@@ -140,6 +140,8 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
+  padding-bottom: 96px;
+  scroll-padding-bottom: 96px;
 }
 
 /* ---- Common elements ---- */
@@ -388,36 +390,53 @@ label {
   white-space: nowrap;
 }
 
-/* ---- Create form ---- */
+/* ---- Create panel (right side) ---- */
 
-.create-form {
-  border: 1px solid #e8e8e8;
-  border-radius: 6px;
-  padding: 12px;
-  background: #fafafa;
+.create-panel {
+  display: flex;
+  flex-direction: column;
 }
 
-.create-form input,
-.create-form textarea {
+.create-panel h2 {
+  margin-bottom: 16px;
+}
+
+.create-panel input,
+.create-panel textarea {
   width: 100%;
   font-size: 13px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   border: 1px solid #d9d9d9;
   border-radius: 4px;
   resize: vertical;
   font-family: inherit;
 }
 
-.create-form input:focus,
-.create-form textarea:focus {
+.create-panel input:focus,
+.create-panel textarea:focus {
   outline: none;
   border-color: #4a6cf7;
 }
 
-.create-error {
-  margin-top: 8px;
-  font-size: 12px;
-  padding: 6px 8px;
+.create-panel textarea {
+  min-height: 180px;
+}
+
+.create-panel textarea:nth-of-type(3) {
+  min-height: 240px;
+}
+
+.create-panel textarea:nth-of-type(4) {
+  min-height: 160px;
+}
+
+.create-panel .form-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 0;
+  position: static;
+  background: none;
 }
 
 .form-actions {
@@ -591,6 +610,7 @@ label {
   margin-top: 20px;
   border-top: 1px solid #eee;
   padding-top: 16px;
+  padding-bottom: 24px;
 }
 
 .reading-header {
@@ -637,6 +657,16 @@ label {
 
 .placeholder {
   color: #bbb;
+}
+
+/* ---- Chapter bottom navigation ---- */
+
+.chapter-bottom-nav {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  flex-wrap: wrap;
 }
 
 /* ---- Rewrite input ---- */

@@ -3,6 +3,7 @@ const fs = require('fs/promises');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
+const archiver = require('archiver');
 
 const app = express();
 app.use(cors());
@@ -133,7 +134,7 @@ app.get('/api/projects', async (_req, res) => {
 // ---- POST /api/projects ----
 
 app.post('/api/projects', async (req, res) => {
-  const { projectName, world, characters, style } = req.body;
+  const { projectName, world, characters, style, summary } = req.body;
 
   if (!projectName || !projectName.trim()) {
     return res.status(400).json({ error: '项目名不能为空' });
@@ -161,8 +162,7 @@ app.post('/api/projects', async (req, res) => {
     await ensureDir(chaptersDir);
     await fs.writeFile(path.join(projectDir, 'world.md'), world || '', 'utf-8');
     await fs.writeFile(path.join(projectDir, 'characters.md'), characters || '', 'utf-8');
-    // summary.md starts empty; the user can edit it later for better continuity
-    await fs.writeFile(path.join(projectDir, 'summary.md'), '', 'utf-8');
+    await fs.writeFile(path.join(projectDir, 'summary.md'), typeof summary === 'string' ? summary : '', 'utf-8');
     await fs.writeFile(path.join(projectDir, 'style.md'), style || '', 'utf-8');
     res.json({ success: true, projectName: name });
   } catch (err) {
@@ -185,7 +185,7 @@ app.get('/api/projects/:projectName', async (req, res) => {
   try {
     await fs.access(projectDir);
   } catch {
-    return res.status(404).json({ error: 'Project not found' });
+    return res.status(404).json({ error: '项目不存在' });
   }
 
   try {
@@ -459,10 +459,10 @@ app.post('/api/generate', async (req, res) => {
   const { projectName, userPrompt, model } = req.body;
 
   if (!projectName || !projectName.trim()) {
-    return res.status(400).json({ error: 'projectName is required' });
+    return res.status(400).json({ error: '缺少项目名' });
   }
   if (!userPrompt || !userPrompt.trim()) {
-    return res.status(400).json({ error: 'userPrompt is required' });
+    return res.status(400).json({ error: '缺少续写要求' });
   }
 
   const allowedModels = ['deepseek-chat', 'deepseek-reasoner'];
@@ -725,6 +725,83 @@ app.get('/api/projects/:projectName/export', async (req, res) => {
     res.json({ fileName: `${projectName}.md`, content });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- GET /api/projects/:projectName/backup ----
+
+app.get('/api/projects/:projectName/backup', async (req, res) => {
+  const { projectName } = req.params;
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  try {
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    const dateStr = new Date().toISOString().slice(0, 10);
+    const filename = `${projectName}-backup-${dateStr}.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+
+    archive.pipe(res);
+
+    // Root markdown files (world.md, characters.md, style.md, summary.md)
+    for (const f of ['world.md', 'characters.md', 'style.md', 'summary.md']) {
+      const fp = path.join(projectDir, f);
+      try {
+        await fs.access(fp);
+        archive.file(fp, { name: f });
+      } catch {
+        // optional file, skip if missing
+      }
+    }
+
+    // chapters/index.json and all .txt files
+    const chaptersDir = path.join(projectDir, 'chapters');
+    try {
+      await fs.access(chaptersDir);
+      const ci = await fs.readdir(chaptersDir);
+      for (const f of ci) {
+        const fp = path.join(chaptersDir, f);
+        const stat = await fs.stat(fp);
+        if (stat.isFile() && (f.endsWith('.txt') || f === 'index.json')) {
+          archive.file(fp, { name: `chapters/${f}` });
+        }
+      }
+    } catch {
+      // no chapters directory
+    }
+
+    // chapters/variants/*.json
+    const variantsDir = path.join(chaptersDir, 'variants');
+    try {
+      await fs.access(variantsDir);
+      const vi = await fs.readdir(variantsDir);
+      for (const f of vi) {
+        if (f.endsWith('.json')) {
+          archive.file(path.join(variantsDir, f), { name: `chapters/variants/${f}` });
+        }
+      }
+    } catch {
+      // no variants directory
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || '备份打包失败' });
+    }
   }
 });
 
@@ -1154,6 +1231,119 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
     res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId, title: indexEntry?.title || variant.title });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- POST /api/projects/:projectName/summary/rebuild ----
+
+const MAX_SUMMARY_CONTENT_LENGTH = 60000;
+
+app.post('/api/projects/:projectName/summary/rebuild', async (req, res) => {
+  const { projectName } = req.params;
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  try {
+    // 1. Read settings files for context
+    const [world, characters, style] = await Promise.all([
+      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+    ]);
+
+    // 2. Read chapters in index.json order with activeVersionId awareness
+    const chaptersDir = path.join(projectDir, 'chapters');
+    try { await fs.access(chaptersDir); } catch {
+      return res.status(404).json({ error: '该项目暂无章节' });
+    }
+
+    const indexEntries = await readChapterIndex(chaptersDir);
+    if (indexEntries.length === 0) {
+      return res.status(404).json({ error: '该项目暂无章节' });
+    }
+
+    // Collect all chapter contents with numbering
+    let allParts = [];
+    for (const entry of indexEntries) {
+      try {
+        const content = await readActiveChapterContent(chaptersDir, entry);
+        const header = `## ${entry.title || `第${parseInt(entry.fileName, 10)}章`}`;
+        allParts.push({ text: `${header}\n\n${content}` });
+      } catch {
+        // skip unreadable chapters
+      }
+    }
+
+    if (allParts.length === 0) {
+      return res.status(404).json({ error: '无可读章节内容' });
+    }
+
+    // Truncate oldest chapters if total content exceeds limit
+    let totalLength = allParts.reduce((sum, p) => sum + p.text.length, 0);
+    let truncatedCount = 0;
+    while (totalLength > MAX_SUMMARY_CONTENT_LENGTH && allParts.length > 1) {
+      const removed = allParts.shift();
+      totalLength -= removed.text.length;
+      truncatedCount++;
+    }
+
+    const chaptersText = allParts.map((p) => p.text).join('\n\n---\n\n');
+    let truncatedNote = '';
+    if (truncatedCount > 0) {
+      truncatedNote = `\n\n注意：共 ${truncatedCount + allParts.length} 章，前 ${truncatedCount} 章因全文过长已截断，以上为最新的 ${allParts.length} 章。`;
+    }
+
+    // 3. Build prompt
+    let userContent = '';
+    if (world) userContent += `## 世界观设定\n${world}\n\n`;
+    if (characters) userContent += `## 人物设定\n${characters}\n\n`;
+    if (style) userContent += `## 写作规则\n${style}\n\n`;
+    userContent += `## 全文章节\n${chaptersText}${truncatedNote}\n\n`;
+    userContent += '请根据以上设定和所有章节正文，输出新的剧情摘要。';
+
+    const messages = [
+      {
+        role: 'system',
+        content:
+          '你是长篇小说剧情摘要助手。你只更新剧情事实，不写正文，不评价作品。' +
+          '根据以下小说设定和全文章节，生成一份完整的故事摘要。使用中文，总长度控制在 800 字以内。',
+      },
+      {
+        role: 'user',
+        content:
+          '请根据以下小说设定和所有章节正文，输出一份完整的剧情摘要。\n\n' +
+          '要求：\n' +
+          '1. 不要写正文。\n' +
+          '2. 不要评价作品。\n' +
+          '3. 只更新剧情事实。\n' +
+          '4. 必须包含：已发生的关键事件、人物关系变化、重要物品/地点/秘密/伏笔、未解决悬念、当前时间线、下一章可接的位置。\n' +
+          '5. 总长度控制在 800 字以内。\n\n' +
+          userContent,
+      },
+    ];
+
+    // 4. Call DeepSeek (only writes summary.md on success)
+    const newSummary = await callDeepSeek('deepseek-chat', messages);
+    const trimmed = newSummary.trim();
+
+    // 5. Write to summary.md (only reached if DeepSeek succeeded)
+    await fs.writeFile(path.join(projectDir, 'summary.md'), trimmed, 'utf-8');
+
+    res.json({ ok: true, message: '摘要已重建', summary: trimmed });
+  } catch (err) {
+    // On any error, old summary.md is preserved (no write occurred)
+    res.status(500).json({ error: err.message || '摘要重建失败' });
   }
 });
 

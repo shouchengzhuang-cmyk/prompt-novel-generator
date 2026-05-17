@@ -31,6 +31,8 @@ function App() {
   const [newCharacters, setNewCharacters] = useState('');
   const [newStyle, setNewStyle] = useState('');
 
+  const [newSummary, setNewSummary] = useState('');
+
   // Create project form error (separate from main error to show it in the left panel)
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -59,6 +61,7 @@ function App() {
 
   // Export
   const [exportStatus, setExportStatus] = useState('');
+  const [rebuildingSummary, setRebuildingSummary] = useState(false);
 
   // Chapter title editing
   const [editingTitle, setEditingTitle] = useState(false);
@@ -153,6 +156,7 @@ function App() {
           world: newWorld,
           characters: newCharacters,
           style: newStyle,
+          summary: newSummary,
         }),
       });
 
@@ -161,6 +165,7 @@ function App() {
       setNewWorld('');
       setNewCharacters('');
       setNewStyle('');
+      setNewSummary('');
       setCreateError('');
       await fetchProjects();
       await handleSelectProject(name);
@@ -412,6 +417,55 @@ function App() {
     }
   };
 
+  // ---- Backup project ----
+  const handleBackup = async () => {
+    if (!currentProject) return;
+    setError('');
+    try {
+      const response = await fetch(`/api/projects/${encodeURIComponent(currentProject)}/backup`);
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || '备份下载失败');
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const disposition = response.headers.get('Content-Disposition');
+      const match = disposition && disposition.match(/filename="?([^"]+)"?/);
+      a.download = match ? decodeURIComponent(match[1]) : `${currentProject}-backup.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setError('备份已下载');
+      setTimeout(() => setError(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // ---- Rebuild summary ----
+  const handleRebuildSummary = async () => {
+    if (!currentProject) return;
+    setError('');
+    setRebuildingSummary(true);
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/summary/rebuild`, {
+        method: 'POST',
+      });
+      // Update local projectDetails summary
+      setProjectDetails((prev) => prev ? { ...prev, summary: data.summary } : prev);
+      setError('摘要已重建');
+      setTimeout(() => setError(''), 3000);
+    } catch (err) {
+      setError(err.message);
+      setTimeout(() => setError(''), 5000);
+    } finally {
+      setRebuildingSummary(false);
+    }
+  };
+
   // ---- Rebuild chapter index ----
   const handleRebuildIndex = async () => {
     if (!currentProject) return;
@@ -550,8 +604,8 @@ function App() {
           return { ...prev, chapters };
         });
       }
-      setError('已设为主线');
-      setTimeout(() => setError(''), 3000);
+      setError('已设为主线，建议重算摘要');
+      setTimeout(() => setError(''), 5000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -616,51 +670,9 @@ function App() {
                     ))}
                   </div>
 
-                  {showCreateForm ? (
-                    <div className="create-form">
-                      <h3>创建新项目</h3>
-                      <label>项目名</label>
-                      <input
-                        value={newProjectName}
-                        onChange={(e) => setNewProjectName(e.target.value)}
-                        placeholder="输入项目名称"
-                      />
-                      <label>世界观设定</label>
-                      <textarea
-                        value={newWorld}
-                        onChange={(e) => setNewWorld(e.target.value)}
-                        rows={4}
-                        placeholder="描述世界观设定..."
-                      />
-                      <label>人物设定</label>
-                      <textarea
-                        value={newCharacters}
-                        onChange={(e) => setNewCharacters(e.target.value)}
-                        rows={4}
-                        placeholder="描述主要人物..."
-                      />
-                      <label>写作规则 / 风格要求</label>
-                      <textarea
-                        value={newStyle}
-                        onChange={(e) => setNewStyle(e.target.value)}
-                        rows={4}
-                        placeholder="文风要求、篇幅要求、写作规则…例如：情色文学，需重点描写人物身体和谈吐，篇幅2000字以上"
-                      />
-                      {createError && <div className="error create-error">{createError}</div>}
-                      <div className="form-actions">
-                        <button className="btn" disabled={creating} onClick={handleCreateProject}>
-                          {creating ? '创建中...' : '创建'}
-                        </button>
-                        <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); }}>
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button className="btn btn-secondary" onClick={() => setShowCreateForm(true)}>
-                      + 创建项目
-                    </button>
-                  )}
+                  <button className="btn btn-secondary" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>
+                    + 创建项目
+                  </button>
                 </div>
               )}
             </section>
@@ -675,6 +687,9 @@ function App() {
                         <button className="btn" onClick={handleRebuildIndex}>重建索引</button>
                         <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
                           {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
+                        </button>
+                        <button className="btn btn-secondary" onClick={handleBackup}>
+                          导出项目备份
                         </button>
                       </>
                     )}
@@ -716,20 +731,79 @@ function App() {
 
         {/* ===== Main Panel: Generate + Reading ===== */}
         <div className="panel panel-main">
-          <h2>生成小说</h2>
+          {showCreateForm ? (
+            <div className="create-panel">
+              <h2>创建新项目</h2>
 
-          {currentProject ? (
+              <label>项目名</label>
+              <input
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="输入项目名称"
+              />
+
+              <label>世界观设定</label>
+              <textarea
+                value={newWorld}
+                onChange={(e) => setNewWorld(e.target.value)}
+                placeholder="描述世界观设定..."
+                rows={6}
+              />
+
+              <label>人物设定</label>
+              <textarea
+                value={newCharacters}
+                onChange={(e) => setNewCharacters(e.target.value)}
+                placeholder="描述主要人物..."
+                rows={6}
+              />
+
+              <label>写作规则 / 风格要求</label>
+              <textarea
+                value={newStyle}
+                onChange={(e) => setNewStyle(e.target.value)}
+                placeholder="文风要求、篇幅要求、写作规则…"
+                rows={8}
+              />
+
+              <label>剧情摘要（可选）</label>
+              <textarea
+                value={newSummary}
+                onChange={(e) => setNewSummary(e.target.value)}
+                placeholder="剧情摘要…"
+                rows={5}
+              />
+
+              {createError && <div className="error">{createError}</div>}
+
+              <div className="form-actions">
+                <button className="btn" disabled={creating} onClick={handleCreateProject}>
+                  {creating ? '创建中...' : '创建'}
+                </button>
+                <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); setNewProjectName(''); setNewWorld(''); setNewCharacters(''); setNewStyle(''); setNewSummary(''); }}>
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h2>生成小说</h2>
+
+              {currentProject ? (
             <>
               <div className="current-project-label">
                 当前项目：<strong>{currentProject}</strong>
                 <button className="btn-link" onClick={handleOpenSettings}>编辑设定</button>
+                <button className="btn-link" onClick={handleRebuildSummary} disabled={rebuildingSummary}>
+                  {rebuildingSummary ? '重算中...' : '重算摘要'}
+                </button>
               </div>
 
               {/* Settings Editor */}
               {showSettings && (
                 <div className="settings-panel">
                   <h3>项目设定</h3>
-                  <label>世界观设定 world.md</label>
+                  <label>世界观设定</label>
                   <textarea
                     className="settings-input"
                     value={editWorld}
@@ -737,7 +811,7 @@ function App() {
                     rows={3}
                     placeholder="世界观设定..."
                   />
-                  <label>人物设定 characters.md</label>
+                  <label>人物设定</label>
                   <textarea
                     className="settings-input"
                     value={editCharacters}
@@ -745,7 +819,7 @@ function App() {
                     rows={3}
                     placeholder="人物设定..."
                   />
-                  <label>写作规则 style.md</label>
+                  <label>写作规则</label>
                   <textarea
                     className="settings-input"
                     value={editStyle}
@@ -753,7 +827,7 @@ function App() {
                     rows={5}
                     placeholder="写作规则、文风要求..."
                   />
-                  <label>剧情摘要 summary.md</label>
+                  <label>剧情摘要</label>
                   <textarea
                     className="settings-input"
                     value={editSummary}
@@ -883,6 +957,31 @@ function App() {
 
                   <div className="reading-content">{variantPreview ? variantPreview.content : readingContent}</div>
 
+                  {/* Chapter bottom navigation */}
+                  {(() => {
+                    if (!projectDetails?.chapters) return null;
+                    const chapters = projectDetails.chapters;
+                    const idx = chapters.findIndex((ch) => (ch.fileName || ch.filename) === readingChapter);
+                    if (idx === -1) return null;
+                    const prev = idx > 0 ? chapters[idx - 1] : null;
+                    const next = idx < chapters.length - 1 ? chapters[idx + 1] : null;
+                    const prevFn = prev ? (prev.fileName || prev.filename) : null;
+                    const nextFn = next ? (next.fileName || next.filename) : null;
+                    return (
+                      <div className="chapter-bottom-nav">
+                        <button className="btn" disabled={!prev} onClick={() => prevFn && handleReadChapter(prevFn)}>
+                          上一章
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                          回目录
+                        </button>
+                        <button className="btn" disabled={!next} onClick={() => nextFn && handleReadChapter(nextFn)}>
+                          下一章
+                        </button>
+                      </div>
+                    );
+                  })()}
+
                   {/* Variants list */}
                   {variants.length > 0 && (
                     <div className="variants-section">
@@ -903,7 +1002,7 @@ function App() {
                               <div className="variant-info">
                                 <span className="variant-meta">
                                   {v.id === activeVersionId && <span style={{ color: '#52c41a', fontWeight: 600, marginRight: 8 }}>● 当前主线</span>}
-                                  {versionLabel} · {new Date(v.createdAt).toLocaleString()} · {v.model || 'original'}
+                                  {versionLabel} · {new Date(v.createdAt).toLocaleString()} · {v.model || '原始版'}
                                 </span>
                                 {v.title && v.title !== ch?.title && (
                                   <span className="variant-instruction" style={{ color: '#4a6cf7' }}>
@@ -941,6 +1040,8 @@ function App() {
             </>
           ) : (
             <p className="hint">请先从左侧选择一个项目，或创建一个新项目。</p>
+          )}
+            </>
           )}
         </div>
       </div>
