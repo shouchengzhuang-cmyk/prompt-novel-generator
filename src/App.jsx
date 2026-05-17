@@ -36,7 +36,7 @@ function App() {
   const [creating, setCreating] = useState(false);
 
   // Generation
-  const [model, setModel] = useState('deepseek-chat');
+  const [model, setModel] = useState('deepseek-reasoner');
   const [userPrompt, setUserPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -71,6 +71,11 @@ function App() {
   const [applyingVariant, setApplyingVariant] = useState(false);
   const [showRewriteInput, setShowRewriteInput] = useState(false);
   const [rewritePrompt, setRewritePrompt] = useState('');
+
+  // Sidebar layout
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
+  const [isChaptersCollapsed, setIsChaptersCollapsed] = useState(false);
 
   // ---- Fetch project list ----
   const fetchProjects = async () => {
@@ -561,110 +566,153 @@ function App() {
   return (
     <div className="app">
       <h1>AI 小说项目管理器</h1>
-      <div className="container">
+      <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects ===== */}
-        <div className="panel panel-left">
-          <div className="panel-header">
-            <h2>项目</h2>
-            <button className="btn" onClick={handleRefresh}>刷新</button>
-          </div>
-
-          <div className="project-list">
-            {projects.length === 0 && (
-              <p className="hint">暂无项目，请创建一个</p>
-            )}
-            {projects.map((name) => (
-              <div key={name} className="project-item-wrap">
-                <div
-                  className={'project-item' + (currentProject === name ? ' active' : '')}
-                  onClick={() => handleSelectProject(name)}
-                >
-                  <span className="project-name">{name}</span>
-                </div>
-                <button className="delete-btn project-delete" onClick={(e) => handleDeleteProject(name, e)}>删除</button>
-              </div>
-            ))}
-          </div>
-
-          {showCreateForm ? (
-            <div className="create-form">
-              <h3>创建新项目</h3>
-              <label>项目名</label>
-              <input
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                placeholder="输入项目名称"
-              />
-              <label>世界观设定</label>
-              <textarea
-                value={newWorld}
-                onChange={(e) => setNewWorld(e.target.value)}
-                rows={4}
-                placeholder="描述世界观设定..."
-              />
-              <label>人物设定</label>
-              <textarea
-                value={newCharacters}
-                onChange={(e) => setNewCharacters(e.target.value)}
-                rows={4}
-                placeholder="描述主要人物..."
-              />
-              <label>写作规则 / 风格要求</label>
-              <textarea
-                value={newStyle}
-                onChange={(e) => setNewStyle(e.target.value)}
-                rows={4}
-                placeholder="文风要求、篇幅要求、写作规则…例如：情色文学，需重点描写人物身体和谈吐，篇幅2000字以上"
-              />
-              {createError && <div className="error create-error">{createError}</div>}
-              <div className="form-actions">
-                <button className="btn" disabled={creating} onClick={handleCreateProject}>
-                  {creating ? '创建中...' : '创建'}
-                </button>
-                <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); }}>
-                  取消
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button className="btn btn-secondary" onClick={() => setShowCreateForm(true)}>
-              + 创建项目
+        {isSidebarCollapsed ? (
+          <button
+            className="sidebar-collapsed-toggle"
+            onClick={() => setIsSidebarCollapsed(false)}
+            title="展开侧栏"
+          >
+            ›
+          </button>
+        ) : (
+          <aside className="panel panel-left sidebar">
+            <button
+              className="sidebar-collapsed-toggle sidebar-collapse-button"
+              onClick={() => setIsSidebarCollapsed(true)}
+              title="收起侧栏"
+            >
+              ‹
             </button>
-          )}
 
-          {projectDetails && (
-            <div className="chapters-list">
-              <div className="panel-header">
-                <h3>章节列表</h3>
-                <button className="btn" onClick={handleRebuildIndex}>重建索引</button>
-                <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
-                  {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
-                </button>
+            <section className="sidebar-section">
+              <div className="sidebar-section-header">
+                <h2>项目</h2>
+                <div className="sidebar-section-actions">
+                  {!isProjectsCollapsed && <button className="btn" onClick={handleRefresh}>刷新</button>}
+                  <button className="btn btn-secondary" onClick={() => setIsProjectsCollapsed((prev) => !prev)}>
+                    {isProjectsCollapsed ? '展开' : '收起'}
+                  </button>
+                </div>
               </div>
-              {projectDetails.chapters && projectDetails.chapters.length > 0 ? (
-                <ul>
-                  {projectDetails.chapters.map((ch, index) => {
-                    const cf = ch.fileName || ch.filename;
-                    const key = cf || `chapter-${index}`;
-                    return (
-                    <li key={key} className={`chapter-item-wrap${!cf ? ' disabled' : ''}`}>
-                      <div
-                        className={'chapter-item' + (cf && readingChapter === cf ? ' active' : '')}
-                        onClick={() => cf && handleReadChapter(cf)}
-                      >
-                        <span className="chapter-name">{cf ? `${cf.slice(0, 3)} ${ch.title || cf.replace(/\.txt$/, '')}` : '无效章节'}</span>
+
+              {!isProjectsCollapsed && (
+                <div className="sidebar-section-body">
+                  <div className="project-list project-list-scroll">
+                    {projects.length === 0 && (
+                      <p className="hint">暂无项目，请创建一个</p>
+                    )}
+                    {projects.map((name) => (
+                      <div key={name} className="project-item-wrap">
+                        <div
+                          className={'project-item' + (currentProject === name ? ' active' : '')}
+                          onClick={() => handleSelectProject(name)}
+                        >
+                          <span className="project-name">{name}</span>
+                        </div>
+                        <button className="delete-btn project-delete" onClick={(e) => handleDeleteProject(name, e)}>删除</button>
                       </div>
-                      <button className="delete-btn chapter-delete" disabled={!cf} onClick={(e) => cf && handleDeleteChapter(cf, e)}>删除</button>
-                    </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="hint">暂无章节</p>
+                    ))}
+                  </div>
+
+                  {showCreateForm ? (
+                    <div className="create-form">
+                      <h3>创建新项目</h3>
+                      <label>项目名</label>
+                      <input
+                        value={newProjectName}
+                        onChange={(e) => setNewProjectName(e.target.value)}
+                        placeholder="输入项目名称"
+                      />
+                      <label>世界观设定</label>
+                      <textarea
+                        value={newWorld}
+                        onChange={(e) => setNewWorld(e.target.value)}
+                        rows={4}
+                        placeholder="描述世界观设定..."
+                      />
+                      <label>人物设定</label>
+                      <textarea
+                        value={newCharacters}
+                        onChange={(e) => setNewCharacters(e.target.value)}
+                        rows={4}
+                        placeholder="描述主要人物..."
+                      />
+                      <label>写作规则 / 风格要求</label>
+                      <textarea
+                        value={newStyle}
+                        onChange={(e) => setNewStyle(e.target.value)}
+                        rows={4}
+                        placeholder="文风要求、篇幅要求、写作规则…例如：情色文学，需重点描写人物身体和谈吐，篇幅2000字以上"
+                      />
+                      {createError && <div className="error create-error">{createError}</div>}
+                      <div className="form-actions">
+                        <button className="btn" disabled={creating} onClick={handleCreateProject}>
+                          {creating ? '创建中...' : '创建'}
+                        </button>
+                        <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); }}>
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button className="btn btn-secondary" onClick={() => setShowCreateForm(true)}>
+                      + 创建项目
+                    </button>
+                  )}
+                </div>
               )}
-            </div>
-          )}
-        </div>
+            </section>
+
+            {projectDetails && (
+              <section className="sidebar-section chapters-list">
+                <div className="sidebar-section-header">
+                  <h3>章节列表</h3>
+                  <div className="sidebar-section-actions">
+                    {!isChaptersCollapsed && (
+                      <>
+                        <button className="btn" onClick={handleRebuildIndex}>重建索引</button>
+                        <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
+                          {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
+                        </button>
+                      </>
+                    )}
+                    <button className="btn btn-secondary" onClick={() => setIsChaptersCollapsed((prev) => !prev)}>
+                      {isChaptersCollapsed ? '展开' : '收起'}
+                    </button>
+                  </div>
+                </div>
+
+                {!isChaptersCollapsed && (
+                  <div className="sidebar-section-body chapter-list-scroll">
+                    {projectDetails.chapters && projectDetails.chapters.length > 0 ? (
+                      <ul>
+                        {projectDetails.chapters.map((ch, index) => {
+                          const cf = ch.fileName || ch.filename;
+                          const key = cf || `chapter-${index}`;
+                          return (
+                          <li key={key} className={`chapter-item-wrap${!cf ? ' disabled' : ''}`}>
+                            <div
+                              className={'chapter-item' + (cf && readingChapter === cf ? ' active' : '')}
+                              onClick={() => cf && handleReadChapter(cf)}
+                            >
+                              <span className="chapter-name">{cf ? `${cf.slice(0, 3)} ${ch.title || cf.replace(/\.txt$/, '')}` : '无效章节'}</span>
+                            </div>
+                            <button className="delete-btn chapter-delete" disabled={!cf} onClick={(e) => cf && handleDeleteChapter(cf, e)}>删除</button>
+                          </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="hint">暂无章节</p>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+          </aside>
+        )}
 
         {/* ===== Main Panel: Generate + Reading ===== */}
         <div className="panel panel-main">
