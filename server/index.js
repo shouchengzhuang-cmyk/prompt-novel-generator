@@ -846,15 +846,14 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
   const effectiveUserPrompt = trimmedUserPrompt || '继续写';
 
   try {
-    // 1. Read context files
-    const [world, characters, summary, style] = await Promise.all([
+    // 1. Read context files (skip summary to avoid old-chapter contamination)
+    const [world, characters, style] = await Promise.all([
       fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
       fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
       fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
     ]);
 
-    // 2. Read original chapter content
+    // 2. Read original chapter content (only for v-original preservation, not for prompt)
     const originalContent = await fs.readFile(chapterPath, 'utf-8');
 
     // 3. Read previous chapters for context (skip the current one)
@@ -873,18 +872,15 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
       // ignore
     }
 
-    // 4. Build prompt
+    // 4. Build prompt — fork from previous chapters, NOT rewrite old chapter
     let systemContent =
-      '你是一位长篇小说写作助手。你的任务是对指定章节进行重新写作。\n' +
-      '1. 这是对现有章节的重写，不是续写下一章。\n' +
-      '2. 必须遵守下面的写作规则。\n' +
-      '3. 保持世界观、人物性格、叙事风格和情节发展的连续性。\n' +
-      '4. 不要重复最近章节中已经写过的内容。\n' +
-      '5. 不要擅自改变人物关系和核心设定。\n' +
-      '6. 始终使用中文写作。\n' +
-      '7. 参考原章节内容，但不要机械复述——在保持情节走向一致的前提下，用不同的描述方式、细节和行文节奏。\n' +
-      '8. 不要写入章节标题或章节编号标记，直接输出正文。\n' +
-      '9. 优先执行用户本次重写要求。';
+      '你是一位长篇小说写作助手。你的任务是基于已有前文，生成当前章节的一个新分支版本。\n' +
+      '1. 只承接前文章节和项目设定。\n' +
+      '2. 不要参考旧版本章节正文。\n' +
+      '3. 不要沿用旧版本的情节走向，按用户本次要求重新展开。\n' +
+      '4. 保持世界观、人物性格、叙事风格一致。\n' +
+      '5. 优先执行用户本次续写要求。\n' +
+      '6. 只输出章节正文，不要解释说明。';
 
     if (style) {
       systemContent += `\n\n## 写作规则\n${style}`;
@@ -893,16 +889,14 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
     let userContent = '';
     if (world) userContent += `## 世界观设定\n${world}\n\n`;
     if (characters) userContent += `## 人物设定\n${characters}\n\n`;
-    if (summary) userContent += `## 故事梗概\n${summary}\n\n`;
     if (recentChapters.length > 0) {
-      userContent += '## 最近章节（前文上下文，供参考）\n';
+      userContent += '## 前文章节\n';
       for (const ch of recentChapters) {
         userContent += `--- ${ch.filename} ---\n${ch.content}\n\n`;
       }
     }
-    userContent += `## 需要重写的原章节（${fileName}）\n${originalContent}\n\n`;
-    userContent += `## 用户本次重写要求\n${effectiveUserPrompt}\n\n`;
-    userContent += '请根据以上设定、上下文和原章节内容，输出重写后的章节正文。不要做任何解释说明。';
+    userContent += `## 用户本次续写要求\n${effectiveUserPrompt}\n\n`;
+    userContent += '请根据以上设定和前文，输出当前章节的新分支版本正文。不要做任何解释说明。';
 
     const messages = [
       { role: 'system', content: systemContent },
@@ -1002,11 +996,25 @@ app.get('/api/projects/:projectName/chapters/:fileName/variants', async (req, re
     const indexEntries = await readChapterIndex(chaptersDir);
     const indexEntry = indexEntries.find((e) => e.fileName === fileName);
     const originalUserPrompt = indexEntry?.userPrompt || '继续写';
-    const variants = (await readVariants(chaptersDir, fileName)).map((variant) =>
+    let variants = (await readVariants(chaptersDir, fileName)).map((variant) =>
       variant.id === 'v-original' && !variant.userPrompt
         ? { ...variant, userPrompt: originalUserPrompt }
         : variant
     );
+
+    // Always include v-original — synthesize from .txt if not yet in variants file
+    if (!variants.find((v) => v.id === 'v-original')) {
+      const originalContent = await fs.readFile(chapterPath, 'utf-8');
+      variants.unshift({
+        id: 'v-original',
+        createdAt: indexEntry?.createdAt || new Date().toISOString(),
+        model: 'original',
+        userPrompt: originalUserPrompt,
+        content: originalContent,
+        title: indexEntry?.title || fileName.replace('.txt', ''),
+      });
+    }
+
     res.json({ fileName, variants });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1043,8 +1051,27 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
   }
 
   try {
-    const variants = await readVariants(chaptersDir, fileName);
-    const variant = variants.find((v) => v.id === variantId);
+    let variants = await readVariants(chaptersDir, fileName);
+    let variant = variants.find((v) => v.id === variantId);
+
+    // If v-original requested but not yet in variants file, synthesize from .txt
+    if (!variant && variantId === 'v-original') {
+      const indexEntries = await readChapterIndex(chaptersDir);
+      const indexEntry = indexEntries.find((e) => e.fileName === fileName);
+      const originalContent = await fs.readFile(chapterPath, 'utf-8');
+      variant = {
+        id: 'v-original',
+        createdAt: indexEntry?.createdAt || new Date().toISOString(),
+        model: 'original',
+        userPrompt: indexEntry?.userPrompt || '',
+        content: originalContent,
+        title: indexEntry?.title || fileName.replace('.txt', ''),
+      };
+      // Persist so subsequent requests read from file
+      variants = [variant, ...variants];
+      await writeVariants(chaptersDir, fileName, variants);
+    }
+
     if (!variant) {
       return res.status(404).json({ error: '候选版本不存在' });
     }
