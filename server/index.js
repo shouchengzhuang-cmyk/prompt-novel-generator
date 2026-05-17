@@ -93,13 +93,16 @@ async function writeChapterIndex(chaptersDir, entries) {
 }
 
 function extractTitleFromContent(content, chapterNumber) {
-  // Try to extract from first non-empty line: "# 标题" or "第X章 标题"
+  // Scan first non-empty lines for a detectable title
   const lines = content.split('\n').filter((l) => l.trim());
   for (const line of lines) {
     const trimmed = line.trim();
     // Match: # 标题  or  ## 标题
     const headingMatch = trimmed.match(/^#{1,3}\s+(.+)/);
     if (headingMatch) return headingMatch[1].trim();
+    // Match: 章节标题：xxx
+    const titleDeclMatch = trimmed.match(/^章节标题[：:]\s*(.+)/);
+    if (titleDeclMatch) return titleDeclMatch[1].trim();
     // Match: 第X章 标题
     const chapterMatch = trimmed.match(/^第[一二三四五六七八九十百千万\d]+章\s+(.+)/);
     if (chapterMatch) return `第${chapterNumber}章 ${chapterMatch[1].trim()}`;
@@ -145,6 +148,14 @@ app.post('/api/projects', async (req, res) => {
   }
 
   try {
+    // Reject if project directory already exists
+    try {
+      await fs.access(projectDir);
+      return res.status(409).json({ error: '项目名已存在，请换一个名称。' });
+    } catch {
+      // directory does not exist, safe to create
+    }
+
     const chaptersDir = path.join(projectDir, 'chapters');
     await ensureDir(chaptersDir);
     await fs.writeFile(path.join(projectDir, 'world.md'), world || '', 'utf-8');
@@ -199,6 +210,8 @@ app.get('/api/projects/:projectName', async (req, res) => {
       chapters = txtFiles.map((f) => ({
         filename: f,
         title: indexMap[f]?.title || extractTitleFromContent('', parseInt(f, 10)),
+        userPrompt: indexMap[f]?.userPrompt || '',
+        activeVersionId: indexMap[f]?.activeVersionId || 'v-original',
       }));
 
       // Load content of last 10 chapters for display
@@ -471,15 +484,33 @@ app.post('/api/generate', async (req, res) => {
       fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
     ]);
 
-    // 2. Read latest 3 chapters for context
+    // 2. Read latest 3 chapters for context (respecting activeVersionId)
     let recentChapters = [];
     try {
       await ensureDir(chaptersDir);
       const files = await fs.readdir(chaptersDir);
       const txtFiles = files.filter((f) => f.endsWith('.txt')).sort().slice(-3);
+      const indexEntries = await readChapterIndex(chaptersDir);
+      const indexMap = {};
+      for (const entry of indexEntries) {
+        indexMap[entry.fileName] = entry;
+      }
       for (const f of txtFiles) {
-        const text = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
-        recentChapters.push({ filename: f, content: text });
+        const entry = indexMap[f];
+        let content;
+        // If this chapter has an active version pointing to a variant, load variant content
+        if (entry && entry.activeVersionId && entry.activeVersionId !== 'v-original') {
+          const variants = await readVariants(chaptersDir, f);
+          const activeVariant = variants.find((v) => v.id === entry.activeVersionId);
+          if (activeVariant) {
+            content = activeVariant.content;
+          } else {
+            content = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+          }
+        } else {
+          content = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+        }
+        recentChapters.push({ filename: f, content });
       }
     } catch {
       await ensureDir(chaptersDir);
@@ -539,10 +570,21 @@ app.post('/api/generate', async (req, res) => {
     // 6a. Extract title and update index.json
     const title = extractTitleFromContent(content, nextNum);
     const indexEntries = await readChapterIndex(chaptersDir);
+    const now = new Date().toISOString();
     indexEntries.push({
       fileName: filename,
       title,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
+      activeVersionId: 'v-original',
+      versions: [
+        {
+          id: 'v-original',
+          title,
+          userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
+          createdAt: now,
+        },
+      ],
     });
     await writeChapterIndex(chaptersDir, indexEntries);
 
@@ -626,7 +668,7 @@ app.get('/api/projects/:projectName/export', async (req, res) => {
         if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
         try {
           const text = await fs.readFile(filePath, 'utf-8');
-          chapters.push({ title: entry.title || entry.fileName.replace('.txt', ''), content: text });
+          chapters.push({ title: entry.title || `第${parseInt(entry.fileName, 10)}章`, content: text });
         } catch {
           // skip missing files
         }
@@ -642,7 +684,7 @@ app.get('/api/projects/:projectName/export', async (req, res) => {
         const relative = path.relative(chaptersDir, filePath);
         if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
         const text = await fs.readFile(filePath, 'utf-8');
-        chapters.push({ title: f.replace('.txt', ''), content: text });
+        chapters.push({ title: `第${parseInt(f, 10)}章`, content: text });
       }
     }
 
@@ -719,13 +761,324 @@ app.post('/api/projects/:projectName/chapters/rebuild-index', async (req, res) =
       }
       newEntries.push({
         fileName: f,
-        title: old?.title || f.replace('.txt', ''),
+        title: old?.title || `第${parseInt(f, 10)}章`,
         createdAt,
+        activeVersionId: old?.activeVersionId || 'v-original',
+        versions: old?.versions || [],
       });
     }
 
     await writeChapterIndex(chaptersDir, newEntries);
     res.json({ ok: true, chapters: newEntries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Variant helpers ----
+
+const VARIANTS_DIR_NAME = 'variants';
+
+function variantsFilePath(chaptersDir, fileName) {
+  const base = fileName.replace(/\.txt$/, '');
+  return path.join(chaptersDir, VARIANTS_DIR_NAME, `${base}.json`);
+}
+
+async function readVariants(chaptersDir, fileName) {
+  const vDir = path.join(chaptersDir, VARIANTS_DIR_NAME);
+  const vFile = variantsFilePath(chaptersDir, fileName);
+  const relative = path.relative(vDir, vFile);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return [];
+  try {
+    const raw = await fs.readFile(vFile, 'utf-8');
+    const data = JSON.parse(raw);
+    return Array.isArray(data.variants) ? data.variants : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeVariants(chaptersDir, fileName, variants) {
+  const vDir = path.join(chaptersDir, VARIANTS_DIR_NAME);
+  await ensureDir(vDir);
+  const vFile = variantsFilePath(chaptersDir, fileName);
+  const relative = path.relative(vDir, vFile);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('无效的文件名');
+  }
+  await fs.writeFile(vFile, JSON.stringify({ fileName, variants }, null, 2), 'utf-8');
+}
+
+// ---- POST /api/projects/:projectName/chapters/:fileName/regenerate ----
+
+app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req, res) => {
+  const { projectName, fileName } = req.params;
+  const { model, userPrompt } = req.body;
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  const allowedModels = ['deepseek-chat', 'deepseek-reasoner'];
+  const effectiveModel = allowedModels.includes(model) ? model : 'deepseek-chat';
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, fileName);
+  const relativePath = path.relative(chaptersDir, chapterPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  try {
+    await fs.access(chapterPath);
+  } catch {
+    return res.status(404).json({ error: '章节不存在' });
+  }
+
+  const trimmedUserPrompt = typeof userPrompt === 'string' ? userPrompt.trim() : '';
+  const effectiveUserPrompt = trimmedUserPrompt || '继续写';
+
+  try {
+    // 1. Read context files
+    const [world, characters, summary, style] = await Promise.all([
+      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+    ]);
+
+    // 2. Read original chapter content
+    const originalContent = await fs.readFile(chapterPath, 'utf-8');
+
+    // 3. Read previous chapters for context (skip the current one)
+    let recentChapters = [];
+    try {
+      await ensureDir(chaptersDir);
+      const files = await fs.readdir(chaptersDir);
+      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+      const currentIndex = txtFiles.indexOf(fileName);
+      const contextFiles = currentIndex > 0 ? txtFiles.slice(Math.max(0, currentIndex - 3), currentIndex) : [];
+      for (const f of contextFiles) {
+        const text = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+        recentChapters.push({ filename: f, content: text });
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4. Build prompt
+    let systemContent =
+      '你是一位长篇小说写作助手。你的任务是对指定章节进行重新写作。\n' +
+      '1. 这是对现有章节的重写，不是续写下一章。\n' +
+      '2. 必须遵守下面的写作规则。\n' +
+      '3. 保持世界观、人物性格、叙事风格和情节发展的连续性。\n' +
+      '4. 不要重复最近章节中已经写过的内容。\n' +
+      '5. 不要擅自改变人物关系和核心设定。\n' +
+      '6. 始终使用中文写作。\n' +
+      '7. 参考原章节内容，但不要机械复述——在保持情节走向一致的前提下，用不同的描述方式、细节和行文节奏。\n' +
+      '8. 不要写入章节标题或章节编号标记，直接输出正文。\n' +
+      '9. 优先执行用户本次重写要求。';
+
+    if (style) {
+      systemContent += `\n\n## 写作规则\n${style}`;
+    }
+
+    let userContent = '';
+    if (world) userContent += `## 世界观设定\n${world}\n\n`;
+    if (characters) userContent += `## 人物设定\n${characters}\n\n`;
+    if (summary) userContent += `## 故事梗概\n${summary}\n\n`;
+    if (recentChapters.length > 0) {
+      userContent += '## 最近章节（前文上下文，供参考）\n';
+      for (const ch of recentChapters) {
+        userContent += `--- ${ch.filename} ---\n${ch.content}\n\n`;
+      }
+    }
+    userContent += `## 需要重写的原章节（${fileName}）\n${originalContent}\n\n`;
+    userContent += `## 用户本次重写要求\n${effectiveUserPrompt}\n\n`;
+    userContent += '请根据以上设定、上下文和原章节内容，输出重写后的章节正文。不要做任何解释说明。';
+
+    const messages = [
+      { role: 'system', content: systemContent },
+      { role: 'user', content: userContent },
+    ];
+
+    // 5. Call DeepSeek
+    const content = await callDeepSeek(effectiveModel, messages);
+
+    // 6. Save as variant
+    const variant = {
+      id: `v-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      model: effectiveModel,
+      userPrompt: effectiveUserPrompt,
+      content,
+    };
+
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const indexEntry = indexEntries.find((e) => e.fileName === fileName);
+    const originalUserPrompt = indexEntry?.userPrompt || '继续写';
+    const existingVariants = await readVariants(chaptersDir, fileName);
+    // If the original content hasn't been saved as a variant yet, save it now
+    if (!existingVariants.find((v) => v.id === 'v-original')) {
+      existingVariants.unshift({
+        id: 'v-original',
+        createdAt: new Date().toISOString(),
+        model: 'original',
+        userPrompt: originalUserPrompt,
+        content: originalContent,
+      });
+    }
+    existingVariants.push(variant);
+    await writeVariants(chaptersDir, fileName, existingVariants);
+
+    // 7. Also track in index.json versions array
+    if (indexEntry) {
+      if (!indexEntry.versions) {
+        indexEntry.versions = [];
+      }
+      if (!indexEntry.versions.find((v) => v.id === 'v-original')) {
+        indexEntry.versions.unshift({
+          id: 'v-original',
+          title: indexEntry.title || fileName.replace('.txt', ''),
+          userPrompt: originalUserPrompt,
+          createdAt: indexEntry.createdAt || new Date().toISOString(),
+        });
+      }
+      indexEntry.versions.push({
+        id: variant.id,
+        title: indexEntry.title || fileName.replace('.txt', ''),
+        userPrompt: effectiveUserPrompt,
+        createdAt: variant.createdAt,
+      });
+      await writeChapterIndex(chaptersDir, indexEntries);
+    }
+
+    res.json({ ok: true, variant });
+  } catch (err) {
+    res.status(500).json({ error: err.message || '服务器内部错误' });
+  }
+});
+
+// ---- GET /api/projects/:projectName/chapters/:fileName/variants ----
+
+app.get('/api/projects/:projectName/chapters/:fileName/variants', async (req, res) => {
+  const { projectName, fileName } = req.params;
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, fileName);
+  const relativePath = path.relative(chaptersDir, chapterPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  try {
+    await fs.access(chapterPath);
+  } catch {
+    return res.status(404).json({ error: '章节不存在' });
+  }
+
+  try {
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const indexEntry = indexEntries.find((e) => e.fileName === fileName);
+    const originalUserPrompt = indexEntry?.userPrompt || '继续写';
+    const variants = (await readVariants(chaptersDir, fileName)).map((variant) =>
+      variant.id === 'v-original' && !variant.userPrompt
+        ? { ...variant, userPrompt: originalUserPrompt }
+        : variant
+    );
+    res.json({ fileName, variants });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- PUT /api/projects/:projectName/chapters/:fileName/variants/:variantId/apply ----
+
+app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply', async (req, res) => {
+  const { projectName, fileName, variantId } = req.params;
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, fileName);
+  const relativePath = path.relative(chaptersDir, chapterPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  try {
+    await fs.access(chapterPath);
+  } catch {
+    return res.status(404).json({ error: '章节不存在' });
+  }
+
+  try {
+    const variants = await readVariants(chaptersDir, fileName);
+    const variant = variants.find((v) => v.id === variantId);
+    if (!variant) {
+      return res.status(404).json({ error: '候选版本不存在' });
+    }
+
+    // Write content to the main .txt file
+    await fs.writeFile(chapterPath, variant.content, 'utf-8');
+
+    // Update index.json: set activeVersionId and track the version
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const indexEntry = indexEntries.find((e) => e.fileName === fileName);
+    if (indexEntry) {
+      indexEntry.activeVersionId = variantId;
+      // Ensure versions array exists with v-original as first entry
+      if (!indexEntry.versions) {
+        indexEntry.versions = [];
+      }
+      if (!indexEntry.versions.find((v) => v.id === 'v-original')) {
+        indexEntry.versions.unshift({
+          id: 'v-original',
+          title: indexEntry.title || fileName.replace('.txt', ''),
+          userPrompt: indexEntry.userPrompt || '',
+          createdAt: indexEntry.createdAt || new Date().toISOString(),
+        });
+      }
+      // Add this variant to versions if not already tracked
+      if (!indexEntry.versions.find((v) => v.id === variantId)) {
+        indexEntry.versions.push({
+          id: variantId,
+          title: indexEntry.title || fileName.replace('.txt', ''),
+          userPrompt: variant.userPrompt || '',
+          createdAt: variant.createdAt,
+        });
+      }
+      await writeChapterIndex(chaptersDir, indexEntries);
+    }
+
+    res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
