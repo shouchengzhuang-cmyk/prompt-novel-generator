@@ -12,7 +12,7 @@ body {
 }
 
 .app {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
 }
@@ -40,7 +40,9 @@ body {
 }
 
 .panel-left {
-  width: 260px;
+  width: 380px;
+  min-width: 340px;
+  max-width: 440px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -72,10 +74,17 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.panel-header h2 {
+.panel-header h2,
+.panel-header h3 {
   margin-bottom: 0;
+}
+
+.panel-header h3 {
+  white-space: nowrap;
 }
 
 label {
@@ -94,13 +103,19 @@ label {
 
 /* ---- Buttons ---- */
 
+/* Base button: default blue (primary) */
 .btn {
-  display: inline-block;
-  padding: 10px 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 44px;
+  min-width: 112px;
+  padding: 0 18px;
   font-size: 14px;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
+  white-space: nowrap;
   background: #4a6cf7;
   color: #fff;
   transition: background 0.2s;
@@ -111,13 +126,27 @@ label {
 }
 
 .btn:disabled {
-  background: #a0b4f7;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.btn-sm {
-  padding: 6px 14px;
-  font-size: 13px;
+/* Color variants */
+.btn-primary {
+  background: #4a6cf7;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #3b5de7;
+}
+
+.btn-success {
+  background: #52c41a;
+  color: #fff;
+}
+
+.btn-success:hover {
+  background: #45a818;
 }
 
 .btn-secondary {
@@ -129,14 +158,15 @@ label {
   background: #d9d9d9;
 }
 
-.copy-btn {
-  background: #52c41a;
-  margin-top: 12px;
-  align-self: flex-start;
+.btn-danger {
+  background: #fff5f5;
+  color: #e8453c;
+  border: 1px solid #ffd4d4;
 }
 
-.copy-btn:hover {
-  background: #45a818;
+.btn-danger:hover {
+  background: #ffe0e0;
+  border-color: #e8453c;
 }
 
 /* ---- Model select ---- */
@@ -226,15 +256,18 @@ label {
 /* ---- Delete buttons ---- */
 
 .delete-btn {
+  height: 32px;
+  min-width: 48px;
+  padding: 0 8px;
   font-size: 11px;
-  padding: 2px 6px;
   border: 1px solid #ffd4d4;
-  border-radius: 3px;
+  border-radius: 6px;
   background: #fff5f5;
   color: #e8453c;
   cursor: pointer;
+  white-space: nowrap;
   transition: all 0.15s;
-  line-height: 1.4;
+  line-height: 1;
   flex-shrink: 0;
   opacity: 0.5;
 }
@@ -300,7 +333,7 @@ label {
 
 .form-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   margin-top: 10px;
 }
 
@@ -482,11 +515,15 @@ label {
   color: #333;
   margin: 0;
   font-family: 'SF Mono', Consolas, monospace;
+  flex: 1;
+  min-width: 200px;
+  white-space: normal;
+  overflow: visible;
 }
 
 .reading-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -506,6 +543,69 @@ label {
 
 .placeholder {
   color: #bbb;
+}
+
+/* ---- Rewrite input ---- */
+
+.rewrite-input-area {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+/* ---- Variants (chapter candidates) ---- */
+
+.variants-section {
+  margin-top: 16px;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+.variant-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+  margin-top: 6px;
+  background: #fafafa;
+  gap: 8px;
+}
+
+.variant-item.active {
+  border-color: #b7eb8f;
+  background: #f6ffed;
+}
+
+.variant-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.variant-meta {
+  font-size: 12px;
+  color: #888;
+}
+
+.variant-instruction {
+  font-size: 12px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-style: italic;
+}
+
+.variant-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 /* ---- Responsive ---- */

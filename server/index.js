@@ -912,12 +912,15 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
     // 5. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
 
-    // 6. Save as variant
+    // 6. Save as variant (with title extracted from content)
+    const chapterNumber = parseInt(fileName, 10);
+    const variantTitle = extractTitleFromContent(content, chapterNumber);
     const variant = {
       id: `v-${Date.now()}`,
       createdAt: new Date().toISOString(),
       model: effectiveModel,
       userPrompt: effectiveUserPrompt,
+      title: variantTitle,
       content,
     };
 
@@ -953,7 +956,7 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
       }
       indexEntry.versions.push({
         id: variant.id,
-        title: indexEntry.title || fileName.replace('.txt', ''),
+        title: variantTitle,
         userPrompt: effectiveUserPrompt,
         createdAt: variant.createdAt,
       });
@@ -1054,6 +1057,10 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
     const indexEntry = indexEntries.find((e) => e.fileName === fileName);
     if (indexEntry) {
       indexEntry.activeVersionId = variantId;
+      // Update chapter title if variant has a meaningful title
+      if (variant.title) {
+        indexEntry.title = variant.title;
+      }
       // Ensure versions array exists with v-original as first entry
       if (!indexEntry.versions) {
         indexEntry.versions = [];
@@ -1078,7 +1085,7 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
       await writeChapterIndex(chaptersDir, indexEntries);
     }
 
-    res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId });
+    res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId, title: indexEntry?.title || variant.title });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

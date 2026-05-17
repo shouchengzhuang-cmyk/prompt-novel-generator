@@ -64,6 +64,14 @@ function App() {
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
 
+  // Variants (regenerated chapter candidates)
+  const [variants, setVariants] = useState([]);
+  const [regenerating, setRegenerating] = useState(false);
+  const [variantPreview, setVariantPreview] = useState(null);
+  const [applyingVariant, setApplyingVariant] = useState(false);
+  const [showRewriteInput, setShowRewriteInput] = useState(false);
+  const [rewritePrompt, setRewritePrompt] = useState('');
+
   // ---- Fetch project list ----
   const fetchProjects = async () => {
     try {
@@ -86,6 +94,10 @@ function App() {
     setUserPrompt('');
     setReadingChapter(null);
     setReadingContent('');
+    setVariants([]);
+    setVariantPreview(null);
+    setShowRewriteInput(false);
+    setRewritePrompt('');
     setShowSettings(false);
     setEditingProjectName(null);
     setEditWorld('');
@@ -215,6 +227,8 @@ function App() {
       }
       setReadingChapter(data.fileName);
       setReadingContent(data.content === '' ? '章节为空' : data.content);
+      // Load variants for this chapter
+      handleLoadVariants(data.fileName);
     } catch (err) {
       setError(err.message);
     }
@@ -239,6 +253,10 @@ function App() {
       if (readingChapter === filename) {
         setReadingChapter(null);
         setReadingContent('');
+        setVariants([]);
+        setVariantPreview(null);
+        setShowRewriteInput(false);
+        setRewritePrompt('');
       }
       setError('章节已删除');
       setTimeout(() => setError(''), 3000);
@@ -263,6 +281,10 @@ function App() {
         setDisplayContent('');
         setReadingChapter(null);
         setReadingContent('');
+        setVariants([]);
+        setVariantPreview(null);
+        setShowRewriteInput(false);
+        setRewritePrompt('');
         setLastFilename('');
         setUserPrompt('');
         setShowSettings(false);
@@ -453,6 +475,89 @@ function App() {
     setEditTitleValue('');
   };
 
+  // ---- Variants (regenerate chapter) ----
+  const handleLoadVariants = async (filename) => {
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}/variants`);
+      setVariants(data.variants || []);
+    } catch {
+      setVariants([]);
+    }
+  };
+
+  const handleLoadRewritePrompt = () => {
+    if (!currentProject || !readingChapter) return;
+    // Get saved userPrompt from projectDetails, fallback to "继续写"
+    const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === readingChapter);
+    const saved = ch?.userPrompt || '继续写';
+    setRewritePrompt(saved);
+    setShowRewriteInput(true);
+  };
+
+  const handleRegenerate = async () => {
+    if (!currentProject || !readingChapter) return;
+    const trimmed = rewritePrompt.trim();
+    if (!trimmed) {
+      setError('续写要求不能为空');
+      return;
+    }
+    setRegenerating(true);
+    setError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/regenerate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, userPrompt: trimmed }),
+      });
+      // Add new variant to list
+      setVariants((prev) => [...prev, data.variant]);
+      setShowRewriteInput(false);
+      setRewritePrompt('');
+      setError('候选版本已生成');
+      setTimeout(() => setError(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const handleApplyVariant = async (variantId) => {
+    if (!currentProject || !readingChapter) return;
+    setApplyingVariant(true);
+    setError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/variants/${encodeURIComponent(variantId)}/apply`, {
+        method: 'PUT',
+      });
+      // Update reading content
+      setReadingContent(data.content);
+      setVariantPreview(null);
+      // Update projectDetails chapters to reflect new activeVersionId and title
+      if (data.activeVersionId) {
+        setProjectDetails((prev) => {
+          if (!prev) return prev;
+          const chapters = prev.chapters?.map((ch) =>
+            (ch.fileName || ch.filename) === readingChapter
+              ? { ...ch, activeVersionId: data.activeVersionId, title: data.title || ch.title }
+              : ch
+          );
+          return { ...prev, chapters };
+        });
+      }
+      setError('已设为主线');
+      setTimeout(() => setError(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setApplyingVariant(false);
+    }
+  };
+
+  const handlePreviewVariant = (variant) => {
+    setVariantPreview(variantPreview?.id === variant.id ? null : variant);
+  };
+
   return (
     <div className="app">
       <h1>AI 小说项目管理器</h1>
@@ -461,7 +566,7 @@ function App() {
         <div className="panel panel-left">
           <div className="panel-header">
             <h2>项目</h2>
-            <button className="btn btn-sm" onClick={handleRefresh}>刷新</button>
+            <button className="btn" onClick={handleRefresh}>刷新</button>
           </div>
 
           <div className="project-list">
@@ -513,16 +618,16 @@ function App() {
               />
               {createError && <div className="error create-error">{createError}</div>}
               <div className="form-actions">
-                <button className="btn btn-sm" disabled={creating} onClick={handleCreateProject}>
+                <button className="btn" disabled={creating} onClick={handleCreateProject}>
                   {creating ? '创建中...' : '创建'}
                 </button>
-                <button className="btn btn-sm btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); }}>
+                <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); }}>
                   取消
                 </button>
               </div>
             </div>
           ) : (
-            <button className="btn btn-sm btn-secondary" onClick={() => setShowCreateForm(true)}>
+            <button className="btn btn-secondary" onClick={() => setShowCreateForm(true)}>
               + 创建项目
             </button>
           )}
@@ -531,8 +636,8 @@ function App() {
             <div className="chapters-list">
               <div className="panel-header">
                 <h3>章节列表</h3>
-                <button className="btn btn-sm" onClick={handleRebuildIndex}>重建索引</button>
-                <button className="btn btn-sm" onClick={handleExport} disabled={exportStatus === 'exporting'}>
+                <button className="btn" onClick={handleRebuildIndex}>重建索引</button>
+                <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
                   {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
                 </button>
               </div>
@@ -609,10 +714,10 @@ function App() {
                     placeholder="剧情摘要..."
                   />
                   <div className="form-actions">
-                    <button className="btn btn-sm" disabled={savingSettings} onClick={handleSaveSettings}>
+                    <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>
                       {savingSettings ? '保存中...' : '保存设定'}
                     </button>
-                    <button className="btn btn-sm btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>
+                    <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>
                       关闭
                     </button>
                   </div>
@@ -674,11 +779,11 @@ function App() {
                             type="text"
                             value={editTitleValue}
                             onChange={(e) => setEditTitleValue(e.target.value)}
-                            style={{ fontSize: 14, padding: '4px 8px', width: 260, borderRadius: 4, border: '1px solid #d9d9d9' }}
+                            style={{ fontSize: 14, padding: '4px 8px', flex: 1, minWidth: 280, borderRadius: 4, border: '1px solid #d9d9d9' }}
                             autoFocus
                           />
-                          <button className="btn btn-sm" onClick={handleSaveTitle}>保存</button>
-                          <button className="btn btn-sm btn-secondary" onClick={handleCancelEditTitle}>取消</button>
+                          <button className="btn" onClick={handleSaveTitle}>保存</button>
+                          <button className="btn btn-secondary" onClick={handleCancelEditTitle}>取消</button>
                         </span>
                       ) : (
                         <>
@@ -692,20 +797,97 @@ function App() {
                       )}
                     </h3>
                     <div className="reading-actions">
-                      <button className="btn btn-sm copy-btn" onClick={handleCopyChapter}>
+                      <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
+                        {showRewriteInput ? '取消重写' : '重写本章'}
+                      </button>
+                      <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
                       </button>
                       {displayContent && (
-                        <button className="btn btn-sm copy-btn" onClick={handleCopyFull}>
+                        <button className="btn btn-success" onClick={handleCopyFull}>
                           复制全文
                         </button>
                       )}
-                      <button className="btn btn-sm btn-secondary" onClick={() => { setReadingChapter(null); setReadingContent(''); }}>
+                      <button className="btn btn-secondary" onClick={() => { setReadingChapter(null); setReadingContent(''); setVariants([]); setVariantPreview(null); setShowRewriteInput(false); setRewritePrompt(''); }}>
                         关闭阅读
                       </button>
                     </div>
                   </div>
-                  <div className="reading-content">{readingContent}</div>
+
+                  {/* Rewrite input */}
+                  {showRewriteInput && (
+                    <div className="rewrite-input-area">
+                      <h3 style={{ fontSize: 14, color: '#555', marginBottom: 6 }}>本次重写要求</h3>
+                      <p style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>你可以在原续写要求基础上修改，只影响这次候选版本生成。</p>
+                      <textarea
+                        className="prompt-input"
+                        value={rewritePrompt}
+                        onChange={(e) => setRewritePrompt(e.target.value)}
+                        placeholder="继续写"
+                        rows={4}
+                        style={{ marginBottom: 8 }}
+                      />
+                      <button className="btn" onClick={handleRegenerate} disabled={regenerating}>
+                        {regenerating ? '重写中...' : '生成候选版本'}
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="reading-content">{variantPreview ? variantPreview.content : readingContent}</div>
+
+                  {/* Variants list */}
+                  {variants.length > 0 && (
+                    <div className="variants-section">
+                      <div className="panel-header" style={{ marginTop: 16 }}>
+                        <h3>候选版本（{variants.length}）</h3>
+                      </div>
+                      {(() => {
+                        const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === readingChapter);
+                        const activeVersionId = ch?.activeVersionId || 'v-original';
+                        return variants.map((v, index) => {
+                          const versionLabel = v.id === 'v-original'
+                            ? '第一版 / 原始版'
+                            : `第${index + 1}版 / 候选版`;
+                          const promptSummary = v.userPrompt || '继续写';
+                          return (
+                          <div key={v.id}>
+                            <div className={'variant-item' + (v.id === activeVersionId ? ' active' : '')}>
+                              <div className="variant-info">
+                                <span className="variant-meta">
+                                  {v.id === activeVersionId && <span style={{ color: '#52c41a', fontWeight: 600, marginRight: 8 }}>● 当前主线</span>}
+                                  {versionLabel} · {new Date(v.createdAt).toLocaleString()} · {v.model || 'original'}
+                                </span>
+                                {v.title && v.title !== ch?.title && (
+                                  <span className="variant-instruction" style={{ color: '#4a6cf7' }}>
+                                    标题：{v.title.slice(0, 80)}{v.title.length > 80 ? '...' : ''}
+                                  </span>
+                                )}
+                                <span className="variant-instruction">
+                                  续写要求：{promptSummary.slice(0, 100)}{promptSummary.length > 100 ? '...' : ''}
+                                </span>
+                              </div>
+                              <div className="variant-actions">
+                                <button
+                                  className={'btn' + (variantPreview?.id === v.id ? ' active' : '')}
+                                  onClick={() => handlePreviewVariant(v)}
+                                >
+                                  {variantPreview?.id === v.id ? '关闭正文' : '查看正文'}
+                                </button>
+                                <button
+                                  className="btn btn-secondary"
+                                  disabled={applyingVariant || v.id === activeVersionId}
+                                  onClick={() => handleApplyVariant(v.id)}
+                                >
+                                  {v.id === activeVersionId ? '当前主线' : (applyingVariant ? '应用中...' : '沿此版本继续')}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
                 </div>
               )}
             </>
