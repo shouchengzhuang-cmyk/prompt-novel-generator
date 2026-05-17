@@ -9,6 +9,7 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 const NOVELS_DIR = path.resolve(__dirname, '..', 'novels');
+const RECENT_CHAPTER_LIMIT = 10;
 
 // ---- Helpers ----
 
@@ -484,12 +485,12 @@ app.post('/api/generate', async (req, res) => {
       fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
     ]);
 
-    // 2. Read latest 3 chapters for context (respecting activeVersionId)
+    // 2. Read latest chapters for context (respecting activeVersionId)
     let recentChapters = [];
     try {
       await ensureDir(chaptersDir);
       const files = await fs.readdir(chaptersDir);
-      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort().slice(-3);
+      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort().slice(-RECENT_CHAPTER_LIMIT);
       const indexEntries = await readChapterIndex(chaptersDir);
       const indexMap = {};
       for (const entry of indexEntries) {
@@ -631,6 +632,34 @@ app.post('/api/generate', async (req, res) => {
 
 // ---- GET /api/projects/:projectName/export ----
 
+async function readActiveChapterContent(chaptersDir, chapterRecord) {
+  const fileName = chapterRecord.fileName || chapterRecord.filename;
+  const chapterPath = path.join(chaptersDir, fileName);
+  const relative = path.relative(chaptersDir, chapterPath);
+  if (!isValidChapterFileName(fileName) || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('无效的章节文件名');
+  }
+
+  const readChapterTxt = () => fs.readFile(chapterPath, 'utf-8');
+  const activeVersionId = chapterRecord.activeVersionId || 'v-original';
+  const variants = await readVariants(chaptersDir, fileName);
+
+  if (activeVersionId !== 'v-original') {
+    const activeVariant = variants.find((variant) => variant.id === activeVersionId);
+    if (activeVariant && typeof activeVariant.content === 'string' && activeVariant.content) {
+      return activeVariant.content;
+    }
+    return readChapterTxt();
+  }
+
+  const originalVariant = variants.find((variant) => variant.id === 'v-original');
+  if (originalVariant && typeof originalVariant.content === 'string' && originalVariant.content) {
+    return originalVariant.content;
+  }
+
+  return readChapterTxt();
+}
+
 app.get('/api/projects/:projectName/export', async (req, res) => {
   const { projectName } = req.params;
 
@@ -663,11 +692,8 @@ app.get('/api/projects/:projectName/export', async (req, res) => {
     if (indexEntries.length > 0) {
       // Use index.json order
       for (const entry of indexEntries) {
-        const filePath = path.join(chaptersDir, entry.fileName);
-        const relative = path.relative(chaptersDir, filePath);
-        if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
         try {
-          const text = await fs.readFile(filePath, 'utf-8');
+          const text = await readActiveChapterContent(chaptersDir, entry);
           chapters.push({ title: entry.title || `第${parseInt(entry.fileName, 10)}章`, content: text });
         } catch {
           // skip missing files
@@ -856,17 +882,30 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
     // 2. Read original chapter content (only for v-original preservation, not for prompt)
     const originalContent = await fs.readFile(chapterPath, 'utf-8');
 
-    // 3. Read previous chapters for context (skip the current one)
+    // 3. Read previous chapters for context (skip the current one, respect activeVersionId)
     let recentChapters = [];
     try {
       await ensureDir(chaptersDir);
       const files = await fs.readdir(chaptersDir);
       const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
       const currentIndex = txtFiles.indexOf(fileName);
-      const contextFiles = currentIndex > 0 ? txtFiles.slice(Math.max(0, currentIndex - 3), currentIndex) : [];
+      const contextFiles = currentIndex > 0 ? txtFiles.slice(Math.max(0, currentIndex - RECENT_CHAPTER_LIMIT), currentIndex) : [];
+      const indexEntries = await readChapterIndex(chaptersDir);
+      const indexMap = {};
+      for (const entry of indexEntries) {
+        indexMap[entry.fileName] = entry;
+      }
       for (const f of contextFiles) {
-        const text = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
-        recentChapters.push({ filename: f, content: text });
+        const entry = indexMap[f];
+        let content;
+        if (entry && entry.activeVersionId && entry.activeVersionId !== 'v-original') {
+          const variants = await readVariants(chaptersDir, f);
+          const activeVariant = variants.find((v) => v.id === entry.activeVersionId);
+          content = activeVariant ? activeVariant.content : await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+        } else {
+          content = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+        }
+        recentChapters.push({ filename: f, content });
       }
     } catch {
       // ignore
@@ -1116,6 +1155,15 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ---- Serve built frontend ----
+
+app.use(express.static(path.join(__dirname, '..', 'dist')));
+
+// SPA fallback: any unmatched route serves index.html
+app.get('*', (_req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'dist', 'index.html'));
 });
 
 // ---- Start ----
