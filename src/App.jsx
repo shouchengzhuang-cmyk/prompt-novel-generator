@@ -55,6 +55,7 @@ function App() {
   const [editCharacters, setEditCharacters] = useState('');
   const [editStyle, setEditStyle] = useState('');
   const [editSummary, setEditSummary] = useState('');
+  const [editingProjectName, setEditingProjectName] = useState(null);
 
   // ---- Fetch project list ----
   const fetchProjects = async () => {
@@ -78,6 +79,12 @@ function App() {
     setUserPrompt('');
     setReadingChapter(null);
     setReadingContent('');
+    setShowSettings(false);
+    setEditingProjectName(null);
+    setEditWorld('');
+    setEditCharacters('');
+    setEditStyle('');
+    setEditSummary('');
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`);
       setProjectDetails(data);
@@ -244,6 +251,12 @@ function App() {
         setReadingContent('');
         setLastFilename('');
         setUserPrompt('');
+        setShowSettings(false);
+        setEditingProjectName(null);
+        setEditWorld('');
+        setEditCharacters('');
+        setEditStyle('');
+        setEditSummary('');
       }
       await fetchProjects();
       setError('项目已删除');
@@ -282,12 +295,19 @@ function App() {
     setEditCharacters(projectDetails.characters || '');
     setEditStyle(projectDetails.style || '');
     setEditSummary(projectDetails.summary || '');
+    setEditingProjectName(currentProject);
     setShowSettings(true);
     setError('');
   };
 
   // ---- Save settings ----
   const handleSaveSettings = async () => {
+    if (editingProjectName !== currentProject) {
+      setError('当前项目已切换，请重新打开编辑设定后再保存。');
+      setShowSettings(false);
+      return;
+    }
+
     setError('');
     setSavingSettings(true);
     try {
