@@ -363,6 +363,58 @@ label {
   font-size: 13px;
   color: #666;
   margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ---- Inline link button (like "编辑设定") ---- */
+
+.btn-link {
+  font-size: 12px;
+  color: #4a6cf7;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-link:hover {
+  color: #3b5de7;
+}
+
+/* ---- Settings panel ---- */
+
+.settings-panel {
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.settings-panel h3 {
+  font-size: 14px;
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.settings-input {
+  width: 100%;
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  resize: vertical;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: #4a6cf7;
 }
 
 /* ---- Prompt input ---- */

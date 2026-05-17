@@ -48,6 +48,14 @@ function App() {
   const [readingChapter, setReadingChapter] = useState(null);
   const [readingContent, setReadingContent] = useState('');
 
+  // Project settings editor
+  const [showSettings, setShowSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [editWorld, setEditWorld] = useState('');
+  const [editCharacters, setEditCharacters] = useState('');
+  const [editStyle, setEditStyle] = useState('');
+  const [editSummary, setEditSummary] = useState('');
+
   // ---- Fetch project list ----
   const fetchProjects = async () => {
     try {
@@ -159,7 +167,7 @@ function App() {
       // Auto-select the new chapter for reading
       setReadingChapter(fileName);
       setReadingContent(data.content);
-      // Refresh chapter list
+      // Refresh chapter list (merge title into local state immediately)
       const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
       setProjectDetails(refreshData);
       if (data.summaryUpdated) {
@@ -194,7 +202,9 @@ function App() {
   // ---- Delete a chapter ----
   const handleDeleteChapter = async (filename, e) => {
     e.stopPropagation();
-    if (!confirm(`确定删除章节 ${filename} 吗？此操作不可恢复。`)) return;
+    const ch = projectDetails?.chapters?.find((c) => c.filename === filename);
+    const label = ch?.title || filename;
+    if (!confirm(`确定删除章节【${label}】吗？此操作不可恢复。`)) return;
     setError('');
     try {
       await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}`, {
@@ -262,6 +272,49 @@ function App() {
       setTimeout(() => setCopied(false), 2000);
     } catch {
       setError('复制失败');
+    }
+  };
+
+  // ---- Open settings ----
+  const handleOpenSettings = () => {
+    if (!projectDetails) return;
+    setEditWorld(projectDetails.world || '');
+    setEditCharacters(projectDetails.characters || '');
+    setEditStyle(projectDetails.style || '');
+    setEditSummary(projectDetails.summary || '');
+    setShowSettings(true);
+    setError('');
+  };
+
+  // ---- Save settings ----
+  const handleSaveSettings = async () => {
+    setError('');
+    setSavingSettings(true);
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          world: editWorld,
+          characters: editCharacters,
+          style: editStyle,
+          summary: editSummary,
+        }),
+      });
+      // Sync projectDetails
+      setProjectDetails((prev) => prev ? {
+        ...prev,
+        world: data.project?.world ?? editWorld,
+        characters: data.project?.characters ?? editCharacters,
+        style: data.project?.style ?? editStyle,
+        summary: data.project?.summary ?? editSummary,
+      } : prev);
+      setError('设定已保存');
+      setTimeout(() => setError(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -359,7 +412,7 @@ function App() {
                         className={'chapter-item' + (readingChapter === ch.filename ? ' active' : '')}
                         onClick={() => handleReadChapter(ch.filename)}
                       >
-                        <span className="chapter-name">{ch.filename}</span>
+                        <span className="chapter-name">{ch.filename.slice(0, 3)} {ch.title || ch.filename}</span>
                       </div>
                       <button className="delete-btn chapter-delete" onClick={(e) => handleDeleteChapter(ch.filename, e)}>删除</button>
                     </li>
@@ -380,7 +433,55 @@ function App() {
             <>
               <div className="current-project-label">
                 当前项目：<strong>{currentProject}</strong>
+                <button className="btn-link" onClick={handleOpenSettings}>编辑设定</button>
               </div>
+
+              {/* Settings Editor */}
+              {showSettings && (
+                <div className="settings-panel">
+                  <h3>项目设定</h3>
+                  <label>世界观设定 world.md</label>
+                  <textarea
+                    className="settings-input"
+                    value={editWorld}
+                    onChange={(e) => setEditWorld(e.target.value)}
+                    rows={3}
+                    placeholder="世界观设定..."
+                  />
+                  <label>人物设定 characters.md</label>
+                  <textarea
+                    className="settings-input"
+                    value={editCharacters}
+                    onChange={(e) => setEditCharacters(e.target.value)}
+                    rows={3}
+                    placeholder="人物设定..."
+                  />
+                  <label>写作规则 style.md</label>
+                  <textarea
+                    className="settings-input"
+                    value={editStyle}
+                    onChange={(e) => setEditStyle(e.target.value)}
+                    rows={5}
+                    placeholder="写作规则、文风要求..."
+                  />
+                  <label>剧情摘要 summary.md</label>
+                  <textarea
+                    className="settings-input"
+                    value={editSummary}
+                    onChange={(e) => setEditSummary(e.target.value)}
+                    rows={5}
+                    placeholder="剧情摘要..."
+                  />
+                  <div className="form-actions">
+                    <button className="btn btn-sm" disabled={savingSettings} onClick={handleSaveSettings}>
+                      {savingSettings ? '保存中...' : '保存设定'}
+                    </button>
+                    <button className="btn btn-sm btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>
+                      关闭
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <label>续写要求</label>
               <textarea
@@ -430,7 +531,13 @@ function App() {
               {readingChapter && (
                 <div className="reading-section">
                   <div className="reading-header">
-                    <h3>{readingChapter}</h3>
+                    <h3>
+                      {(() => {
+                        const ch = projectDetails?.chapters?.find((c) => c.filename === readingChapter);
+                        return ch?.title || readingChapter;
+                      })()}
+                      <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400, marginLeft: 10 }}>{readingChapter}</span>
+                    </h3>
                     <div className="reading-actions">
                       <button className="btn btn-sm copy-btn" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}

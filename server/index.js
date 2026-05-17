@@ -71,6 +71,45 @@ async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
 
+// ---- Chapter title helpers ----
+
+const INDEX_FILE = 'index.json';
+
+async function readChapterIndex(chaptersDir) {
+  try {
+    const raw = await fs.readFile(path.join(chaptersDir, INDEX_FILE), 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return [];
+  }
+}
+
+async function writeChapterIndex(chaptersDir, entries) {
+  await fs.writeFile(
+    path.join(chaptersDir, INDEX_FILE),
+    JSON.stringify(entries, null, 2),
+    'utf-8'
+  );
+}
+
+function extractTitleFromContent(content, chapterNumber) {
+  // Try to extract from first non-empty line: "# 标题" or "第X章 标题"
+  const lines = content.split('\n').filter((l) => l.trim());
+  for (const line of lines) {
+    const trimmed = line.trim();
+    // Match: # 标题  or  ## 标题
+    const headingMatch = trimmed.match(/^#{1,3}\s+(.+)/);
+    if (headingMatch) return headingMatch[1].trim();
+    // Match: 第X章 标题
+    const chapterMatch = trimmed.match(/^第[一二三四五六七八九十百千万\d]+章\s+(.+)/);
+    if (chapterMatch) return `第${chapterNumber}章 ${chapterMatch[1].trim()}`;
+    // Match bare "第X章"
+    const bareChapter = trimmed.match(/^(第[一二三四五六七八九十百千万\d]+章)/);
+    if (bareChapter) return bareChapter[1];
+  }
+  return `第${chapterNumber}章`;
+}
+
 // ---- GET /api/projects ----
 
 app.get('/api/projects', async (_req, res) => {
@@ -151,10 +190,16 @@ app.get('/api/projects/:projectName', async (req, res) => {
 
     try {
       const files = await fs.readdir(chaptersDir);
-      chapters = files
-        .filter((f) => f.endsWith('.txt'))
-        .sort()
-        .map((f) => ({ filename: f }));
+      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+      const indexEntries = await readChapterIndex(chaptersDir);
+      const indexMap = {};
+      for (const entry of indexEntries) {
+        indexMap[entry.fileName] = entry;
+      }
+      chapters = txtFiles.map((f) => ({
+        filename: f,
+        title: indexMap[f]?.title || extractTitleFromContent('', parseInt(f, 10)),
+      }));
 
       // Load content of last 10 chapters for display
       const recentFiles = chapters.slice(-10);
@@ -243,6 +288,12 @@ app.delete('/api/projects/:projectName/chapters/:fileName', async (req, res) => 
 
   try {
     await fs.rm(chapterPath);
+    // Remove entry from index.json
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const filtered = indexEntries.filter((e) => e.fileName !== fileName);
+    if (filtered.length !== indexEntries.length) {
+      await writeChapterIndex(chaptersDir, filtered);
+    }
     res.json({ ok: true, message: '章节已删除', fileName });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -275,6 +326,45 @@ app.delete('/api/projects/:projectName', async (req, res) => {
   try {
     await fs.rm(projectDir, { recursive: true, force: false });
     res.json({ ok: true, message: '项目已删除', projectName });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- PUT /api/projects/:projectName ----
+
+app.put('/api/projects/:projectName', async (req, res) => {
+  const { projectName } = req.params;
+  const { world, characters, style, summary } = req.body;
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  try {
+    const project = {
+      world: typeof world === 'string' ? world : '',
+      characters: typeof characters === 'string' ? characters : '',
+      style: typeof style === 'string' ? style : '',
+      summary: typeof summary === 'string' ? summary : '',
+    };
+
+    await Promise.all([
+      fs.writeFile(path.join(projectDir, 'world.md'), project.world, 'utf-8'),
+      fs.writeFile(path.join(projectDir, 'characters.md'), project.characters, 'utf-8'),
+      fs.writeFile(path.join(projectDir, 'style.md'), project.style, 'utf-8'),
+      fs.writeFile(path.join(projectDir, 'summary.md'), project.summary, 'utf-8'),
+    ]);
+    res.json({ ok: true, message: '设定已保存', project });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -377,7 +467,17 @@ app.post('/api/generate', async (req, res) => {
     const filename = String(nextNum).padStart(3, '0') + '.txt';
     await fs.writeFile(path.join(chaptersDir, filename), content, 'utf-8');
 
-    // 6. Update summary after the chapter is safely saved.
+    // 6a. Extract title and update index.json
+    const title = extractTitleFromContent(content, nextNum);
+    const indexEntries = await readChapterIndex(chaptersDir);
+    indexEntries.push({
+      fileName: filename,
+      title,
+      createdAt: new Date().toISOString(),
+    });
+    await writeChapterIndex(chaptersDir, indexEntries);
+
+    // 6b. Update summary after the chapter is safely saved.
     try {
       const oldSummary = await fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => '');
       const summaryMessages = [
@@ -403,11 +503,12 @@ app.post('/api/generate', async (req, res) => {
       ];
       const updatedSummary = await callDeepSeek('deepseek-chat', summaryMessages);
       await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
-      res.json({ content, fileName: filename, summaryUpdated: true });
+      res.json({ content, fileName: filename, title, summaryUpdated: true });
     } catch (summaryErr) {
       res.json({
         content,
         fileName: filename,
+        title,
         summaryUpdated: false,
         summaryError: summaryErr.message || '摘要更新失败',
       });
