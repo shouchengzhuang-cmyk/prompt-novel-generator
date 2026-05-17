@@ -57,6 +57,13 @@ function App() {
   const [editSummary, setEditSummary] = useState('');
   const [editingProjectName, setEditingProjectName] = useState(null);
 
+  // Export
+  const [exportStatus, setExportStatus] = useState('');
+
+  // Chapter title editing
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [editTitleValue, setEditTitleValue] = useState('');
+
   // ---- Fetch project list ----
   const fetchProjects = async () => {
     try {
@@ -87,6 +94,13 @@ function App() {
     setEditSummary('');
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`);
+      // Normalize: ensure chapters have fileName regardless of backend field name
+      if (data.chapters) {
+        data.chapters = data.chapters.map((ch) => {
+          if (!ch.fileName && ch.filename) ch.fileName = ch.filename;
+          return ch;
+        });
+      }
       setProjectDetails(data);
       setDisplayContent(data.recentContent || '');
     } catch (err) {
@@ -209,7 +223,7 @@ function App() {
   // ---- Delete a chapter ----
   const handleDeleteChapter = async (filename, e) => {
     e.stopPropagation();
-    const ch = projectDetails?.chapters?.find((c) => c.filename === filename);
+    const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === filename);
     const label = ch?.title || filename;
     if (!confirm(`确定删除章节【${label}】吗？此操作不可恢复。`)) return;
     setError('');
@@ -347,6 +361,98 @@ function App() {
     }
   };
 
+  // ---- Export full text ----
+  const handleExport = async () => {
+    if (!currentProject) return;
+    setExportStatus('exporting');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/export`);
+      const blob = new Blob([data.content], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.fileName || `${currentProject}.md`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setExportStatus('success');
+      setTimeout(() => setExportStatus(''), 3000);
+    } catch (err) {
+      setExportStatus('error');
+      setError('导出失败：' + err.message);
+      setTimeout(() => { setExportStatus(''); }, 3000);
+    }
+  };
+
+  // ---- Rebuild chapter index ----
+  const handleRebuildIndex = async () => {
+    if (!currentProject) return;
+    if (!confirm('确定要重建章节索引吗？已有章节标题会尽量保留。')) return;
+    setError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/rebuild-index`, {
+        method: 'POST',
+      });
+      // Update projectDetails chapters
+      if (data.chapters) {
+        data.chapters = data.chapters.map((ch) => {
+          if (!ch.fileName && ch.filename) ch.fileName = ch.filename;
+          return ch;
+        });
+      }
+      setProjectDetails((prev) => prev ? { ...prev, chapters: data.chapters } : prev);
+      // If the reading chapter no longer exists, clear reading
+      if (readingChapter && !data.chapters.find((ch) => ch.fileName === readingChapter)) {
+        setReadingChapter(null);
+        setReadingContent('');
+      }
+      setError('索引已重建');
+      setTimeout(() => setError(''), 3000);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // ---- Edit chapter title ----
+  const handleStartEditTitle = () => {
+    const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === readingChapter);
+    setEditTitleValue(ch?.title || '');
+    setEditingTitle(true);
+  };
+
+  const handleSaveTitle = async () => {
+    const trimmed = editTitleValue.trim();
+    if (!trimmed) {
+      setError('标题不能为空');
+      return;
+    }
+    setError('');
+    try {
+      await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/title`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      // Update local state
+      setProjectDetails((prev) => {
+        if (!prev) return prev;
+        const updated = prev.chapters?.map((ch) =>
+          ch.fileName === readingChapter ? { ...ch, title: trimmed } : ch
+        );
+        return { ...prev, chapters: updated };
+      });
+      setEditingTitle(false);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleCancelEditTitle = () => {
+    setEditingTitle(false);
+    setEditTitleValue('');
+  };
+
   return (
     <div className="app">
       <h1>AI 小说项目管理器</h1>
@@ -423,20 +529,30 @@ function App() {
 
           {projectDetails && (
             <div className="chapters-list">
-              <h3>章节列表</h3>
+              <div className="panel-header">
+                <h3>章节列表</h3>
+                <button className="btn btn-sm" onClick={handleRebuildIndex}>重建索引</button>
+                <button className="btn btn-sm" onClick={handleExport} disabled={exportStatus === 'exporting'}>
+                  {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
+                </button>
+              </div>
               {projectDetails.chapters && projectDetails.chapters.length > 0 ? (
                 <ul>
-                  {projectDetails.chapters.map((ch) => (
-                    <li key={ch.filename} className="chapter-item-wrap">
+                  {projectDetails.chapters.map((ch, index) => {
+                    const cf = ch.fileName || ch.filename;
+                    const key = cf || `chapter-${index}`;
+                    return (
+                    <li key={key} className={`chapter-item-wrap${!cf ? ' disabled' : ''}`}>
                       <div
-                        className={'chapter-item' + (readingChapter === ch.filename ? ' active' : '')}
-                        onClick={() => handleReadChapter(ch.filename)}
+                        className={'chapter-item' + (cf && readingChapter === cf ? ' active' : '')}
+                        onClick={() => cf && handleReadChapter(cf)}
                       >
-                        <span className="chapter-name">{ch.filename.slice(0, 3)} {ch.title || ch.filename}</span>
+                        <span className="chapter-name">{cf ? `${cf.slice(0, 3)} ${ch.title || cf.replace(/\.txt$/, '')}` : '无效章节'}</span>
                       </div>
-                      <button className="delete-btn chapter-delete" onClick={(e) => handleDeleteChapter(ch.filename, e)}>删除</button>
+                      <button className="delete-btn chapter-delete" disabled={!cf} onClick={(e) => cf && handleDeleteChapter(cf, e)}>删除</button>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="hint">暂无章节</p>
@@ -552,11 +668,28 @@ function App() {
                 <div className="reading-section">
                   <div className="reading-header">
                     <h3>
-                      {(() => {
-                        const ch = projectDetails?.chapters?.find((c) => c.filename === readingChapter);
-                        return ch?.title || readingChapter;
-                      })()}
-                      <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400, marginLeft: 10 }}>{readingChapter}</span>
+                      {editingTitle ? (
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <input
+                            type="text"
+                            value={editTitleValue}
+                            onChange={(e) => setEditTitleValue(e.target.value)}
+                            style={{ fontSize: 14, padding: '4px 8px', width: 260, borderRadius: 4, border: '1px solid #d9d9d9' }}
+                            autoFocus
+                          />
+                          <button className="btn btn-sm" onClick={handleSaveTitle}>保存</button>
+                          <button className="btn btn-sm btn-secondary" onClick={handleCancelEditTitle}>取消</button>
+                        </span>
+                      ) : (
+                        <>
+                          {(() => {
+                            const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === readingChapter);
+                            return ch?.title || readingChapter;
+                          })()}
+                          <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400, marginLeft: 10 }}>{readingChapter}</span>
+                          <button className="btn-link" style={{ marginLeft: 8, fontSize: 12 }} onClick={handleStartEditTitle}>编辑标题</button>
+                        </>
+                      )}
                     </h3>
                     <div className="reading-actions">
                       <button className="btn btn-sm copy-btn" onClick={handleCopyChapter}>

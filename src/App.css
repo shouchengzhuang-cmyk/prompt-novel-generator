@@ -325,6 +325,11 @@ label {
   gap: 4px;
 }
 
+.chapter-item-wrap.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .chapter-item-wrap .chapter-item {
   flex: 1;
   min-width: 0;

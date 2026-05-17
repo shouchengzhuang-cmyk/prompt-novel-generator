@@ -300,6 +300,75 @@ app.delete('/api/projects/:projectName/chapters/:fileName', async (req, res) => 
   }
 });
 
+// ---- PUT /api/projects/:projectName/chapters/:fileName/title ----
+
+app.put('/api/projects/:projectName/chapters/:fileName/title', async (req, res) => {
+  const { projectName, fileName } = req.params;
+  let { title } = req.body;
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, fileName);
+  const relativePath = path.relative(chaptersDir, chapterPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  try {
+    await fs.access(chapterPath);
+  } catch {
+    return res.status(404).json({ error: '章节不存在' });
+  }
+
+  if (typeof title !== 'string') {
+    return res.status(400).json({ error: 'title 必须为字符串' });
+  }
+
+  title = title.trim();
+  if (!title) {
+    return res.status(400).json({ error: 'title 不能为空' });
+  }
+
+  try {
+    let indexEntries = await readChapterIndex(chaptersDir);
+
+    // Rebuild index.json if missing or empty
+    if (indexEntries.length === 0) {
+      const files = await fs.readdir(chaptersDir);
+      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+      indexEntries = txtFiles.map((f) => ({
+        fileName: f,
+        title: f.replace('.txt', ''),
+        createdAt: new Date().toISOString(),
+      }));
+    }
+
+    // Find or create entry
+    let entry = indexEntries.find((e) => e.fileName === fileName);
+    if (entry) {
+      entry.title = title;
+    } else {
+      entry = { fileName, title, createdAt: new Date().toISOString() };
+      indexEntries.push(entry);
+    }
+
+    await writeChapterIndex(chaptersDir, indexEntries);
+    res.json({ ok: true, chapter: { fileName: entry.fileName, title: entry.title, createdAt: entry.createdAt } });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---- DELETE /api/projects/:projectName ----
 
 app.delete('/api/projects/:projectName', async (req, res) => {
@@ -515,6 +584,150 @@ app.post('/api/generate', async (req, res) => {
     }
   } catch (err) {
     res.status(500).json({ error: err.message || '服务器内部错误' });
+  }
+});
+
+// ---- GET /api/projects/:projectName/export ----
+
+app.get('/api/projects/:projectName/export', async (req, res) => {
+  const { projectName } = req.params;
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+
+  try {
+    await fs.access(chaptersDir);
+  } catch {
+    return res.status(404).json({ error: '该项目暂无章节' });
+  }
+
+  try {
+    // Try reading index.json first
+    const indexEntries = await readChapterIndex(chaptersDir);
+    let chapters = [];
+
+    if (indexEntries.length > 0) {
+      // Use index.json order
+      for (const entry of indexEntries) {
+        const filePath = path.join(chaptersDir, entry.fileName);
+        const relative = path.relative(chaptersDir, filePath);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+        try {
+          const text = await fs.readFile(filePath, 'utf-8');
+          chapters.push({ title: entry.title || entry.fileName.replace('.txt', ''), content: text });
+        } catch {
+          // skip missing files
+        }
+      }
+    }
+
+    // Fallback: read .txt files sorted alphabetically
+    if (chapters.length === 0) {
+      const files = await fs.readdir(chaptersDir);
+      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+      for (const f of txtFiles) {
+        const filePath = path.join(chaptersDir, f);
+        const relative = path.relative(chaptersDir, filePath);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+        const text = await fs.readFile(filePath, 'utf-8');
+        chapters.push({ title: f.replace('.txt', ''), content: text });
+      }
+    }
+
+    if (chapters.length === 0) {
+      return res.status(404).json({ error: '该项目暂无章节' });
+    }
+
+    // Build markdown
+    const parts = chapters.map((ch) => `# ${ch.title}\n\n${ch.content}`);
+    const content = parts.join('\n\n');
+
+    res.json({ fileName: `${projectName}.md`, content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- POST /api/projects/:projectName/chapters/rebuild-index ----
+
+app.post('/api/projects/:projectName/chapters/rebuild-index', async (req, res) => {
+  const { projectName } = req.params;
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+
+  try {
+    await fs.access(chaptersDir);
+  } catch {
+    return res.status(404).json({ error: '该项目暂无章节' });
+  }
+
+  try {
+    // Scan all .txt files sorted
+    const files = await fs.readdir(chaptersDir);
+    const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+
+    if (txtFiles.length === 0) {
+      return res.status(404).json({ error: '该项目暂无章节' });
+    }
+
+    // Read old index, keyed by fileName
+    const oldEntries = await readChapterIndex(chaptersDir);
+    const oldMap = {};
+    for (const entry of oldEntries) {
+      oldMap[entry.fileName] = entry;
+    }
+
+    // Build new index
+    const newEntries = [];
+    for (const f of txtFiles) {
+      const old = oldMap[f];
+      let createdAt;
+      if (old && old.createdAt) {
+        createdAt = old.createdAt;
+      } else {
+        try {
+          const stat = await fs.stat(path.join(chaptersDir, f));
+          createdAt = stat.birthtime?.toISOString() || stat.mtime.toISOString();
+        } catch {
+          createdAt = new Date().toISOString();
+        }
+      }
+      newEntries.push({
+        fileName: f,
+        title: old?.title || f.replace('.txt', ''),
+        createdAt,
+      });
+    }
+
+    await writeChapterIndex(chaptersDir, newEntries);
+    res.json({ ok: true, chapters: newEntries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
