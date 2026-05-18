@@ -841,66 +841,163 @@ label {
   border-top: 1px solid #eee;
 }
 
-/* ---- Advanced settings (collapsible Prompt Vault) ---- */
+/* ---- Advanced options (collapsible in main area) ---- */
 
-.advanced-settings {
-  margin-top: 24px;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  background: #fff;
+.advanced-options {
+  margin-top: 12px;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
   overflow: hidden;
 }
 
-.advanced-settings-summary {
+.advanced-options-summary {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  justify-content: space-between;
+  padding: 8px 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
+  color: #888;
   user-select: none;
   list-style: none;
 }
 
-.advanced-settings-summary::-webkit-details-marker {
+.advanced-options-summary::-webkit-details-marker {
   display: none;
 }
 
-.advanced-settings-summary::before {
-  content: '▶';
+.advanced-options-summary:hover {
+  background: #fafafa;
+  color: #555;
+}
+
+.advanced-options[open] .advanced-options-summary {
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.advanced-options-title {
+  font-weight: 400;
+}
+
+.advanced-options-arrow {
   font-size: 10px;
-  color: #999;
   transition: transform 0.15s;
 }
 
-.advanced-settings[open] .advanced-settings-summary::before {
+.advanced-options[open] .advanced-options-arrow {
   transform: rotate(90deg);
 }
 
-.advanced-settings-summary:hover {
-  background: #fafafa;
+.advanced-options-body {
+  padding: 12px;
 }
 
-.advanced-settings-title {
-  font-weight: 500;
-  color: #333;
+/* ---- Advanced options sub (VaultPanel inside advanced options) ---- */
+
+.advanced-options-sub {
+  margin-top: 8px;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  overflow: hidden;
 }
 
-.advanced-settings-hint {
+.advanced-options-sub-summary {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  cursor: pointer;
   font-size: 12px;
-  color: #bbb;
+  color: #999;
+  user-select: none;
+  list-style: none;
 }
 
-.advanced-settings-body {
-  border-top: 1px solid #eee;
-  padding: 16px;
+.advanced-options-sub-summary::-webkit-details-marker {
+  display: none;
 }
 
-.advanced-settings-body .vault-panel {
+.advanced-options-sub-summary::before {
+  content: '▶';
+  font-size: 9px;
+  color: #ccc;
+  margin-right: 6px;
+  transition: transform 0.15s;
+}
+
+.advanced-options-sub[open] .advanced-options-sub-summary::before {
+  transform: rotate(90deg);
+}
+
+.advanced-options-sub-summary:hover {
+  background: #fafafa;
+  color: #666;
+}
+
+.advanced-options-sub-body {
+  padding: 8px 10px;
+}
+
+.advanced-options-sub-body .vault-panel {
   padding: 0;
   border: none;
   box-shadow: none;
   border-radius: 0;
+}
+
+/* ---- Project tools (collapsible in chapter sidebar) ---- */
+
+.project-tools {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.project-tools-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #999;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  border: 1px dashed #ddd;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.project-tools-summary::-webkit-details-marker {
+  display: none;
+}
+
+.project-tools-summary::before {
+  content: '▶';
+  font-size: 8px;
+  margin-right: 2px;
+  transition: transform 0.15s;
+}
+
+.project-tools[open] .project-tools-summary::before {
+  transform: rotate(90deg);
+}
+
+.project-tools-summary:hover {
+  color: #666;
+  border-color: #ccc;
+}
+
+.project-tools-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 4px;
+}
+
+.project-tools-body .btn {
+  min-height: 30px;
+  min-width: auto;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 
 /* ---- Responsive ---- */
