@@ -5,6 +5,9 @@ const express = require('express');
 const cors = require('cors');
 const archiver = require('archiver');
 
+const vaultRoutes = require('./routes/vault');
+const { buildPrompt } = require('./services/promptBuilder');
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -517,30 +520,23 @@ app.post('/api/generate', async (req, res) => {
       await ensureDir(chaptersDir);
     }
 
-    // 3. Build messages
-    let systemContent =
-      '你是一位长篇小说写作助手。根据以下规则续写接下来的内容：\n' +
-      '1. 必须遵守下面的写作规则。\n' +
-      '2. 保持世界观、人物性格、叙事风格和情节发展的连续性。\n' +
-      '3. 不要重复最近章节中已经写过的内容。\n' +
-      '4. 不要擅自改变人物关系和核心设定。\n' +
-      '5. 始终使用中文写作。';
+    // 3. Build messages from Vault template
+    const recentChaptersText = recentChapters.map((ch) => `--- ${ch.filename} ---\n${ch.content}`).join('\n\n');
+    const promptInfo = await buildPrompt('novel.generateChapter', {
+      world: world || '',
+      characters: characters || '',
+      style: style || '',
+      summary: summary || '',
+      recentChapters: recentChaptersText,
+      userPrompt: userPrompt.trim(),
+    });
+    const { systemContent, userContent, templateId, templateTitle, usedFallback } = promptInfo;
+    const debugPromptInfo = { taskType: 'novel.generateChapter', templateId, templateTitle, usedFallback };
 
-    if (style) {
-      systemContent += `\n\n## 写作规则\n${style}`;
+    console.log(`[生成] 项目=${projectName} taskType=novel.generateChapter templateId=${templateId || '(无)'} usedFallback=${usedFallback}`);
+    if (usedFallback) {
+      console.warn(`[生成] ⚠ 项目=${projectName} taskType=novel.generateChapter 使用了 fallback 生成，未使用 Vault 模板`);
     }
-
-    let userContent = '';
-    if (world) userContent += `## 世界观设定\n${world}\n\n`;
-    if (characters) userContent += `## 人物设定\n${characters}\n\n`;
-    if (summary) userContent += `## 故事梗概\n${summary}\n\n`;
-    if (recentChapters.length > 0) {
-      userContent += '## 最近章节\n';
-      for (const ch of recentChapters) {
-        userContent += `--- ${ch.filename} ---\n${ch.content}\n\n`;
-      }
-    }
-    userContent += `## 本次续写要求\n${userPrompt.trim()}`;
 
     const messages = [
       { role: 'system', content: systemContent },
@@ -615,7 +611,7 @@ app.post('/api/generate', async (req, res) => {
       ];
       const updatedSummary = await callDeepSeek('deepseek-chat', summaryMessages);
       await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
-      res.json({ content, fileName: filename, title, summaryUpdated: true });
+      res.json({ content, fileName: filename, title, summaryUpdated: true, debugPromptInfo });
     } catch (summaryErr) {
       res.json({
         content,
@@ -623,6 +619,7 @@ app.post('/api/generate', async (req, res) => {
         title,
         summaryUpdated: false,
         summaryError: summaryErr.message || '摘要更新失败',
+        debugPromptInfo,
       });
     }
   } catch (err) {
@@ -988,31 +985,22 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
       // ignore
     }
 
-    // 4. Build prompt — fork from previous chapters, NOT rewrite old chapter
-    let systemContent =
-      '你是一位长篇小说写作助手。你的任务是基于已有前文，生成当前章节的一个新分支版本。\n' +
-      '1. 只承接前文章节和项目设定。\n' +
-      '2. 不要参考旧版本章节正文。\n' +
-      '3. 不要沿用旧版本的情节走向，按用户本次要求重新展开。\n' +
-      '4. 保持世界观、人物性格、叙事风格一致。\n' +
-      '5. 优先执行用户本次续写要求。\n' +
-      '6. 只输出章节正文，不要解释说明。';
+    // 4. Build prompt from Vault template (fork — NOT rewrite old chapter)
+    const recentChaptersText = recentChapters.map((ch) => `--- ${ch.filename} ---\n${ch.content}`).join('\n\n');
+    const promptInfo = await buildPrompt('novel.rewriteChapter', {
+      world: world || '',
+      characters: characters || '',
+      style: style || '',
+      recentChapters: recentChaptersText,
+      userPrompt: effectiveUserPrompt,
+    });
+    const { systemContent, userContent, templateId, templateTitle, usedFallback } = promptInfo;
+    const debugPromptInfo = { taskType: 'novel.rewriteChapter', templateId, templateTitle, usedFallback };
 
-    if (style) {
-      systemContent += `\n\n## 写作规则\n${style}`;
+    console.log(`[重写] 项目=${projectName} 章节=${fileName} taskType=novel.rewriteChapter templateId=${templateId || '(无)'} usedFallback=${usedFallback}`);
+    if (usedFallback) {
+      console.warn(`[重写] ⚠ 项目=${projectName} 章节=${fileName} taskType=novel.rewriteChapter 使用了 fallback 生成，未使用 Vault 模板`);
     }
-
-    let userContent = '';
-    if (world) userContent += `## 世界观设定\n${world}\n\n`;
-    if (characters) userContent += `## 人物设定\n${characters}\n\n`;
-    if (recentChapters.length > 0) {
-      userContent += '## 前文章节\n';
-      for (const ch of recentChapters) {
-        userContent += `--- ${ch.filename} ---\n${ch.content}\n\n`;
-      }
-    }
-    userContent += `## 用户本次续写要求\n${effectiveUserPrompt}\n\n`;
-    userContent += '请根据以上设定和前文，输出当前章节的新分支版本正文。不要做任何解释说明。';
 
     const messages = [
       { role: 'system', content: systemContent },
@@ -1073,7 +1061,7 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
       await writeChapterIndex(chaptersDir, indexEntries);
     }
 
-    res.json({ ok: true, variant });
+    res.json({ ok: true, variant, debugPromptInfo });
   } catch (err) {
     res.status(500).json({ error: err.message || '服务器内部错误' });
   }
@@ -1346,6 +1334,114 @@ app.post('/api/projects/:projectName/summary/rebuild', async (req, res) => {
     res.status(500).json({ error: err.message || '摘要重建失败' });
   }
 });
+
+// ---- GET /api/projects/:projectName/prompt-preview ----
+
+app.get('/api/projects/:projectName/prompt-preview', async (req, res) => {
+  const { projectName } = req.params;
+  const { taskType, userPrompt, fileName } = req.query;
+
+  if (!taskType || !['novel.generateChapter', 'novel.rewriteChapter'].includes(taskType)) {
+    return res.status(400).json({ error: 'taskType 必须为 novel.generateChapter 或 novel.rewriteChapter' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+
+  try {
+    // 1. Read context files
+    const [worldFile, charactersFile, styleFile] = await Promise.all([
+      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+    ]);
+
+    let context = {
+      world: worldFile || '',
+      characters: charactersFile || '',
+      style: styleFile || '',
+      userPrompt: (userPrompt || '').trim(),
+    };
+
+    if (taskType === 'novel.generateChapter') {
+      const summaryFile = await fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => '');
+      context.summary = summaryFile || '';
+    }
+
+    // 2. Read recent chapters (with activeVersionId awareness)
+    let recentChapters = [];
+    try {
+      await ensureDir(chaptersDir);
+      const files = await fs.readdir(chaptersDir);
+      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+      const indexEntries = await readChapterIndex(chaptersDir);
+      const indexMap = {};
+      for (const entry of indexEntries) {
+        indexMap[entry.fileName] = entry;
+      }
+
+      let selectedFiles;
+      if (taskType === 'novel.rewriteChapter') {
+        if (!fileName) {
+          return res.status(400).json({ error: 'rewriteChapter 预览需要提供 fileName' });
+        }
+        if (!isValidChapterFileName(fileName)) {
+          return res.status(400).json({ error: '无效的 fileName' });
+        }
+        const currentIndex = txtFiles.indexOf(fileName);
+        if (currentIndex === -1) {
+          return res.status(404).json({ error: '章节不存在' });
+        }
+        selectedFiles = currentIndex > 0
+          ? txtFiles.slice(Math.max(0, currentIndex - RECENT_CHAPTER_LIMIT), currentIndex)
+          : [];
+      } else {
+        selectedFiles = txtFiles.slice(-RECENT_CHAPTER_LIMIT);
+      }
+
+      for (const f of selectedFiles) {
+        const entry = indexMap[f];
+        let content;
+        if (entry && entry.activeVersionId && entry.activeVersionId !== 'v-original') {
+          const variants = await readVariants(chaptersDir, f);
+          const activeVariant = variants.find((v) => v.id === entry.activeVersionId);
+          content = activeVariant ? activeVariant.content : await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+        } else {
+          content = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+        }
+        recentChapters.push({ filename: f, content });
+      }
+    } catch {
+      await ensureDir(chaptersDir);
+    }
+
+    context.recentChapters = recentChapters.map((ch) => `--- ${ch.filename} ---\n${ch.content}`).join('\n\n');
+
+    // 3. Build prompt
+    const promptInfo = await buildPrompt(taskType, context);
+    const { systemContent, userContent, templateId, templateTitle, usedFallback } = promptInfo;
+
+    res.json({ taskType, templateId, templateTitle, usedFallback, systemContent, userContent });
+  } catch (err) {
+    res.status(500).json({ error: err.message || '预览生成失败' });
+  }
+});
+
+// ---- Vault routes ----
+
+app.use('/api/vault/templates', vaultRoutes);
 
 // ---- Serve built frontend ----
 

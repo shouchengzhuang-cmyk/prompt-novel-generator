@@ -1,0 +1,104 @@
+[
+  {
+    "id": "novel-generate",
+    "title": "小说续写",
+    "description": "续写小说下一章节正文。自动注入世界观、人物设定、写作规则、剧情摘要和最近章节上下文，拼接用户续写要求后生成。",
+    "category": "小说创作",
+    "tags": [
+      "续写",
+      "小说"
+    ],
+    "taskType": "novel.generateChapter",
+    "defaultModel": "deepseek-reasoner",
+    "systemTemplate": "你是一位长篇小说写作助手。根据以下规则续写接下来的内容：\n1. 必须遵守下面的写作规则。\n2. 保持世界观、人物性格、叙事风格和情节发展的连续性。\n3. 不要重复最近章节中已经写过的内容。\n4. 不要擅自改变人物关系和核心设定。\n5. 始终使用中文写作。\n\n## 写作规则\n{{style}}",
+    "userTemplate": "## 世界观设定\n{{world}}\n\n## 人物设定\n{{characters}}\n\n## 故事梗概\n{{summary}}\n\n## 最近章节\n{{recentChapters}}\n\n## 本次续写要求\n{{userPrompt}}",
+    "variables": [
+      {
+        "name": "world",
+        "label": "世界观设定",
+        "type": "text",
+        "source": "project"
+      },
+      {
+        "name": "characters",
+        "label": "人物设定",
+        "type": "text",
+        "source": "project"
+      },
+      {
+        "name": "style",
+        "label": "写作规则",
+        "type": "text",
+        "source": "project"
+      },
+      {
+        "name": "summary",
+        "label": "剧情摘要",
+        "type": "text",
+        "source": "project"
+      },
+      {
+        "name": "recentChapters",
+        "label": "最近章节上下文",
+        "type": "text",
+        "source": "system"
+      },
+      {
+        "name": "userPrompt",
+        "label": "续写要求",
+        "type": "textarea",
+        "source": "user"
+      }
+    ],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  },
+  {
+    "id": "novel-rewrite",
+    "title": "章节重写",
+    "description": "生成当前章节的候选分支版本。基于前文章节和项目设定，按用户要求生成新的候选版本。",
+    "category": "小说创作",
+    "tags": [
+      "重写",
+      "分支"
+    ],
+    "taskType": "novel.rewriteChapter",
+    "defaultModel": "deepseek-chat",
+    "systemTemplate": "你是一位长篇小说写作助手。你的任务是基于已有前文，生成当前章节的一个新分支版本。\n1. 只承接前文章节和项目设定。\n2. 不要参考旧版本章节正文。\n3. 不要沿用旧版本的情节走向，按用户本次要求重新展开。\n4. 保持世界观、人物性格、叙事风格一致。\n5. 优先执行用户本次续写要求。\n6. 只输出章节正文，不要解释说明。\n\n## 写作规则\n{{style}}",
+    "userTemplate": "## 世界观设定\n{{world}}\n\n## 人物设定\n{{characters}}\n\n## 前文章节\n{{recentChapters}}\n\n## 用户本次续写要求\n{{userPrompt}}\n\n请根据以上设定和前文，输出当前章节的新分支版本正文。不要做任何解释说明。",
+    "variables": [
+      {
+        "name": "world",
+        "label": "世界观设定",
+        "type": "text",
+        "source": "project"
+      },
+      {
+        "name": "characters",
+        "label": "人物设定",
+        "type": "text",
+        "source": "project"
+      },
+      {
+        "name": "style",
+        "label": "写作规则",
+        "type": "text",
+        "source": "project"
+      },
+      {
+        "name": "recentChapters",
+        "label": "前文章节",
+        "type": "text",
+        "source": "system"
+      },
+      {
+        "name": "userPrompt",
+        "label": "重写要求",
+        "type": "textarea",
+        "source": "user"
+      }
+    ],
+    "createdAt": "2024-01-01T00:00:00.000Z",
+    "updatedAt": "2024-01-01T00:00:00.000Z"
+  }
+]

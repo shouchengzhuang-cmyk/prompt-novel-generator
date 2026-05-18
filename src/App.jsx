@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
+import VaultPanel from './components/VaultPanel';
+import PromptPreviewPanel from './components/PromptPreviewPanel';
 
 async function safeJsonFetch(url, options) {
   const response = await fetch(url, options);
@@ -80,6 +82,12 @@ function App() {
   const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
   const [isChaptersCollapsed, setIsChaptersCollapsed] = useState(false);
 
+  // Prompt Vault
+  const [showVault, setShowVault] = useState(false);
+
+  // Debug: current generation template info
+  const [debugPromptInfo, setDebugPromptInfo] = useState(null);
+
   // ---- Fetch project list ----
   const fetchProjects = async () => {
     try {
@@ -108,6 +116,7 @@ function App() {
     setRewritePrompt('');
     setShowSettings(false);
     setEditingProjectName(null);
+    setDebugPromptInfo(null);
     setEditWorld('');
     setEditCharacters('');
     setEditStyle('');
@@ -207,6 +216,8 @@ function App() {
       });
       setLastFilename(fileName);
       setUserPrompt('');
+      // Debug template info
+      setDebugPromptInfo(data.debugPromptInfo || null);
       // Auto-select the new chapter for reading
       setReadingChapter(fileName);
       setReadingContent(data.content);
@@ -228,6 +239,7 @@ function App() {
   // ---- Read a chapter ----
   const handleReadChapter = async (filename) => {
     setError('');
+    setDebugPromptInfo(null);
     try {
       const url = `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}`;
       const data = await safeJsonFetch(url);
@@ -267,6 +279,7 @@ function App() {
         setVariantPreview(null);
         setShowRewriteInput(false);
         setRewritePrompt('');
+        setDebugPromptInfo(null);
       }
       setError('章节已删除');
       setTimeout(() => setError(''), 3000);
@@ -299,6 +312,7 @@ function App() {
         setUserPrompt('');
         setShowSettings(false);
         setEditingProjectName(null);
+        setDebugPromptInfo(null);
         setEditWorld('');
         setEditCharacters('');
         setEditStyle('');
@@ -568,8 +582,8 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, userPrompt: trimmed }),
       });
-      // Add new variant to list
-      setVariants((prev) => [...prev, data.variant]);
+      // Add new variant to list, embedding debug prompt info for display
+      setVariants((prev) => [...prev, { ...data.variant, _debugPromptInfo: data.debugPromptInfo }]);
       setShowRewriteInput(false);
       setRewritePrompt('');
       setError('候选版本已生成');
@@ -619,7 +633,24 @@ function App() {
 
   return (
     <div className="app">
-      <h1>AI 小说项目管理器</h1>
+      <h1>AI 写作工作台</h1>
+      <div className="app-tabs">
+        <button
+          className={'app-tab' + (!showVault ? ' active' : '')}
+          onClick={() => setShowVault(false)}
+        >
+          小说管理器
+        </button>
+        <button
+          className={'app-tab' + (showVault ? ' active' : '')}
+          onClick={() => setShowVault(true)}
+        >
+          Prompt Vault
+        </button>
+      </div>
+      {showVault ? (
+        <VaultPanel />
+      ) : (
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects ===== */}
         {isSidebarCollapsed ? (
@@ -884,6 +915,12 @@ function App() {
                 </label>
               </div>
 
+              <PromptPreviewPanel
+                taskType="novel.generateChapter"
+                projectDetails={projectDetails}
+                userPrompt={userPrompt}
+              />
+
               <button className="btn" onClick={handleGenerate} disabled={loading}>
                 {loading ? '生成中...' : '生成下一段'}
               </button>
@@ -930,11 +967,20 @@ function App() {
                           复制全文
                         </button>
                       )}
-                      <button className="btn btn-secondary" onClick={() => { setReadingChapter(null); setReadingContent(''); setVariants([]); setVariantPreview(null); setShowRewriteInput(false); setRewritePrompt(''); }}>
+                      <button className="btn btn-secondary" onClick={() => { setReadingChapter(null); setReadingContent(''); setVariants([]); setVariantPreview(null); setShowRewriteInput(false); setRewritePrompt(''); setDebugPromptInfo(null); }}>
                         关闭阅读
                       </button>
                     </div>
                   </div>
+
+                  {/* Debug template info */}
+                  {debugPromptInfo && (
+                    <div className="debug-prompt-info">
+                      {debugPromptInfo.usedFallback
+                        ? '本次使用模板：旧版内置 Prompt（Vault 模板未命中）'
+                        : `本次使用模板：${debugPromptInfo.templateTitle || '未知'}`}
+                    </div>
+                  )}
 
                   {/* Rewrite input */}
                   {showRewriteInput && (
@@ -948,6 +994,12 @@ function App() {
                         placeholder="继续写"
                         rows={4}
                         style={{ marginBottom: 8 }}
+                      />
+                      <PromptPreviewPanel
+                        taskType="novel.rewriteChapter"
+                        projectDetails={projectDetails}
+                        userPrompt={rewritePrompt}
+                        fileName={readingChapter}
                       />
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating}>
                         {regenerating ? '重写中...' : '生成候选版本'}
@@ -1012,6 +1064,13 @@ function App() {
                                 <span className="variant-instruction">
                                   续写要求：{promptSummary.slice(0, 100)}{promptSummary.length > 100 ? '...' : ''}
                                 </span>
+                                {v._debugPromptInfo && (
+                                  <span className="debug-prompt-info debug-prompt-info-inline">
+                                    {v._debugPromptInfo.usedFallback
+                                      ? '旧版内置 Prompt（Vault 模板未命中）'
+                                      : `模板：${v._debugPromptInfo.templateTitle || '未知'}`}
+                                  </span>
+                                )}
                               </div>
                               <div className="variant-actions">
                                 <button
@@ -1043,8 +1102,9 @@ function App() {
           )}
             </>
           )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
