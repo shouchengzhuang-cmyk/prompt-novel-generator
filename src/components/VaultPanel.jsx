@@ -52,7 +52,7 @@ export default function VaultPanel() {
       category: '',
       tags: [],
       taskType: '',
-      defaultModel: 'deepseek-chat',
+      defaultModel: 'deepseek-v4-flash',
       systemTemplate: '',
       userTemplate: '',
       variables: [],
@@ -199,8 +199,8 @@ export default function VaultPanel() {
             <div className="vault-field">
               <label>默认模型</label>
               <select value={editForm.defaultModel} onChange={(e) => handleChange('defaultModel', e.target.value)}>
-                <option value="deepseek-chat">deepseek-chat</option>
-                <option value="deepseek-reasoner">deepseek-reasoner</option>
+                <option value="deepseek-v4-flash">deepseek-v4-flash</option>
+                <option value="deepseek-v4-pro">deepseek-v4-pro</option>
               </select>
             </div>
           </div>

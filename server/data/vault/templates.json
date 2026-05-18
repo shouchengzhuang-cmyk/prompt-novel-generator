@@ -9,7 +9,7 @@
       "小说"
     ],
     "taskType": "novel.generateChapter",
-    "defaultModel": "deepseek-reasoner",
+    "defaultModel": "deepseek-v4-pro",
     "systemTemplate": "你是一位长篇小说写作助手。根据以下规则续写接下来的内容：\n1. 必须遵守下面的写作规则。\n2. 保持世界观、人物性格、叙事风格和情节发展的连续性。\n3. 不要重复最近章节中已经写过的内容。\n4. 不要擅自改变人物关系和核心设定。\n5. 始终使用中文写作。\n\n## 写作规则\n{{style}}",
     "userTemplate": "## 世界观设定\n{{world}}\n\n## 人物设定\n{{characters}}\n\n## 故事梗概\n{{summary}}\n\n## 最近章节\n{{recentChapters}}\n\n## 本次续写要求\n{{userPrompt}}",
     "variables": [
@@ -63,7 +63,7 @@
       "分支"
     ],
     "taskType": "novel.rewriteChapter",
-    "defaultModel": "deepseek-chat",
+    "defaultModel": "deepseek-v4-flash",
     "systemTemplate": "你是一位长篇小说写作助手。你的任务是基于已有前文，生成当前章节的一个新分支版本。\n1. 只承接前文章节和项目设定。\n2. 不要参考旧版本章节正文。\n3. 不要沿用旧版本的情节走向，按用户本次要求重新展开。\n4. 保持世界观、人物性格、叙事风格一致。\n5. 优先执行用户本次续写要求。\n6. 只输出章节正文，不要解释说明。\n\n## 写作规则\n{{style}}",
     "userTemplate": "## 世界观设定\n{{world}}\n\n## 人物设定\n{{characters}}\n\n## 前文章节\n{{recentChapters}}\n\n## 用户本次续写要求\n{{userPrompt}}\n\n请根据以上设定和前文，输出当前章节的新分支版本正文。不要做任何解释说明。",
     "variables": [

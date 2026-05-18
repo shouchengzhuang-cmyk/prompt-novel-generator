@@ -109,7 +109,7 @@ npm run dev
 1. 读取项目目录的 `world.md`、`characters.md`、`summary.md`
 2. 读取 `chapters/` 下最新 3 个 txt 文件
 3. 将所有上下文 + userPrompt 拼入 messages 数组
-4. 调用 DeepSeek Chat API（模型 `deepseek-chat`）
+4. 调用 DeepSeek API（模型 `deepseek-v4-flash` / `deepseek-v4-pro`）
 5. 生成内容自动编号保存为新 txt 文件
 6. 返回 `{ content, filename }`
 
@@ -118,4 +118,4 @@ npm run dev
 - **前端**：React 18 + Vite 5
 - **后端**：Node.js + Express（使用原生 fetch）
 - **存储**：本地文件系统（txt / markdown）
-- **API**：DeepSeek Chat（deepseek-chat）
+- **API**：DeepSeek（deepseek-v4-flash / deepseek-v4-pro）

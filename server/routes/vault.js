@@ -82,7 +82,7 @@ router.post('/', async (req, res) => {
       category: category || '',
       tags: Array.isArray(tags) ? tags : [],
       taskType: taskType || '',
-      defaultModel: defaultModel || 'deepseek-chat',
+      defaultModel: defaultModel || 'deepseek-v4-flash',
       systemTemplate,
       userTemplate,
       variables: Array.isArray(variables) ? variables : [],

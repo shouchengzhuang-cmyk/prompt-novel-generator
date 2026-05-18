@@ -468,8 +468,8 @@ app.post('/api/generate', async (req, res) => {
     return res.status(400).json({ error: '缺少续写要求' });
   }
 
-  const allowedModels = ['deepseek-chat', 'deepseek-reasoner'];
-  const effectiveModel = allowedModels.includes(model) ? model : 'deepseek-chat';
+  const allowedModels = ['deepseek-v4-flash', 'deepseek-v4-pro'];
+  const effectiveModel = allowedModels.includes(model) ? model : 'deepseek-v4-flash';
 
   let projectDir;
   try {
@@ -609,7 +609,7 @@ app.post('/api/generate', async (req, res) => {
             `## 新章节 ${filename}\n${content}`,
         },
       ];
-      const updatedSummary = await callDeepSeek('deepseek-chat', summaryMessages);
+      const updatedSummary = await callDeepSeek('deepseek-v4-flash', summaryMessages);
       await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
       res.json({ content, fileName: filename, title, summaryUpdated: true, debugPromptInfo });
     } catch (summaryErr) {
@@ -919,8 +919,8 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
     return res.status(400).json({ error: '无效的章节文件名' });
   }
 
-  const allowedModels = ['deepseek-chat', 'deepseek-reasoner'];
-  const effectiveModel = allowedModels.includes(model) ? model : 'deepseek-chat';
+  const allowedModels = ['deepseek-v4-flash', 'deepseek-v4-pro'];
+  const effectiveModel = allowedModels.includes(model) ? model : 'deepseek-v4-flash';
 
   let projectDir;
   try {
@@ -1322,7 +1322,7 @@ app.post('/api/projects/:projectName/summary/rebuild', async (req, res) => {
     ];
 
     // 4. Call DeepSeek (only writes summary.md on success)
-    const newSummary = await callDeepSeek('deepseek-chat', messages);
+    const newSummary = await callDeepSeek('deepseek-v4-flash', messages);
     const trimmed = newSummary.trim();
 
     // 5. Write to summary.md (only reached if DeepSeek succeeded)

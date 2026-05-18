@@ -40,7 +40,7 @@ function App() {
   const [creating, setCreating] = useState(false);
 
   // Generation
-  const [model, setModel] = useState('deepseek-reasoner');
+  const [model, setModel] = useState('deepseek-v4-flash');
   const [userPrompt, setUserPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -887,30 +887,30 @@ function App() {
               />
 
               <div className="model-select">
-                <label className={'model-option' + (model === 'deepseek-chat' ? ' active' : '')}>
+                <label className={'model-option' + (model === 'deepseek-v4-flash' ? ' active' : '')}>
                   <input
                     type="radio"
                     name="model"
-                    value="deepseek-chat"
-                    checked={model === 'deepseek-chat'}
-                    onChange={() => setModel('deepseek-chat')}
+                    value="deepseek-v4-flash"
+                    checked={model === 'deepseek-v4-flash'}
+                    onChange={() => setModel('deepseek-v4-flash')}
                   />
                   <span className="model-option-text">
                     <span className="model-option-title">快速模式</span>
-                    <span className="model-option-sub">deepseek-chat · 速度更快，适合日常续写</span>
+                    <span className="model-option-sub">deepseek-v4-flash · 速度更快，适合日常续写</span>
                   </span>
                 </label>
-                <label className={'model-option' + (model === 'deepseek-reasoner' ? ' active' : '')}>
+                <label className={'model-option' + (model === 'deepseek-v4-pro' ? ' active' : '')}>
                   <input
                     type="radio"
                     name="model"
-                    value="deepseek-reasoner"
-                    checked={model === 'deepseek-reasoner'}
-                    onChange={() => setModel('deepseek-reasoner')}
+                    value="deepseek-v4-pro"
+                    checked={model === 'deepseek-v4-pro'}
+                    onChange={() => setModel('deepseek-v4-pro')}
                   />
                   <span className="model-option-text">
                     <span className="model-option-title">深度模式</span>
-                    <span className="model-option-sub">deepseek-reasoner · 复杂剧情与长线伏笔</span>
+                    <span className="model-option-sub">deepseek-v4-pro · 复杂剧情与长线伏笔</span>
                   </span>
                 </label>
               </div>
