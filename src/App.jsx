@@ -98,21 +98,14 @@ function App() {
   // Generation progress
   const [genProgress, setGenProgress] = useState({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
 
-  // Toast notification
-  const [toast, setToast] = useState(null); // { text, type }
-  const titleTimeoutRef = useRef(null);
-  const originalTitleRef = useRef(document.title);
+  // Bottom-right notification card
+  const [notification, setNotification] = useState(null);
 
-  // Set document.title and optionally schedule restoration after ms
-  function setTemporaryTitle(title, restoreMs) {
-    clearTimeout(titleTimeoutRef.current);
-    document.title = title;
-    if (restoreMs) {
-      titleTimeoutRef.current = setTimeout(() => {
-        document.title = originalTitleRef.current;
-      }, restoreMs);
-    }
-  }
+  useEffect(() => {
+    if (!notification) return;
+    const timer = setTimeout(() => setNotification(null), 10000);
+    return () => clearTimeout(timer);
+  }, [notification]);
 
   // Editor Note
   const [showEditorNote, setShowEditorNote] = useState(false);
@@ -238,8 +231,6 @@ function App() {
 
     setError('');
     setLoading(true);
-    setToast(null);
-    setTemporaryTitle('写作中… - 小说生成器');
     setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch('/api/generate', {
@@ -273,13 +264,11 @@ function App() {
         setError(`章节已保存到：${fileName}，但摘要更新失败：${data.summaryError || '未知错误'}`);
       }
       setGenProgress(prev => ({ ...prev, status: 'success' }));
-      setToast({ text: '这一章写好了', type: 'success' });
-      setTemporaryTitle('已写好！ - 小说生成器', 3000);
+      setNotification({ title: '这一章写好了', message: '新章节已经生成，可以继续阅读。' });
     } catch (err) {
       setError(err.message);
       setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
-      setToast({ text: '生成失败，请查看错误提示', type: 'error' });
-      setTemporaryTitle('生成失败 - 小说生成器', 3000);
+      setNotification({ title: '生成失败', message: '请查看页面错误提示。' });
     } finally {
       setLoading(false);
     }
@@ -631,8 +620,6 @@ function App() {
     }
     setRegenerating(true);
     setError('');
-    setToast(null);
-    setTemporaryTitle('写作中… - 小说生成器');
     setGenProgress({ visible: true, mode: 'rewrite', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/regenerate`, {
@@ -647,13 +634,11 @@ function App() {
       setGenProgress(prev => ({ ...prev, status: 'success' }));
       setError('候选版本已生成');
       setTimeout(() => setError(''), 3000);
-      setToast({ text: '这一章写好了', type: 'success' });
-      setTemporaryTitle('已写好！ - 小说生成器', 3000);
+      setNotification({ title: '候选版本写好了', message: '可以查看并决定是否采用。' });
     } catch (err) {
       setError(err.message);
       setGenProgress({ visible: true, mode: 'rewrite', status: 'error', errorMessage: err.message });
-      setToast({ text: '生成失败，请查看错误提示', type: 'error' });
-      setTemporaryTitle('生成失败 - 小说生成器', 3000);
+      setNotification({ title: '生成失败', message: '请查看页面错误提示。' });
     } finally {
       setRegenerating(false);
     }
@@ -715,21 +700,6 @@ function App() {
   const enhancedPrompt = useMemo(() => buildEnhancedPrompt(userPrompt.trim(), writingPrefs), [userPrompt, writingPrefs]);
   const enhancedRewritePrompt = useMemo(() => buildEnhancedPrompt((rewritePrompt || '').trim(), writingPrefs), [rewritePrompt, writingPrefs]);
 
-  // Toast auto-dismiss
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2500);
-    return () => clearTimeout(timer);
-  }, [toast]);
-
-  // Component unmount cleanup: clear title timeout and restore title
-  useEffect(() => {
-    return () => {
-      clearTimeout(titleTimeoutRef.current);
-      document.title = originalTitleRef.current;
-    };
-  }, []);
-
   const handleGenProgressDone = useCallback(() => {
     setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
   }, []);
@@ -772,11 +742,6 @@ function App() {
 
   return (
     <div className="app">
-      {toast && (
-        <div className={`toast toast--${toast.type}`}>
-          {toast.text}
-        </div>
-      )}
       <h1>AI 写作工作台</h1>
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects ===== */}
@@ -1080,12 +1045,6 @@ function App() {
               <button className="btn" onClick={handleGenerate} disabled={loading}>
                 {loading ? '生成中...' : '生成下一段'}
               </button>
-              {loading && (
-                <div className="generating-notice">
-                  <span className="generating-spinner"></span>
-                  正在生成章节…
-                </div>
-              )}
               <GenerationProgress
                 visible={genProgress.visible}
                 mode={genProgress.mode}
@@ -1175,12 +1134,6 @@ function App() {
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating}>
                         {regenerating ? '重写中...' : '生成候选版本'}
                       </button>
-                      {regenerating && (
-                        <div className="generating-notice">
-                          <span className="generating-spinner"></span>
-                          正在生成候选版本…
-                        </div>
-                      )}
                       <GenerationProgress
                         visible={genProgress.visible && genProgress.mode === 'rewrite'}
                         mode="rewrite"
@@ -1324,6 +1277,15 @@ function App() {
               )}
             </div>
           </div>
+        </div>
+      )}
+      {notification && (
+        <div className="notification-card">
+          <div className="notification-header">
+            <span className="notification-title">{notification.title}</span>
+            <button className="notification-close" onClick={() => setNotification(null)}>×</button>
+          </div>
+          <div className="notification-body">{notification.message}</div>
         </div>
       )}
     </div>
