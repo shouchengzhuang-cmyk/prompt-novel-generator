@@ -76,6 +76,102 @@ async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
 
+// ---- Editor Note ----
+
+async function buildEditorNote(projectName, chapterFileName) {
+  // 1. Validate chapterFileName
+  if (!isValidChapterFileName(chapterFileName)) {
+    const err = new Error('无效的章节文件名');
+    err.statusCode = 400;
+    err.code = 'INVALID_CHAPTER_FILENAME';
+    throw err;
+  }
+
+  const projectDir = safeProjectDir(projectName);
+
+  const [world, characters, summary, style] = await Promise.all([
+    fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+  ]);
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, chapterFileName);
+  const rp = path.relative(chaptersDir, chapterPath);
+  if (rp.startsWith('..') || path.isAbsolute(rp)) {
+    const err = new Error('无效的章节文件名');
+    err.statusCode = 400;
+    err.code = 'INVALID_CHAPTER_FILENAME';
+    throw err;
+  }
+
+  // 2. Current chapter — fail if not found (core input)
+  let chapterContent;
+  try {
+    chapterContent = await fs.readFile(chapterPath, 'utf-8');
+  } catch {
+    const err = new Error('章节不存在');
+    err.statusCode = 404;
+    err.code = 'CHAPTER_NOT_FOUND';
+    throw err;
+  }
+
+  // 3. History chapters — skip individual failures gracefully
+  const files = (await fs.readdir(chaptersDir))
+    .filter((f) => f.endsWith('.txt') && isValidChapterFileName(f))
+    .sort();
+  const idx = files.indexOf(chapterFileName);
+  let prevText = '';
+  if (idx > 0) {
+    const prevFiles = files.slice(Math.max(0, idx - 3), idx);
+    for (const f of prevFiles) {
+      try {
+        const c = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
+        prevText += `${f}:\n${c.length > 2000 ? c.slice(0, 2000) + '\n…' : c}\n\n`;
+      } catch {
+        // Skip individual history chapter read failure
+      }
+    }
+  }
+
+  // Build context (truncated to keep prompt lean)
+  let contextText = '';
+  if (world) contextText += `世界观：${world.slice(0, 800)}\n\n`;
+  if (characters) contextText += `人物设定：${characters.slice(0, 800)}\n\n`;
+  if (style) contextText += `写作风格：${style.slice(0, 500)}\n\n`;
+  if (summary) contextText += `剧情摘要：${summary.slice(0, 800)}\n\n`;
+  if (prevText) contextText += `前文回顾：\n${prevText}`;
+  contextText += `当前章节 ${chapterFileName}：\n${chapterContent.slice(0, 4000)}${chapterContent.length > 4000 ? '\n…' : ''}\n\n`;
+
+  const messages = [
+    {
+      role: 'system',
+      content: '你是一个后台章节编辑。你的任务是为下一章生成模型输出一段内部的编辑备注。',
+    },
+    {
+      role: 'user',
+      content: contextText +
+        '请基于以上信息，输出一段 80～160 字的编辑备注。\n\n' +
+        '编辑备注只关注：\n' +
+        '1. 当前章节效果\n' +
+        '2. 最大风险/偏差\n' +
+        '3. 下一章应如何承接\n\n' +
+        '格式要求：\n' +
+        '- 纯文字，无 Markdown\n' +
+        '- 不要多级标题\n' +
+        '- 不要引用大段原文\n' +
+        '- 不要和用户对话\n' +
+        '- 不要询问用户\n' +
+        '- 不要重写正文\n' +
+        '- 直接输出备注内容，不要前缀说明',
+    },
+  ];
+
+  const note = await callDeepSeek('deepseek-v4-flash', messages);
+  return note.trim();
+}
+
 // ---- Chapter title helpers ----
 
 const INDEX_FILE = 'index.json';
@@ -543,8 +639,35 @@ app.post('/api/generate', async (req, res) => {
       { role: 'user', content: userContent },
     ];
 
+    // 4a. Generate editor note from latest chapter and append to messages
+    try {
+      if (recentChapters.length > 0) {
+        const lastCh = recentChapters[recentChapters.length - 1];
+        const note = await buildEditorNote(projectName, lastCh.filename);
+        if (note) {
+          const suffix = `\n\n【后台编辑给下一章生成模型的提醒】\n${note}\n\n以上是内部编辑提醒，只用于指导生成，不要出现在正文中。`;
+          messages[1] = { role: 'user', content: messages[1].content + suffix };
+          console.log(`[编辑备注] 已并入生成 prompt`);
+        }
+      }
+    } catch (noteErr) {
+      console.warn(`[编辑备注] 生成失败（不影响主流程）: ${noteErr.message}`);
+    }
+
     // 4. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
+
+    // 4b. Leakage detection: reject if editor note phrases leaked into generated content
+    const LEAK_PHRASES = [
+      '后台编辑给下一章生成模型的提醒',
+      '内部编辑提醒',
+      '编辑备注',
+      '只用于指导生成',
+      '不要出现在正文中',
+    ];
+    if (LEAK_PHRASES.some((p) => content.includes(p))) {
+      throw new Error('生成内容包含编辑备注泄漏词，已拦截保存。请重试。');
+    }
 
     // 5. Determine next chapter number and save
     await ensureDir(chaptersDir);
@@ -1436,6 +1559,29 @@ app.get('/api/projects/:projectName/prompt-preview', async (req, res) => {
     res.json({ taskType, templateId, templateTitle, usedFallback, systemContent, userContent });
   } catch (err) {
     res.status(500).json({ error: err.message || '预览生成失败' });
+  }
+});
+
+// ---- GET /api/editor/note ----
+
+app.get('/api/editor/note', async (req, res) => {
+  const { projectName, chapterFileName } = req.query;
+
+  if (!projectName) {
+    return res.status(400).json({ error: '缺少项目名' });
+  }
+
+  if (!chapterFileName) {
+    return res.status(400).json({ error: '缺少章节文件名' });
+  }
+
+  try {
+    const note = await buildEditorNote(projectName, chapterFileName);
+    console.log(`[编辑备注] 项目=${projectName} 章节=${chapterFileName}`);
+    res.json({ note, projectName, chapterFileName });
+  } catch (err) {
+    const status = err.statusCode || 500;
+    res.status(status).json({ error: err.message || '编辑备注生成失败' });
   }
 });
 

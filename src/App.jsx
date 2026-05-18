@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
 import VaultPanel from './components/VaultPanel';
 import PromptPreviewPanel from './components/PromptPreviewPanel';
 import WritingControlPanel from './components/WritingControlPanel';
+import GenerationProgress from './components/GenerationProgress';
 
 async function safeJsonFetch(url, options) {
   const response = await fetch(url, options);
@@ -94,6 +95,16 @@ function App() {
   // Debug: current generation template info
   const [debugPromptInfo, setDebugPromptInfo] = useState(null);
 
+  // Generation progress
+  const [genProgress, setGenProgress] = useState({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
+
+  // Editor Note
+  const [showEditorNote, setShowEditorNote] = useState(false);
+  const [editorNoteLoading, setEditorNoteLoading] = useState(false);
+  const [editorNoteError, setEditorNoteError] = useState('');
+  const [editorNoteResult, setEditorNoteResult] = useState('');
+  const editorNoteReqId = useRef(0);
+
   // ---- Fetch project list ----
   const fetchProjects = async () => {
     try {
@@ -123,6 +134,12 @@ function App() {
     setShowSettings(false);
     setEditingProjectName(null);
     setDebugPromptInfo(null);
+    // Clear Editor Note state
+    setShowEditorNote(false);
+    setEditorNoteResult('');
+    setEditorNoteError('');
+    setEditorNoteLoading(false);
+    editorNoteReqId.current++;
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
     setEditCharacters('');
@@ -205,6 +222,7 @@ function App() {
 
     setError('');
     setLoading(true);
+    setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch('/api/generate', {
         method: 'POST',
@@ -236,8 +254,10 @@ function App() {
       } else {
         setError(`章节已保存到：${fileName}，但摘要更新失败：${data.summaryError || '未知错误'}`);
       }
+      setGenProgress(prev => ({ ...prev, status: 'success' }));
     } catch (err) {
       setError(err.message);
+      setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
     } finally {
       setLoading(false);
     }
@@ -247,6 +267,12 @@ function App() {
   const handleReadChapter = async (filename) => {
     setError('');
     setDebugPromptInfo(null);
+    // Clear Editor Note state to prevent stale results from interfering
+    setShowEditorNote(false);
+    setEditorNoteResult('');
+    setEditorNoteError('');
+    setEditorNoteLoading(false);
+    editorNoteReqId.current++;
     try {
       const url = `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}`;
       const data = await safeJsonFetch(url);
@@ -583,6 +609,7 @@ function App() {
     }
     setRegenerating(true);
     setError('');
+    setGenProgress({ visible: true, mode: 'rewrite', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/regenerate`, {
         method: 'POST',
@@ -593,10 +620,12 @@ function App() {
       setVariants((prev) => [...prev, { ...data.variant, _debugPromptInfo: data.debugPromptInfo }]);
       setShowRewriteInput(false);
       setRewritePrompt('');
+      setGenProgress(prev => ({ ...prev, status: 'success' }));
       setError('候选版本已生成');
       setTimeout(() => setError(''), 3000);
     } catch (err) {
       setError(err.message);
+      setGenProgress({ visible: true, mode: 'rewrite', status: 'error', errorMessage: err.message });
     } finally {
       setRegenerating(false);
     }
@@ -657,6 +686,46 @@ function App() {
 
   const enhancedPrompt = useMemo(() => buildEnhancedPrompt(userPrompt.trim(), writingPrefs), [userPrompt, writingPrefs]);
   const enhancedRewritePrompt = useMemo(() => buildEnhancedPrompt((rewritePrompt || '').trim(), writingPrefs), [rewritePrompt, writingPrefs]);
+
+  const handleGenProgressDone = useCallback(() => {
+    setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
+  }, []);
+
+  // ---- Editor Note ----
+  const handleEditorNote = async () => {
+    if (!currentProject || !readingChapter) {
+      setEditorNoteError('请先选择项目并阅读章节');
+      return;
+    }
+
+    const reqId = ++editorNoteReqId.current;
+    setEditorNoteLoading(true);
+    setEditorNoteError('');
+    setEditorNoteResult('');
+    setShowEditorNote(true);
+
+    try {
+      const url = `/api/editor/note?projectName=${encodeURIComponent(currentProject)}&chapterFileName=${encodeURIComponent(readingChapter)}`;
+      const data = await safeJsonFetch(url);
+      if (reqId !== editorNoteReqId.current) return;
+      setEditorNoteResult(data.note || '（无备注内容）');
+    } catch (err) {
+      if (reqId !== editorNoteReqId.current) return;
+      setEditorNoteError(err.message);
+    } finally {
+      if (reqId === editorNoteReqId.current) {
+        setEditorNoteLoading(false);
+      }
+    }
+  };
+
+  const handleCloseEditorNote = () => {
+    setShowEditorNote(false);
+    setEditorNoteResult('');
+    setEditorNoteError('');
+    setEditorNoteLoading(false);
+    editorNoteReqId.current++;
+  };
 
   return (
     <div className="app">
@@ -963,7 +1032,13 @@ function App() {
               <button className="btn" onClick={handleGenerate} disabled={loading}>
                 {loading ? '生成中...' : '生成下一段'}
               </button>
-              {loading && <div className="loading">正在调用 DeepSeek API，请稍候...</div>}
+              <GenerationProgress
+                visible={genProgress.visible}
+                mode={genProgress.mode}
+                status={genProgress.status}
+                errorMessage={genProgress.errorMessage}
+                onComplete={handleGenProgressDone}
+              />
               {error && <div className="error">{error}</div>}
 
               {/* Reading Section */}
@@ -997,6 +1072,9 @@ function App() {
                     <div className="reading-actions">
                       <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}
+                      </button>
+                      <button className="btn btn-ai" onClick={handleEditorNote}>
+                        编辑备注
                       </button>
                       <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
@@ -1043,6 +1121,13 @@ function App() {
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating}>
                         {regenerating ? '重写中...' : '生成候选版本'}
                       </button>
+                      <GenerationProgress
+                        visible={genProgress.visible && genProgress.mode === 'rewrite'}
+                        mode="rewrite"
+                        status={genProgress.status}
+                        errorMessage={genProgress.errorMessage}
+                        onComplete={handleGenProgressDone}
+                      />
                     </div>
                   )}
 
@@ -1143,6 +1228,44 @@ function App() {
           )}
           </div>
         </div>
+
+      {/* ===== Editor Note Overlay ===== */}
+      {showEditorNote && (
+        <div className="editor-note-overlay" onClick={handleCloseEditorNote}>
+          <div className="editor-note-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="editor-note-header">
+              <h3>编辑备注</h3>
+              <span className="editor-note-role">后台编辑 → 生成模型</span>
+              <button className="btn btn-secondary" onClick={handleCloseEditorNote}>关闭</button>
+            </div>
+            <div className="editor-note-body">
+
+              {/* Loading state */}
+              {editorNoteLoading && (
+                <div className="editor-note-loading">
+                  <div className="editor-note-loading-spinner"></div>
+                  <span>正在生成编辑备注...</span>
+                </div>
+              )}
+
+              {/* Error state */}
+              {editorNoteError && <div className="error">{editorNoteError}</div>}
+
+              {/* Result */}
+              {!editorNoteLoading && editorNoteResult && (
+                <div className="editor-note-text">{editorNoteResult}</div>
+              )}
+
+              {/* Empty state */}
+              {!editorNoteLoading && !editorNoteResult && !editorNoteError && (
+                <div className="editor-note-empty">
+                  <p>点击"编辑备注"查看后台给生成模型的内部提醒。</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
