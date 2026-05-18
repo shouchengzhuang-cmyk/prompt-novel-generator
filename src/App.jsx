@@ -98,6 +98,11 @@ function App() {
   // Generation progress
   const [genProgress, setGenProgress] = useState({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
 
+  // Toast notification
+  const [toast, setToast] = useState(null); // { text, type }
+  const titleTimeoutRef = useRef(null);
+  const originalTitleRef = useRef(document.title);
+
   // Editor Note
   const [showEditorNote, setShowEditorNote] = useState(false);
   const [editorNoteLoading, setEditorNoteLoading] = useState(false);
@@ -222,6 +227,9 @@ function App() {
 
     setError('');
     setLoading(true);
+    setToast(null);
+    document.title = '写作中… - 小说生成器';
+    clearTimeout(titleTimeoutRef.current);
     setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch('/api/generate', {
@@ -255,9 +263,19 @@ function App() {
         setError(`章节已保存到：${fileName}，但摘要更新失败：${data.summaryError || '未知错误'}`);
       }
       setGenProgress(prev => ({ ...prev, status: 'success' }));
+      setToast({ text: '这一章写好了', type: 'success' });
+      document.title = '已写好！ - 小说生成器';
+      titleTimeoutRef.current = setTimeout(() => {
+        document.title = originalTitleRef.current;
+      }, 3000);
     } catch (err) {
       setError(err.message);
       setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
+      setToast({ text: '生成失败，请查看错误提示', type: 'error' });
+      document.title = '生成失败 - 小说生成器';
+      titleTimeoutRef.current = setTimeout(() => {
+        document.title = originalTitleRef.current;
+      }, 3000);
     } finally {
       setLoading(false);
     }
@@ -609,6 +627,9 @@ function App() {
     }
     setRegenerating(true);
     setError('');
+    setToast(null);
+    document.title = '写作中… - 小说生成器';
+    clearTimeout(titleTimeoutRef.current);
     setGenProgress({ visible: true, mode: 'rewrite', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/regenerate`, {
@@ -623,9 +644,19 @@ function App() {
       setGenProgress(prev => ({ ...prev, status: 'success' }));
       setError('候选版本已生成');
       setTimeout(() => setError(''), 3000);
+      setToast({ text: '这一章写好了', type: 'success' });
+      document.title = '已写好！ - 小说生成器';
+      titleTimeoutRef.current = setTimeout(() => {
+        document.title = originalTitleRef.current;
+      }, 3000);
     } catch (err) {
       setError(err.message);
       setGenProgress({ visible: true, mode: 'rewrite', status: 'error', errorMessage: err.message });
+      setToast({ text: '生成失败，请查看错误提示', type: 'error' });
+      document.title = '生成失败 - 小说生成器';
+      titleTimeoutRef.current = setTimeout(() => {
+        document.title = originalTitleRef.current;
+      }, 3000);
     } finally {
       setRegenerating(false);
     }
@@ -687,6 +718,13 @@ function App() {
   const enhancedPrompt = useMemo(() => buildEnhancedPrompt(userPrompt.trim(), writingPrefs), [userPrompt, writingPrefs]);
   const enhancedRewritePrompt = useMemo(() => buildEnhancedPrompt((rewritePrompt || '').trim(), writingPrefs), [rewritePrompt, writingPrefs]);
 
+  // Toast auto-dismiss
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 2500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const handleGenProgressDone = useCallback(() => {
     setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
   }, []);
@@ -729,6 +767,11 @@ function App() {
 
   return (
     <div className="app">
+      {toast && (
+        <div className={`toast toast--${toast.type}`}>
+          {toast.text}
+        </div>
+      )}
       <h1>AI 写作工作台</h1>
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects ===== */}
@@ -1032,6 +1075,12 @@ function App() {
               <button className="btn" onClick={handleGenerate} disabled={loading}>
                 {loading ? '生成中...' : '生成下一段'}
               </button>
+              {loading && (
+                <div className="generating-notice">
+                  <span className="generating-spinner"></span>
+                  正在生成章节…
+                </div>
+              )}
               <GenerationProgress
                 visible={genProgress.visible}
                 mode={genProgress.mode}
@@ -1121,6 +1170,12 @@ function App() {
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating}>
                         {regenerating ? '重写中...' : '生成候选版本'}
                       </button>
+                      {regenerating && (
+                        <div className="generating-notice">
+                          <span className="generating-spinner"></span>
+                          正在生成候选版本…
+                        </div>
+                      )}
                       <GenerationProgress
                         visible={genProgress.visible && genProgress.mode === 'rewrite'}
                         mode="rewrite"
