@@ -746,6 +746,163 @@ label {
   display: block;
 }
 
+/* ---- Writing controls ---- */
+
+.writing-controls {
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.writing-controls-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 12px;
+}
+
+.writing-controls-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.writing-controls-row:last-of-type {
+  margin-bottom: 0;
+}
+
+.writing-controls-label {
+  font-size: 13px;
+  color: #555;
+  min-width: 70px;
+  padding-top: 6px;
+  flex-shrink: 0;
+}
+
+.writing-controls-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.writing-controls-input:focus {
+  outline: none;
+  border-color: #4a6cf7;
+}
+
+.writing-controls-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.writing-controls-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #fff;
+  transition: all 0.15s;
+  user-select: none;
+  font-size: 13px;
+  color: #555;
+}
+
+.writing-controls-option:hover {
+  border-color: #b3b3b3;
+  background: #f0f0f0;
+}
+
+.writing-controls-option.active {
+  border-color: #4a6cf7;
+  background: #e6f0ff;
+  color: #4a6cf7;
+}
+
+.writing-controls-option input {
+  margin: 0;
+}
+
+.writing-controls-hint {
+  font-size: 11px;
+  color: #aaa;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+}
+
+/* ---- Advanced settings (collapsible Prompt Vault) ---- */
+
+.advanced-settings {
+  margin-top: 24px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.advanced-settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  user-select: none;
+  list-style: none;
+}
+
+.advanced-settings-summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced-settings-summary::before {
+  content: '▶';
+  font-size: 10px;
+  color: #999;
+  transition: transform 0.15s;
+}
+
+.advanced-settings[open] .advanced-settings-summary::before {
+  transform: rotate(90deg);
+}
+
+.advanced-settings-summary:hover {
+  background: #fafafa;
+}
+
+.advanced-settings-title {
+  font-weight: 500;
+  color: #333;
+}
+
+.advanced-settings-hint {
+  font-size: 12px;
+  color: #bbb;
+}
+
+.advanced-settings-body {
+  border-top: 1px solid #eee;
+  padding: 16px;
+}
+
+.advanced-settings-body .vault-panel {
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
 /* ---- Responsive ---- */
 
 @media (max-width: 900px) {

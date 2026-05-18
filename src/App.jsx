@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import './App.css';
 import VaultPanel from './components/VaultPanel';
 import PromptPreviewPanel from './components/PromptPreviewPanel';
+import WritingControlPanel from './components/WritingControlPanel';
 
 async function safeJsonFetch(url, options) {
   const response = await fetch(url, options);
@@ -82,8 +83,13 @@ function App() {
   const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
   const [isChaptersCollapsed, setIsChaptersCollapsed] = useState(false);
 
-  // Prompt Vault
-  const [showVault, setShowVault] = useState(false);
+  // Writing preferences
+  const [writingPrefs, setWritingPrefs] = useState({
+    style: '',
+    paragraph: 'normal',
+    pace: 'normal',
+    characterConsistency: 'strict',
+  });
 
   // Debug: current generation template info
   const [debugPromptInfo, setDebugPromptInfo] = useState(null);
@@ -117,6 +123,7 @@ function App() {
     setShowSettings(false);
     setEditingProjectName(null);
     setDebugPromptInfo(null);
+    setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
     setEditCharacters('');
     setEditStyle('');
@@ -204,7 +211,7 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           projectName: currentProject,
-          userPrompt: userPrompt.trim(),
+          userPrompt: enhancedPrompt,
           model,
         }),
       });
@@ -580,7 +587,7 @@ function App() {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/regenerate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, userPrompt: trimmed }),
+        body: JSON.stringify({ model, userPrompt: enhancedRewritePrompt }),
       });
       // Add new variant to list, embedding debug prompt info for display
       setVariants((prev) => [...prev, { ...data.variant, _debugPromptInfo: data.debugPromptInfo }]);
@@ -631,26 +638,29 @@ function App() {
     setVariantPreview(variantPreview?.id === variant.id ? null : variant);
   };
 
+  // Build enhanced prompt by appending writing preferences
+  function buildEnhancedPrompt(basePrompt, prefs) {
+    const lines = [];
+    if (prefs.style?.trim()) lines.push(`- 文风：${prefs.style.trim()}`);
+
+    const paragraphMap = { short: '短段，加快叙事节奏', normal: '自然段', long: '长段，展开细节描写' };
+    lines.push(`- 段落：${paragraphMap[prefs.paragraph] || paragraphMap.normal}`);
+
+    const paceMap = { slow: '慢热，铺垫细节', normal: '正常推进', fast: '快一点，减少冗余描写' };
+    lines.push(`- 剧情推进：${paceMap[prefs.pace] || paceMap.normal}`);
+
+    const charMap = { strict: '严格保持既有人物性格和关系', natural: '允许人物自然发展' };
+    lines.push(`- 人设：${charMap[prefs.characterConsistency] || charMap.strict}`);
+
+    return basePrompt + '\n\n【本次写作偏好】\n' + lines.join('\n');
+  }
+
+  const enhancedPrompt = useMemo(() => buildEnhancedPrompt(userPrompt.trim(), writingPrefs), [userPrompt, writingPrefs]);
+  const enhancedRewritePrompt = useMemo(() => buildEnhancedPrompt((rewritePrompt || '').trim(), writingPrefs), [rewritePrompt, writingPrefs]);
+
   return (
     <div className="app">
       <h1>AI 写作工作台</h1>
-      <div className="app-tabs">
-        <button
-          className={'app-tab' + (!showVault ? ' active' : '')}
-          onClick={() => setShowVault(false)}
-        >
-          小说管理器
-        </button>
-        <button
-          className={'app-tab' + (showVault ? ' active' : '')}
-          onClick={() => setShowVault(true)}
-        >
-          Prompt Vault
-        </button>
-      </div>
-      {showVault ? (
-        <VaultPanel />
-      ) : (
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects ===== */}
         {isSidebarCollapsed ? (
@@ -915,10 +925,15 @@ function App() {
                 </label>
               </div>
 
+              <WritingControlPanel
+                prefs={writingPrefs}
+                onChange={setWritingPrefs}
+              />
+
               <PromptPreviewPanel
                 taskType="novel.generateChapter"
                 projectDetails={projectDetails}
-                userPrompt={userPrompt}
+                userPrompt={enhancedPrompt}
               />
 
               <button className="btn" onClick={handleGenerate} disabled={loading}>
@@ -998,7 +1013,7 @@ function App() {
                       <PromptPreviewPanel
                         taskType="novel.rewriteChapter"
                         projectDetails={projectDetails}
-                        userPrompt={rewritePrompt}
+                        userPrompt={enhancedRewritePrompt}
                         fileName={readingChapter}
                       />
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating}>
@@ -1100,11 +1115,20 @@ function App() {
           ) : (
             <p className="hint">请先从左侧选择一个项目，或创建一个新项目。</p>
           )}
+
+          <details className="advanced-settings">
+            <summary className="advanced-settings-summary">
+              <span className="advanced-settings-title">高级模板设置</span>
+              <span className="advanced-settings-hint">Prompt 模板编辑区，一般不用改</span>
+            </summary>
+            <div className="advanced-settings-body">
+              <VaultPanel />
+            </div>
+          </details>
             </>
           )}
           </div>
         </div>
-      )}
     </div>
   );
 }
