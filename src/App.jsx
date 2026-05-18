@@ -103,6 +103,17 @@ function App() {
   const titleTimeoutRef = useRef(null);
   const originalTitleRef = useRef(document.title);
 
+  // Set document.title and optionally schedule restoration after ms
+  function setTemporaryTitle(title, restoreMs) {
+    clearTimeout(titleTimeoutRef.current);
+    document.title = title;
+    if (restoreMs) {
+      titleTimeoutRef.current = setTimeout(() => {
+        document.title = originalTitleRef.current;
+      }, restoreMs);
+    }
+  }
+
   // Editor Note
   const [showEditorNote, setShowEditorNote] = useState(false);
   const [editorNoteLoading, setEditorNoteLoading] = useState(false);
@@ -228,8 +239,7 @@ function App() {
     setError('');
     setLoading(true);
     setToast(null);
-    document.title = '写作中… - 小说生成器';
-    clearTimeout(titleTimeoutRef.current);
+    setTemporaryTitle('写作中… - 小说生成器');
     setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch('/api/generate', {
@@ -264,18 +274,12 @@ function App() {
       }
       setGenProgress(prev => ({ ...prev, status: 'success' }));
       setToast({ text: '这一章写好了', type: 'success' });
-      document.title = '已写好！ - 小说生成器';
-      titleTimeoutRef.current = setTimeout(() => {
-        document.title = originalTitleRef.current;
-      }, 3000);
+      setTemporaryTitle('已写好！ - 小说生成器', 3000);
     } catch (err) {
       setError(err.message);
       setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
       setToast({ text: '生成失败，请查看错误提示', type: 'error' });
-      document.title = '生成失败 - 小说生成器';
-      titleTimeoutRef.current = setTimeout(() => {
-        document.title = originalTitleRef.current;
-      }, 3000);
+      setTemporaryTitle('生成失败 - 小说生成器', 3000);
     } finally {
       setLoading(false);
     }
@@ -628,8 +632,7 @@ function App() {
     setRegenerating(true);
     setError('');
     setToast(null);
-    document.title = '写作中… - 小说生成器';
-    clearTimeout(titleTimeoutRef.current);
+    setTemporaryTitle('写作中… - 小说生成器');
     setGenProgress({ visible: true, mode: 'rewrite', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/regenerate`, {
@@ -645,18 +648,12 @@ function App() {
       setError('候选版本已生成');
       setTimeout(() => setError(''), 3000);
       setToast({ text: '这一章写好了', type: 'success' });
-      document.title = '已写好！ - 小说生成器';
-      titleTimeoutRef.current = setTimeout(() => {
-        document.title = originalTitleRef.current;
-      }, 3000);
+      setTemporaryTitle('已写好！ - 小说生成器', 3000);
     } catch (err) {
       setError(err.message);
       setGenProgress({ visible: true, mode: 'rewrite', status: 'error', errorMessage: err.message });
       setToast({ text: '生成失败，请查看错误提示', type: 'error' });
-      document.title = '生成失败 - 小说生成器';
-      titleTimeoutRef.current = setTimeout(() => {
-        document.title = originalTitleRef.current;
-      }, 3000);
+      setTemporaryTitle('生成失败 - 小说生成器', 3000);
     } finally {
       setRegenerating(false);
     }
@@ -724,6 +721,14 @@ function App() {
     const timer = setTimeout(() => setToast(null), 2500);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  // Component unmount cleanup: clear title timeout and restore title
+  useEffect(() => {
+    return () => {
+      clearTimeout(titleTimeoutRef.current);
+      document.title = originalTitleRef.current;
+    };
+  }, []);
 
   const handleGenProgressDone = useCallback(() => {
     setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
