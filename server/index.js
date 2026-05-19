@@ -46,6 +46,9 @@ function isValidChapterFileName(fileName) {
 }
 
 async function callDeepSeek(model, messages) {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    throw new Error('请在 server/.env 中配置 DEEPSEEK_API_KEY');
+  }
   const response = await fetch('https://api.deepseek.com/chat/completions', {
     method: 'POST',
     headers: {

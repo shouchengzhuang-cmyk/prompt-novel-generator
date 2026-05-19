@@ -220,6 +220,7 @@ function App() {
 
   // ---- Generate ----
   const handleGenerate = async () => {
+    if (loading || regenerating) return;
     if (!currentProject) {
       setError('请先选择一个项目');
       return;
@@ -255,20 +256,18 @@ function App() {
       // Auto-select the new chapter for reading
       setReadingChapter(fileName);
       setReadingContent(data.content);
-      // Refresh chapter list (merge title into local state immediately)
-      const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
-      setProjectDetails(refreshData);
-      if (data.summaryUpdated) {
-        setError(`已保存到：${fileName}，摘要已更新`);
-      } else {
-        setError(`章节已保存到：${fileName}，但摘要更新失败：${data.summaryError || '未知错误'}`);
+      // Refresh chapter list (don't let failure affect success state)
+      try {
+        const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+        setProjectDetails(refreshData);
+      } catch (refreshErr) {
+        console.warn('刷新章节列表失败:', refreshErr);
       }
       setGenProgress(prev => ({ ...prev, status: 'success' }));
-      setNotification({ title: '这一章写好了', message: '新章节已经生成，可以继续阅读。' });
+      setNotification({ title: '这一章写好了', message: `新章节已保存（${fileName}）` });
     } catch (err) {
-      setError(err.message);
       setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
-      setNotification({ title: '生成失败', message: '请查看页面错误提示。' });
+      setNotification({ title: '生成失败', message: err.message });
     } finally {
       setLoading(false);
     }
@@ -284,6 +283,12 @@ function App() {
     setEditorNoteError('');
     setEditorNoteLoading(false);
     editorNoteReqId.current++;
+    // Clear previous chapter state before loading new one
+    setVariantPreview(null);
+    setVariants([]);
+    setShowRewriteInput(false);
+    setRewritePrompt('');
+    setReadingContent('');
     try {
       const url = `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}`;
       const data = await safeJsonFetch(url);
@@ -612,6 +617,7 @@ function App() {
   };
 
   const handleRegenerate = async () => {
+    if (loading || regenerating) return;
     if (!currentProject || !readingChapter) return;
     const trimmed = rewritePrompt.trim();
     if (!trimmed) {
@@ -632,13 +638,10 @@ function App() {
       setShowRewriteInput(false);
       setRewritePrompt('');
       setGenProgress(prev => ({ ...prev, status: 'success' }));
-      setError('候选版本已生成');
-      setTimeout(() => setError(''), 3000);
       setNotification({ title: '候选版本写好了', message: '可以查看并决定是否采用。' });
     } catch (err) {
-      setError(err.message);
       setGenProgress({ visible: true, mode: 'rewrite', status: 'error', errorMessage: err.message });
-      setNotification({ title: '生成失败', message: '请查看页面错误提示。' });
+      setNotification({ title: '生成失败', message: err.message });
     } finally {
       setRegenerating(false);
     }
