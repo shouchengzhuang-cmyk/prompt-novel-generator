@@ -1278,9 +1278,6 @@ function App() {
                       <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}
                       </button>
-                      <button className="btn btn-ai" onClick={handleEditorNote}>
-                        生成编辑备注
-                      </button>
                       <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
                       </button>
