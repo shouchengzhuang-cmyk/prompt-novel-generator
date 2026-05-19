@@ -196,6 +196,36 @@ async function writeChapterIndex(chaptersDir, entries) {
   );
 }
 
+async function ensureChapterIndexEntry(chaptersDir, fileName) {
+  const entries = await readChapterIndex(chaptersDir);
+  let entry = entries.find((item) => item.fileName === fileName);
+  if (!entry) {
+    entry = {
+      fileName,
+      title: extractTitleFromContent('', parseInt(fileName, 10)),
+      createdAt: new Date().toISOString(),
+    };
+    entries.push(entry);
+  }
+  return { entries, entry };
+}
+
+function formatLocalMinute(timestamp = Date.now()) {
+  const date = new Date(timestamp);
+  const pad = (n) => String(n).padStart(2, '0');
+  return [
+    date.getFullYear(),
+    '-',
+    pad(date.getMonth() + 1),
+    '-',
+    pad(date.getDate()),
+    ' ',
+    pad(date.getHours()),
+    ':',
+    pad(date.getMinutes()),
+  ].join('');
+}
+
 function extractTitleFromContent(content, chapterNumber) {
   // Scan first non-empty lines for a detectable title
   const lines = content.split('\n').filter((l) => l.trim());
@@ -315,6 +345,8 @@ app.get('/api/projects/:projectName', async (req, res) => {
         title: indexMap[f]?.title || extractTitleFromContent('', parseInt(f, 10)),
         userPrompt: indexMap[f]?.userPrompt || '',
         activeVersionId: indexMap[f]?.activeVersionId || 'v-original',
+        editorNotes: Array.isArray(indexMap[f]?.editorNotes) ? indexMap[f].editorNotes : [],
+        editorChats: Array.isArray(indexMap[f]?.editorChats) ? indexMap[f].editorChats : [],
       }));
 
       // Load content of last 10 chapters for display
@@ -367,7 +399,15 @@ app.get('/api/projects/:projectName/chapters/:fileName', async (req, res) => {
     }
     console.log('读取章节路径:', chapterPath);
     const content = await fs.readFile(chapterPath, 'utf-8');
-    res.json({ fileName, content });
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const entry = indexEntries.find((item) => item.fileName === fileName);
+    res.json({
+      fileName,
+      title: entry?.title || null,
+      content,
+      editorNotes: Array.isArray(entry?.editorNotes) ? entry.editorNotes : [],
+      editorChats: Array.isArray(entry?.editorChats) ? entry.editorChats : [],
+    });
   } catch {
     res.status(404).json({ error: '章节不存在' });
   }
@@ -1585,6 +1625,237 @@ app.get('/api/editor/note', async (req, res) => {
   } catch (err) {
     const status = err.statusCode || 500;
     res.status(status).json({ error: err.message || '编辑备注生成失败' });
+  }
+});
+
+// ---- POST /api/editor-chat ----
+
+app.post('/api/editor-chat', async (req, res) => {
+  const { projectName, chapterId, fileName, message } = req.body;
+  const trimmedMessage = typeof message === 'string' ? message.trim() : '';
+
+  if (!projectName) {
+    return res.status(400).json({ error: '缺少项目名' });
+  }
+  if (!trimmedMessage) {
+    return res.status(400).json({ error: '消息不能为空' });
+  }
+
+  // 优先用 fileName 定位章节，若没有则用 chapterId
+  const resolvedFileName = (typeof fileName === 'string' && fileName.trim())
+    ? fileName.trim()
+    : (typeof chapterId === 'string' && chapterId.trim())
+      ? chapterId.trim()
+      : '';
+
+  if (!resolvedFileName || !isValidChapterFileName(resolvedFileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, resolvedFileName);
+  const relativePath = path.relative(chaptersDir, chapterPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  // 读取章节正文，内容为空或读取失败则直接返回 404，不调用 AI
+  let chapterContent;
+  try {
+    chapterContent = await fs.readFile(chapterPath, 'utf-8');
+  } catch {
+    return res.status(404).json({ error: '当前章节正文读取失败，无法进行编辑分析' });
+  }
+  if (!chapterContent || chapterContent.trim().length === 0) {
+    return res.status(404).json({ error: '当前章节正文读取失败，无法进行编辑分析' });
+  }
+
+  // 读取项目设置文件
+  const [world, characters, summary, style] = await Promise.all([
+    fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+  ]);
+
+  // 从 index.json 获取本章元数据
+  let chapterTitle = resolvedFileName;
+  let editorNotes = [];
+  let editorChats = [];
+  try {
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const entry = indexEntries.find((item) => item.fileName === resolvedFileName);
+    if (entry) {
+      chapterTitle = entry.title || resolvedFileName;
+      editorNotes = Array.isArray(entry.editorNotes) ? entry.editorNotes : [];
+      editorChats = Array.isArray(entry.editorChats) ? entry.editorChats : [];
+    }
+  } catch {
+    // index.json 读取失败不影响主流程
+  }
+
+  const recentChats = editorChats.slice(-8).map((chat) => {
+    const roleName = chat.role === 'user' ? '用户' : '随书编辑';
+    return `${roleName}：${chat.content}`;
+  }).join('\n');
+
+  // ===== debug 日志（完整正文信息） =====
+  const fullContentFirst100 = chapterContent.slice(0, 100).replace(/\n/g, '\\n');
+  const fullContentLast100 = chapterContent.length > 100
+    ? chapterContent.slice(-100).replace(/\n/g, '\\n')
+    : chapterContent.replace(/\n/g, '\\n');
+  const lastNonWhitespace = chapterContent.trimEnd().slice(-1);
+  console.log('--- [编辑对话] full content debug ---');
+  console.log('projectName:', projectName);
+  console.log('received chapterId:', chapterId);
+  console.log('received fileName:', fileName);
+  console.log('resolved chapter title:', chapterTitle);
+  console.log('resolved fileName:', resolvedFileName);
+  console.log('full content length:', chapterContent.length);
+  console.log('full content first 100:', fullContentFirst100);
+  console.log('full content last 100:', fullContentLast100);
+  console.log('full content last char:', lastNonWhitespace);
+  console.log('editorNotes length:', editorNotes.length);
+  console.log('recent editorChats count:', editorChats.length);
+  console.log('--- [编辑对话] full content debug end ---');
+
+  // 自检：如果用户问的是全文最后一个字，在日志中输出
+  if (/最后一个字|全文最后/.test(trimmedMessage)) {
+    console.log(`[编辑对话自检] user asked about last char, server calculated last non-whitespace char: "${lastNonWhitespace}"`);
+  }
+
+  let contextText = '';
+  if (world) contextText += `## 世界观设定\n${world.slice(0, 1200)}\n\n`;
+  if (characters) contextText += `## 人物设定\n${characters.slice(0, 1200)}\n\n`;
+  if (style) contextText += `## 写作规则\n${style.slice(0, 800)}\n\n`;
+  if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 1000)}\n\n`;
+  if (editorNotes.length > 0) {
+    contextText += `## 已有编辑备注\n${editorNotes.join('\n\n').slice(0, 2000)}\n\n`;
+  }
+  if (recentChats) {
+    contextText += `## 最近编辑对话\n${recentChats.slice(0, 2000)}\n\n`;
+  }
+  // 当前章节正文必须使用完整文件内容，不允许截断
+  contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${chapterContent}\n\n`;
+  contextText += `## 用户本次问题\n${trimmedMessage}`;
+
+  const reply = (await callDeepSeek('deepseek-v4-flash', [
+    {
+      role: 'system',
+      content:
+        '你是”小墨匣”的随书编辑，你的任务是根据后端提供的项目设置和当前章节正文，' +
+        '指出章节问题、分析人物、判断节奏、给出具体修改建议。\n\n' +
+        '硬性规则（必须遵守）：\n' +
+        '1. 你只能根据后端提供的当前章节正文和项目上下文来回答。\n' +
+        '2. 不允许编造文件名、附件、章节编号。\n' +
+        '3. 不允许说”第五章不在附件里””你只给了第一章”这类话，除非后端上下文明示你缺少内容。\n' +
+        '4. 如果当前上下文不足，只能说”我现在拿到的当前章节内容不足，请检查章节是否保存或重新打开章节”。\n' +
+        '5. 不要空泛夸奖。不要默认重写全文。\n' +
+        '6. 回复要像真人编辑聊天，短而有判断。\n' +
+        '7. 如果用户想法有问题，要直接指出。',
+    },
+    {
+      role: 'user',
+      content: contextText,
+    },
+  ])).trim();
+
+  const now = Date.now();
+  const userChat = {
+    id: `chat-${now}-user`,
+    role: 'user',
+    content: trimmedMessage,
+    createdAt: now,
+  };
+  const editorChat = {
+    id: `chat-${now}-editor`,
+    role: 'editor',
+    content: reply,
+    createdAt: Date.now(),
+  };
+  editorChats = [...editorChats, userChat, editorChat];
+
+  // 写回 index.json
+  try {
+    const { entries, entry: idxEntry } = await ensureChapterIndexEntry(chaptersDir, resolvedFileName);
+    idxEntry.editorChats = editorChats;
+    idxEntry.editorNotes = editorNotes;
+    await writeChapterIndex(chaptersDir, entries);
+  } catch {
+    // index.json 写入失败不影响回复
+  }
+
+  res.json({ reply, editorChats });
+});
+
+// ---- POST /api/projects/:projectName/chapters/:fileName/editor-notes ----
+
+app.post('/api/projects/:projectName/chapters/:fileName/editor-notes', async (req, res) => {
+  const { projectName, fileName } = req.params;
+  const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+  if (!content) {
+    return res.status(400).json({ error: '备注内容不能为空' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    const chaptersDir = path.join(projectDir, 'chapters');
+    await fs.access(path.join(chaptersDir, fileName));
+    const { entries, entry } = await ensureChapterIndexEntry(chaptersDir, fileName);
+    const editorNotes = Array.isArray(entry.editorNotes) ? entry.editorNotes : [];
+    const note = `## 编辑建议 ${formatLocalMinute()}\n${content}`;
+    entry.editorNotes = [...editorNotes, note];
+    await writeChapterIndex(chaptersDir, entries);
+    res.json({ ok: true, note, editorNotes: entry.editorNotes });
+  } catch (err) {
+    const status = err.code === 'ENOENT' ? 404 : 500;
+    res.status(status).json({ error: err.message || '保存编辑备注失败' });
+  }
+});
+
+// ---- DELETE /api/projects/:projectName/chapters/:fileName/editor-chats ----
+
+app.delete('/api/projects/:projectName/chapters/:fileName/editor-chats', async (req, res) => {
+  const { projectName, fileName } = req.params;
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    const chaptersDir = path.join(projectDir, 'chapters');
+    await fs.access(path.join(chaptersDir, fileName));
+    const { entries, entry } = await ensureChapterIndexEntry(chaptersDir, fileName);
+    entry.editorChats = [];
+    await writeChapterIndex(chaptersDir, entries);
+    res.json({ ok: true, editorChats: [] });
+  } catch (err) {
+    const status = err.code === 'ENOENT' ? 404 : 500;
+    res.status(status).json({ error: err.message || '清空编辑对话失败' });
   }
 });
 
