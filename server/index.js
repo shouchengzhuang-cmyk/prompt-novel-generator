@@ -150,29 +150,226 @@ async function buildEditorNote(projectName, chapterFileName) {
   const messages = [
     {
       role: 'system',
-      content: '你是一个后台章节编辑。你的任务是为下一章生成模型输出一段内部的编辑备注。',
+      content:
+        '你是章节编辑，只输出简短、可执行的写作批注，给后续写作用。\n' +
+        '禁止使用 Markdown：不要 **加粗**、### 标题、表格、> 引用、``` 代码块、--- 分隔线、复杂编号层级。\n' +
+        '使用纯文本，可以用简单中文小标题，例如：本章问题：修改建议：下章注意：。\n' +
+        '300 字以内，语气直接，不客套，不写“总体来说”“可以看出”“值得注意的是”。',
     },
     {
       role: 'user',
       content: contextText +
-        '请基于以上信息，输出一段 80～160 字的编辑备注。\n\n' +
-        '编辑备注只关注：\n' +
-        '1. 当前章节效果\n' +
-        '2. 最大风险/偏差\n' +
-        '3. 下一章应如何承接\n\n' +
+        '请基于以上信息，输出 300 字以内的编辑备注。\n\n' +
+        '只保留对后续写作最有用的内容：人物行为是否合理、情绪是否连续、伏笔是否保留、下一章应该接什么、哪些内容不要重复、哪些冲突需要修正。\n\n' +
         '格式要求：\n' +
-        '- 纯文字，无 Markdown\n' +
-        '- 不要多级标题\n' +
-        '- 不要引用大段原文\n' +
-        '- 不要和用户对话\n' +
-        '- 不要询问用户\n' +
-        '- 不要重写正文\n' +
-        '- 直接输出备注内容，不要前缀说明',
+        '纯文本。可以使用“本章问题：”“修改建议：”“下章注意：”这类简单中文小标题。\n' +
+        '禁止 Markdown 特殊格式符号：不要 **加粗**，不要 ### 标题，不要表格，不要 > 引用，不要 ``` 代码块，不要 --- 分隔线，不要复杂编号层级。\n' +
+        '不要客套，不要总结式废话，不要询问用户，不要重写正文。直接输出批注内容。',
     },
   ];
 
   const note = await callDeepSeek('deepseek-v4-flash', messages);
-  return note.trim();
+  return sanitizeEditorText(note, 300);
+}
+
+// ---- Editorial Memory Helpers ----
+
+const DEFAULT_EDITORIAL_MEMORY = `# 项目编辑记忆
+
+> 最后更新：暂无
+> 说明：这里记录编辑对本项目的长期判断、伏笔跟踪、人物关系演变和后续写作风险。summary.md 记录剧情事实，本文件记录编辑分析。
+
+## 长期关注点
+
+暂无。
+
+## 伏笔跟踪
+
+暂无。
+
+## 章节编辑记忆
+`;
+
+function getEditorialMemoryPath(projectName) {
+  return path.join(safeProjectDir(projectName), 'editorial-memory.md');
+}
+
+async function ensureEditorialMemory(projectName) {
+  const filePath = getEditorialMemoryPath(projectName);
+  try {
+    await fs.access(filePath);
+  } catch {
+    await ensureDir(path.dirname(filePath));
+    await fs.writeFile(filePath, DEFAULT_EDITORIAL_MEMORY, 'utf-8');
+  }
+  return filePath;
+}
+
+async function readEditorialMemory(projectName) {
+  try {
+    await ensureEditorialMemory(projectName);
+    const filePath = getEditorialMemoryPath(projectName);
+    return await fs.readFile(filePath, 'utf-8');
+  } catch {
+    return DEFAULT_EDITORIAL_MEMORY;
+  }
+}
+
+async function writeEditorialMemory(projectName, content) {
+  const filePath = getEditorialMemoryPath(projectName);
+  await ensureDir(path.dirname(filePath));
+  await fs.writeFile(filePath, content, 'utf-8');
+}
+
+/**
+ * Replace or append a full chapter memory block (including markers) in editorial-memory.md.
+ * fullBlock must contain `<!-- chapter-memory:start fileName -->` and `<!-- chapter-memory:end fileName -->`.
+ * If block for this fileName already exists, replaces it. Otherwise appends after `## 章节编辑记忆` section.
+ */
+function replaceChapterMemoryBlock(memoryContent, fileName, fullBlock) {
+  const startMarker = `<!-- chapter-memory:start ${fileName} -->`;
+  const endMarker = `<!-- chapter-memory:end ${fileName} -->`;
+
+  const startIdx = memoryContent.indexOf(startMarker);
+  const endIdx = memoryContent.indexOf(endMarker);
+
+  if (startIdx !== -1 && endIdx !== -1) {
+    const before = memoryContent.substring(0, startIdx);
+    const after = memoryContent.substring(endIdx + endMarker.length);
+    return before + fullBlock + after;
+  }
+
+  // Append new block after "## 章节编辑记忆" section
+  const sectionMarker = '## 章节编辑记忆';
+  const sectionIdx = memoryContent.indexOf(sectionMarker);
+  if (sectionIdx !== -1) {
+    const sectionEnd = sectionIdx + sectionMarker.length;
+    const before = memoryContent.substring(0, sectionEnd);
+    const after = memoryContent.substring(sectionEnd);
+    return before + '\n\n' + fullBlock + after;
+  }
+
+  return memoryContent + '\n\n' + fullBlock;
+}
+
+/**
+ * Select and truncate editorial memory for prompt injection.
+ * Keeps header + long-term concerns + latest chapter blocks within maxChars.
+ */
+function selectEditorialMemoryForPrompt(memoryContent, maxChars) {
+  if (!memoryContent || memoryContent.length <= maxChars) {
+    return memoryContent || '';
+  }
+
+  // Keep header (everything before ## 章节编辑记忆) + latest 3 chapter blocks
+  const parts = [];
+  const headerMatch = memoryContent.match(/^[\s\S]*?(?=## 章节编辑记忆)/);
+  if (headerMatch) {
+    parts.push(headerMatch[0].trim());
+  }
+
+  const blockRegex = /<!-- chapter-memory:start \S+ -->[\s\S]*?<!-- chapter-memory:end \S+ -->/g;
+  const blocks = memoryContent.match(blockRegex) || [];
+  const recentBlocks = blocks.slice(-3);
+
+  if (recentBlocks.length > 0) {
+    parts.push('## 章节编辑记忆', ...recentBlocks);
+  }
+
+  const result = parts.join('\n\n');
+  if (result.length <= maxChars) return result;
+
+  if (recentBlocks.length > 2) {
+    const shorter = [parts[0], '## 章节编辑记忆', ...recentBlocks.slice(-2)].join('\n\n');
+    if (shorter.length <= maxChars) return shorter;
+  }
+
+  return memoryContent.slice(0, maxChars) + '\n\n…（项目编辑记忆因过长已截断）';
+}
+
+/**
+ * Called after a new chapter is generated.
+ * Reads chapter content + summary + old editorial-memory.md, calls flash model,
+ * then replaces or appends the corresponding chapter block.
+ * Errors are caught and logged — never affects the caller.
+ */
+async function updateEditorialMemoryForChapter(projectName, fileName) {
+  const projectDir = safeProjectDir(projectName);
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, fileName);
+  const rp = path.relative(chaptersDir, chapterPath);
+  if (rp.startsWith('..') || path.isAbsolute(rp)) {
+    throw new Error('无效的章节文件名');
+  }
+
+  const chapterContent = await fs.readFile(chapterPath, 'utf-8');
+  const summary = await fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => '');
+  const oldMemory = await readEditorialMemory(projectName);
+
+  // Get chapter title from index.json
+  let chapterTitle = fileName;
+  try {
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const entry = indexEntries.find((item) => item.fileName === fileName);
+    if (entry && entry.title) chapterTitle = entry.title;
+  } catch { /* use fileName as fallback */ }
+
+  const chapterNumber = parseInt(fileName, 10);
+  const titleDisplay = `第${chapterNumber}章（${fileName}）`;
+
+  const messages = [
+    {
+      role: 'system',
+      content:
+        '你是"小墨匣"的项目级编辑记忆维护员。' +
+        '你的任务不是总结剧情事实，而是维护编辑长期记忆：人物关系演变、伏笔跟踪、跨章节风险、后续写作提醒。' +
+        'summary.md 已经负责剧情事实；你不要重复写流水账。',
+    },
+    {
+      role: 'user',
+      content:
+        `## 当前章节\n标题：${chapterTitle}\n文件名：${fileName}\n\n` +
+        `## 当前章节正文\n${chapterContent}\n\n` +
+        (summary ? `## 当前剧情摘要\n${summary}\n\n` : '') +
+        `## 旧项目编辑记忆\n${oldMemory}\n\n` +
+        '只输出当前章节的 memory block，不要输出整个文件。\n\n' +
+        `必须使用这个格式（保留 \`<!-- chapter-memory:start -->\` 标记）：\n\n` +
+        `<!-- chapter-memory:start ${fileName} -->\n` +
+        `### ${titleDisplay}\n\n` +
+        `- **剧情意义**：（本章在整体剧情中的作用）\n` +
+        `- **人物关系变化**：（人物关系的新进展或变化）\n` +
+        `- **伏笔与未解决问题**：（本章设置的伏笔或未解决的问题）\n` +
+        `- **编辑判断**：（编辑对本章质量的整体判断）\n` +
+        `- **后续提醒**：（对后续章节的写作提醒）\n\n` +
+        `<!-- chapter-memory:end ${fileName} -->`,
+    },
+  ];
+
+  const aiResponse = await callDeepSeek('deepseek-v4-flash', messages);
+  let blockContent = aiResponse.trim();
+  // Strip code fences if present
+  blockContent = blockContent.replace(/^```[\w]*\n?/gm, '').replace(/\n?```\s*$/gm, '').trim();
+
+  // Ensure the block has proper markers
+  if (!blockContent.includes('<!-- chapter-memory:start')) {
+    blockContent =
+      `<!-- chapter-memory:start ${fileName} -->\n` +
+      `### ${titleDisplay}\n\n` +
+      blockContent +
+      `\n<!-- chapter-memory:end ${fileName} -->`;
+  }
+
+  const currentMemory = await readEditorialMemory(projectName);
+  let updatedMemory = replaceChapterMemoryBlock(currentMemory, fileName, blockContent);
+
+  // Update the "最后更新" timestamp
+  const now = new Date();
+  const dateStr =
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ` +
+    `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  updatedMemory = updatedMemory.replace(/> 最后更新：.*/, `> 最后更新：${dateStr}`);
+
+  await writeEditorialMemory(projectName, updatedMemory);
 }
 
 // ---- Chapter title helpers ----
@@ -258,6 +455,21 @@ function formatLocalMinute(timestamp = Date.now()) {
     ':',
     pad(date.getMinutes()),
   ].join('');
+}
+
+function sanitizeEditorText(text, maxLength = 500) {
+  if (typeof text !== 'string') return '';
+  return text
+    .replace(/^```[\w-]*\s*$/gm, '')
+    .replace(/^\s*#{1,6}\s*/gm, '')
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^\s*>\s?/gm, '')
+    .replace(/^\s*-{3,}\s*$/gm, '')
+    .replace(/^\s*\|.*\|\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, maxLength)
+    .trim();
 }
 
 function extractTitleFromContent(content, chapterNumber) {
@@ -361,6 +573,7 @@ app.get('/api/projects/:projectName', async (req, res) => {
       fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
       fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
     ]);
+    const editorialMemory = await readEditorialMemory(projectName);
 
     const chaptersDir = path.join(projectDir, 'chapters');
     let chapters = [];
@@ -404,7 +617,7 @@ app.get('/api/projects/:projectName', async (req, res) => {
       // chapters dir may not exist
     }
 
-    res.json({ projectName, world, characters, summary, style, chapters, recentContent });
+    res.json({ projectName, world, characters, summary, style, editorialMemory, chapters, recentContent });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -634,7 +847,7 @@ app.delete('/api/projects/:projectName', async (req, res) => {
 
 app.put('/api/projects/:projectName', async (req, res) => {
   const { projectName } = req.params;
-  const { world, characters, style, summary } = req.body;
+  const { world, characters, style, summary, editorialMemory } = req.body;
 
   let projectDir;
   try {
@@ -655,14 +868,19 @@ app.put('/api/projects/:projectName', async (req, res) => {
       characters: typeof characters === 'string' ? characters : '',
       style: typeof style === 'string' ? style : '',
       summary: typeof summary === 'string' ? summary : '',
+      editorialMemory: typeof editorialMemory === 'string' ? editorialMemory : undefined,
     };
 
-    await Promise.all([
+    const writes = [
       fs.writeFile(path.join(projectDir, 'world.md'), project.world, 'utf-8'),
       fs.writeFile(path.join(projectDir, 'characters.md'), project.characters, 'utf-8'),
       fs.writeFile(path.join(projectDir, 'style.md'), project.style, 'utf-8'),
       fs.writeFile(path.join(projectDir, 'summary.md'), project.summary, 'utf-8'),
-    ]);
+    ];
+    if (project.editorialMemory !== undefined) {
+      writes.push(fs.writeFile(path.join(projectDir, 'editorial-memory.md'), project.editorialMemory, 'utf-8'));
+    }
+    await Promise.all(writes);
     res.json({ ok: true, message: '设定已保存', project });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -700,6 +918,7 @@ app.post('/api/generate', async (req, res) => {
       fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
       fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
     ]);
+    const editorialMemoryForPrompt = await readEditorialMemory(projectName);
 
     // 2. Read latest chapters for context (respecting activeVersionId)
     let recentChapters = [];
@@ -743,6 +962,7 @@ app.post('/api/generate', async (req, res) => {
       characters: characters || '',
       style: style || '',
       summary: summary || '',
+      editorialMemory: editorialMemoryForPrompt || '',
       recentChapters: recentChaptersText,
       userPrompt: userPrompt.trim(),
     });
@@ -758,6 +978,31 @@ app.post('/api/generate', async (req, res) => {
       { role: 'system', content: systemContent },
       { role: 'user', content: userContent },
     ];
+
+    // 3b. Inject editorial-memory.md into user prompt (after summary, before recent chapters)
+    if (editorialMemoryForPrompt) {
+      const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForPrompt, 2000);
+      if (selectedMemory) {
+        const sectionText = `\n\n## 项目编辑记忆\n${selectedMemory}\n\n`;
+        let currentContent = messages[1].content;
+        // Try to insert before recent chapters section
+        const chapterHeaders = ['## 最近章节', '## 前文章节', '## 前文'];
+        let injected = false;
+        for (const h of chapterHeaders) {
+          if (currentContent.includes(h)) {
+            currentContent = currentContent.replace(h, sectionText + h);
+            injected = true;
+            break;
+          }
+        }
+        if (!injected) {
+          // Fallback: inject before user prompt section
+          currentContent = currentContent.replace('## 本次续写要求', sectionText + '## 本次续写要求');
+        }
+        messages[1] = { role: 'user', content: currentContent };
+        console.log(`[编辑记忆] 已并入生成 prompt (${selectedMemory.length} 字)`);
+      }
+    }
 
     // 4a. Generate editor note from latest chapter and append to messages
     try {
@@ -854,6 +1099,15 @@ app.post('/api/generate', async (req, res) => {
       ];
       const updatedSummary = await callDeepSeek('deepseek-v4-flash', summaryMessages);
       await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
+
+      // 6c. Update editorial-memory.md (non-critical, errors are logged)
+      try {
+        await updateEditorialMemoryForChapter(projectName, filename);
+        console.log(`[编辑记忆] 已更新章节 ${filename}`);
+      } catch (memErr) {
+        console.warn(`[编辑记忆] 更新失败（不影响主流程）: ${memErr.message}`);
+      }
+
       res.json({ content, fileName: filename, title, summaryUpdated: true, debugPromptInfo });
     } catch (summaryErr) {
       res.json({
@@ -996,8 +1250,8 @@ app.get('/api/projects/:projectName/backup', async (req, res) => {
 
     archive.pipe(res);
 
-    // Root markdown files (world.md, characters.md, style.md, summary.md)
-    for (const f of ['world.md', 'characters.md', 'style.md', 'summary.md']) {
+    // Root markdown files (world.md, characters.md, style.md, summary.md, editorial-memory.md)
+    for (const f of ['world.md', 'characters.md', 'style.md', 'summary.md', 'editorial-memory.md']) {
       const fp = path.join(projectDir, f);
       try {
         await fs.access(fp);
@@ -1763,6 +2017,7 @@ app.post('/api/editor-chat', async (req, res) => {
     fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
     fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
   ]);
+  const editorialMemoryForChat = await readEditorialMemory(projectName);
 
   // 从 index.json 获取本章元数据
   let chapterTitle = resolvedFileName;
@@ -1815,6 +2070,12 @@ app.post('/api/editor-chat', async (req, res) => {
   if (characters) contextText += `## 人物设定\n${characters.slice(0, 1200)}\n\n`;
   if (style) contextText += `## 写作规则\n${style.slice(0, 800)}\n\n`;
   if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 1000)}\n\n`;
+  if (editorialMemoryForChat) {
+    const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 1500);
+    if (selectedMemory) {
+      contextText += `## 项目编辑记忆\n${selectedMemory}\n\n`;
+    }
+  }
   if (editorNotes.length > 0) {
     contextText += `## 已有编辑备注\n${editorNotes.join('\n\n').slice(0, 2000)}\n\n`;
   }
@@ -1825,7 +2086,7 @@ app.post('/api/editor-chat', async (req, res) => {
   contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${chapterContent}\n\n`;
   contextText += `## 用户本次问题\n${trimmedMessage}`;
 
-  const reply = (await callDeepSeek('deepseek-v4-flash', [
+  const reply = sanitizeEditorText(await callDeepSeek('deepseek-v4-flash', [
     {
       role: 'system',
       content:
@@ -1838,13 +2099,18 @@ app.post('/api/editor-chat', async (req, res) => {
         '4. 如果当前上下文不足，只能说”我现在拿到的当前章节内容不足，请检查章节是否保存或重新打开章节”。\n' +
         '5. 不要空泛夸奖。不要默认重写全文。\n' +
         '6. 回复要像真人编辑聊天，短而有判断。\n' +
-        '7. 如果用户想法有问题，要直接指出。',
+        '7. 如果用户想法有问题，要直接指出。\n' +
+        '8. 500 字以内；信息很多时，优先保留对后续写作最有用的建议。\n' +
+        '9. 禁止使用 Markdown 特殊格式符号：不要 **加粗**，不要 ### 标题，不要表格，不要 > 引用，不要 ``` 代码块，不要 --- 分隔线，不要复杂编号层级。\n' +
+        '10. 使用纯文本。可以用简单中文小标题，例如：本章问题：修改建议：下章注意：。\n' +
+        '11. 不要客套，不要总结式废话，不要说“总体来说”“可以看出”“值得注意的是”。\n' +
+        '12. 建议要可执行，重点看人物行为、情绪连续、伏笔去留、下一章承接、重复内容、冲突修正。',
     },
     {
       role: 'user',
       content: contextText,
     },
-  ])).trim();
+  ]), 500);
 
   const now = Date.now();
   const userChat = {
@@ -1899,7 +2165,11 @@ app.post('/api/projects/:projectName/chapters/:fileName/editor-notes', async (re
     await fs.access(path.join(chaptersDir, fileName));
     const { entries, entry } = await ensureChapterIndexEntry(chaptersDir, fileName);
     const editorNotes = Array.isArray(entry.editorNotes) ? entry.editorNotes : [];
-    const note = `## 编辑建议 ${formatLocalMinute()}\n${content}`;
+    const cleanContent = sanitizeEditorText(content, 300);
+    if (!cleanContent) {
+      return res.status(400).json({ error: '备注内容不能为空' });
+    }
+    const note = `编辑建议 ${formatLocalMinute()}\n${cleanContent}`;
     entry.editorNotes = [...editorNotes, note];
     await writeChapterIndex(chaptersDir, entries);
     res.json({ ok: true, note, editorNotes: entry.editorNotes });
