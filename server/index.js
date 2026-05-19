@@ -2047,83 +2047,79 @@ app.post('/api/editor-chat', async (req, res) => {
     // index.json 读取失败不影响主流程
   }
 
-  const recentChats = editorChats.slice(-8).map((chat) => {
-    const roleName = chat.role === 'user' ? '用户' : '随书编辑';
-    return `${roleName}：${chat.content}`;
-  }).join('\n');
+  // 判断是否进入分析模式：只有用户明确要求分析、审稿等时才注入全文
+  const isAnalysisMode = /分析|审稿|修改建议|逐段|评审|人物动机/.test(trimmedMessage)
+    || (trimmedMessage.length >= 30 && /问题|节奏|建议/.test(trimmedMessage));
 
-  // ===== debug 日志（完整正文信息） =====
-  const fullContentFirst100 = chapterContent.slice(0, 100).replace(/\n/g, '\\n');
-  const fullContentLast100 = chapterContent.length > 100
-    ? chapterContent.slice(-100).replace(/\n/g, '\\n')
-    : chapterContent.replace(/\n/g, '\\n');
-  const lastNonWhitespace = chapterContent.trimEnd().slice(-1);
-  console.log('--- [编辑对话] full content debug ---');
-  console.log('projectName:', projectName);
-  console.log('received chapterId:', chapterId);
-  console.log('received fileName:', fileName);
-  console.log('resolved chapter title:', chapterTitle);
-  console.log('resolved fileName:', resolvedFileName);
-  console.log('full content length:', chapterContent.length);
-  console.log('full content first 100:', fullContentFirst100);
-  console.log('full content last 100:', fullContentLast100);
-  console.log('full content last char:', lastNonWhitespace);
-  console.log('editorNotes length:', editorNotes.length);
-  console.log('recent editorChats count:', editorChats.length);
-  console.log('--- [编辑对话] full content debug end ---');
-
-  // 自检：如果用户问的是全文最后一个字，在日志中输出
-  if (/最后一个字|全文最后/.test(trimmedMessage)) {
-    console.log(`[编辑对话自检] user asked about last char, server calculated last non-whitespace char: "${lastNonWhitespace}"`);
-  }
+  const recentUserMessages = editorChats
+    .filter((chat) => chat.role === 'user')
+    .slice(-4)
+    .map((chat) => `用户：${chat.content}`)
+    .join('\n');
 
   let contextText = '';
-  if (world) contextText += `## 世界观设定\n${world.slice(0, 1200)}\n\n`;
-  if (characters) contextText += `## 人物设定\n${characters.slice(0, 1200)}\n\n`;
-  if (style) contextText += `## 写作规则\n${style.slice(0, 800)}\n\n`;
-  if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 1000)}\n\n`;
+  if (world) contextText += `## 世界观设定\n${world.slice(0, 600)}\n\n`;
+  if (characters) contextText += `## 人物设定\n${characters.slice(0, 600)}\n\n`;
+  if (style) contextText += `## 写作规则\n${style.slice(0, 400)}\n\n`;
+  if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 600)}\n\n`;
   if (editorialMemoryForChat) {
-    const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 1500);
+    const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 800);
     if (selectedMemory) {
       contextText += `## 项目编辑记忆\n${selectedMemory}\n\n`;
     }
   }
-  if (editorNotes.length > 0) {
-    contextText += `## 已有编辑备注\n${editorNotes.join('\n\n').slice(0, 2000)}\n\n`;
+  if (recentUserMessages) {
+    contextText += `## 对话历史（仅用户消息）\n${recentUserMessages.slice(0, 800)}\n\n`;
   }
-  if (recentChats) {
-    contextText += `## 最近编辑对话\n${recentChats.slice(0, 2000)}\n\n`;
+
+  if (isAnalysisMode) {
+    // 分析模式：注入完整章节内容 + 已有编辑备注 + 全部最近对话
+    if (editorNotes.length > 0) {
+      contextText += `## 已有编辑备注\n${editorNotes.join('\n\n').slice(0, 2000)}\n\n`;
+    }
+    const allHistory = editorChats.slice(-6).map((chat) => {
+      const roleName = chat.role === 'user' ? '用户' : '随书编辑';
+      return `${roleName}：${chat.content}`;
+    }).join('\n');
+    if (allHistory) {
+      contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
+    }
+    contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${chapterContent}\n\n`;
+  } else {
+    // 闲聊模式：只提供章节标题和开头片段作为背景，不注入完整全文
+    const preview = chapterContent.slice(0, 400).replace(/\n{3,}/g, '\n\n');
+    contextText += `## 当前章节\n项目：${projectName}\n章节：${chapterTitle}（${resolvedFileName}）\n开头片段：${preview}${chapterContent.length > 400 ? '\n（以上为章节开头片段，完整内容未加载）' : ''}\n\n`;
   }
-  // 当前章节正文必须使用完整文件内容，不允许截断
-  contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${chapterContent}\n\n`;
+
   contextText += `## 用户本次问题\n${trimmedMessage}`;
 
-  const reply = truncateAtSentence(sanitizeEditorText(await callDeepSeek('deepseek-v4-flash', [
+  const reply = sanitizeEditorText(truncateAtSentence(await callDeepSeek('deepseek-v4-flash', [
     {
       role: 'system',
       content:
-        '你是”小墨匣”写作工具的随书编辑，也是作者的写作搭子。你的任务是根据后端提供的章节正文和项目上下文，和作者自然对话。\n\n' +
-        '核心原则：\n' +
-        '1. 优先回答用户当前问题。用户问什么，你就答什么，不要默认输出审稿报告。\n' +
-        '2. 语气自然，像真人聊天。可以用口语化的表达，不要太正式。\n' +
-        '3. 用户闲聊或开放式提问时（如”说点啥吧””这章感觉如何”），可以简短评价整体感觉，或讨论后续方向，不要硬挑毛病。\n' +
-        '4. 只有用户明确要求分析、评审、找问题、给修改建议时（如”这章有什么问题””节奏怎么样””人物动机站得住吗””帮我分析一下”），才输出具体分析。\n' +
-        '5. 用户问”后面怎么写””接下来怎么发展”时，重点给后续走向建议，而不是回头改。\n' +
-        '6. 用户表达疲惫或卡文时，先回应状态，再给低压力的小建议。\n' +
-        '7. 看上下文判断回复的重点：如果最近编辑对话已经讨论过某个问题，不要反复说。\n' +
-        '8. 回复长度控制在自然的一小段到三小段。不需要每段都有小标题。\n' +
-        '9. 不要默认使用”人物分析 / 节奏判断 / 修改建议”三段式结构。只有在用户明确要求分析时才可以用这种结构。\n' +
-        '10. 不要空泛夸奖。不要编造文件名、附件、章节编号。\n' +
-        '11. 如果用户想法有问题，要直接指出。\n' +
-        '12. 如果当前上下文不足，说”我现在拿到的当前章节内容不足，请检查章节是否保存或重新打开章节”。\n' +
-        '13. 禁止使用 Markdown 特殊格式符号：不要 **加粗**，不要 ### 标题，不要表格，不要 > 引用，不要 ``` 代码块，不要 --- 分隔线，不要复杂编号层级。使用纯文本。\n' +
-        '14. 不要客套，不要说”总体来说””可以看出””值得注意的是”。',
+        '你是”小墨匣”写作工具的随书编辑。你和作者的关系像私聊，不是审稿人。\n\n' +
+        '一、核心定位\n' +
+        '你不需要审稿。章节内容和项目设定只是背景资料，不是你的分析任务。\n' +
+        '用户最后发送的消息是你唯一需要直接回应的问题。\n' +
+        '每次只回答用户正在说的这句话，不要提前展开全面分析。\n\n' +
+        '二、默认回复规则\n' +
+        '1. 回复必须像私聊，1～3 句话。\n' +
+        '2. 不使用小标题，不编号，不列点。\n' +
+        '3. 不输出”本章问题””人物判断””节奏判断””修改建议””下章注意”等审稿式结构。\n' +
+        '4. 用户吐槽、感叹、玩梗、随口问时，自然接话就行，不要主动扩展成章节评审。\n' +
+        '5. 用户问感受时，直接说阅读感受加一点理由，不展开成报告。\n' +
+        '6. 用户问后续写法时，直接讨论后续方向，不要先回头审稿。\n' +
+        '7. 不要以”用户说……”开头。不要复述你的任务，不要解释你将怎么分析。直接回话。\n' +
+        '8. 闲聊回复 80～180 字，一般问题不超过 250 字。\n\n' +
+        '三、分析模式（仅以下情况允许打破默认规则）\n' +
+        '只有用户明确要求分析、审稿、列问题、给修改建议、逐段评审、判断节奏或人物动机时，\n' +
+        '才可以使用小标题、列点、结构化分析。即使进入分析模式，也要先给简短判断再展开。',
     },
     {
       role: 'user',
       content: contextText,
     },
-  ]), 500));
+  ]), 300));
 
   const now = Date.now();
   const userChat = {
