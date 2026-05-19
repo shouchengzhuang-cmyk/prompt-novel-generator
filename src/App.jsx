@@ -71,6 +71,7 @@ function App() {
   const [editCharacters, setEditCharacters] = useState('');
   const [editStyle, setEditStyle] = useState('');
   const [editSummary, setEditSummary] = useState('');
+  const [editEditorialMemory, setEditEditorialMemory] = useState('');
   const [editingProjectName, setEditingProjectName] = useState(null);
 
   // Export
@@ -181,6 +182,7 @@ function App() {
     setEditCharacters('');
     setEditStyle('');
     setEditSummary('');
+    setEditEditorialMemory('');
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`);
       // Normalize: ensure chapters have fileName regardless of backend field name
@@ -414,6 +416,7 @@ function App() {
         setEditCharacters('');
         setEditStyle('');
         setEditSummary('');
+        setEditEditorialMemory('');
         resetEditorRoom();
       }
       await fetchProjects();
@@ -453,6 +456,7 @@ function App() {
     setEditCharacters(projectDetails.characters || '');
     setEditStyle(projectDetails.style || '');
     setEditSummary(projectDetails.summary || '');
+    setEditEditorialMemory(projectDetails.editorialMemory || '');
     setEditingProjectName(currentProject);
     setShowSettings(true);
     setError('');
@@ -477,6 +481,7 @@ function App() {
           characters: editCharacters,
           style: editStyle,
           summary: editSummary,
+          editorialMemory: editEditorialMemory,
         }),
       });
       // Sync projectDetails
@@ -486,6 +491,7 @@ function App() {
         characters: data.project?.characters ?? editCharacters,
         style: data.project?.style ?? editStyle,
         summary: data.project?.summary ?? editSummary,
+        editorialMemory: data.project?.editorialMemory ?? editEditorialMemory,
       } : prev);
       setError('设定已保存');
       setTimeout(() => setError(''), 3000);
@@ -1142,6 +1148,15 @@ function App() {
                     onChange={(e) => setEditSummary(e.target.value)}
                     rows={5}
                     placeholder="剧情摘要..."
+                  />
+                  <label>项目编辑记忆</label>
+                  <div className="settings-hint">记录跨章节人物关系、伏笔、长期写作风险和编辑判断。不同于剧情摘要：摘要记录剧情事实，这里记录编辑分析。</div>
+                  <textarea
+                    className="settings-input"
+                    value={editEditorialMemory}
+                    onChange={(e) => setEditEditorialMemory(e.target.value)}
+                    rows={6}
+                    placeholder="项目编辑记忆..."
                   />
                   <div className="form-actions">
                     <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>
