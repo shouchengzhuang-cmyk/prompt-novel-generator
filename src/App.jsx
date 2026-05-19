@@ -852,6 +852,11 @@ function App() {
       return;
     }
 
+    const userMsg = { id: `local-${Date.now()}-user`, role: 'user', content: trimmed, createdAt: Date.now() };
+    const chatsWithUser = [...editorChats, userMsg];
+
+    setEditorChats(chatsWithUser);
+    setEditorChatInput('');
     setEditorChatSending(true);
     setEditorChatError('');
     try {
@@ -865,16 +870,11 @@ function App() {
           message: trimmed,
         }),
       });
-      const nextChats = Array.isArray(data.editorChats)
+      const finalChats = Array.isArray(data.editorChats)
         ? data.editorChats
-        : [
-            ...editorChats,
-            { id: `local-${Date.now()}-user`, role: 'user', content: trimmed, createdAt: Date.now() },
-            { id: `local-${Date.now()}-editor`, role: 'editor', content: data.reply || '', createdAt: Date.now() },
-          ];
-      setEditorChats(nextChats);
-      syncCurrentChapterEditorData(editorNotes, nextChats);
-      setEditorChatInput('');
+        : [...chatsWithUser, { id: `local-${Date.now()}-editor`, role: 'editor', content: data.reply || '', createdAt: Date.now() }];
+      setEditorChats(finalChats);
+      syncCurrentChapterEditorData(editorNotes, finalChats);
     } catch (err) {
       setEditorChatError(err.message);
     } finally {
