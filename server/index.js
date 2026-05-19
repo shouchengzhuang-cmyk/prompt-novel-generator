@@ -210,6 +210,40 @@ async function ensureChapterIndexEntry(chaptersDir, fileName) {
   return { entries, entry };
 }
 
+function clearRewriteStaleMarker(entry) {
+  if (!entry) return;
+  delete entry.staleAfterRewrite;
+  delete entry.staleReason;
+  delete entry.staleFromFileName;
+  delete entry.staleAt;
+}
+
+function markChaptersStaleAfterRewrite(chapters, rewrittenFileName, staleAt = Date.now()) {
+  const rewrittenIndex = chapters.findIndex((item) => item.fileName === rewrittenFileName);
+  if (rewrittenIndex < 0) return chapters;
+
+  const chapterNumber = parseInt(rewrittenFileName, 10);
+  const staleReason = `第${chapterNumber}章已重写，后续章节可能与当前剧情不连续`;
+
+  return chapters.map((chapter, index) => {
+    if (index === rewrittenIndex) {
+      const nextChapter = { ...chapter };
+      clearRewriteStaleMarker(nextChapter);
+      return nextChapter;
+    }
+    if (index > rewrittenIndex) {
+      return {
+        ...chapter,
+        staleAfterRewrite: true,
+        staleReason,
+        staleFromFileName: rewrittenFileName,
+        staleAt,
+      };
+    }
+    return chapter;
+  });
+}
+
 function formatLocalMinute(timestamp = Date.now()) {
   const date = new Date(timestamp);
   const pad = (n) => String(n).padStart(2, '0');
@@ -341,7 +375,9 @@ app.get('/api/projects/:projectName', async (req, res) => {
         indexMap[entry.fileName] = entry;
       }
       chapters = txtFiles.map((f) => ({
+        ...(indexMap[f] || {}),
         filename: f,
+        fileName: f,
         title: indexMap[f]?.title || extractTitleFromContent('', parseInt(f, 10)),
         userPrompt: indexMap[f]?.userPrompt || '',
         activeVersionId: indexMap[f]?.activeVersionId || 'v-original',
@@ -407,9 +443,47 @@ app.get('/api/projects/:projectName/chapters/:fileName', async (req, res) => {
       content,
       editorNotes: Array.isArray(entry?.editorNotes) ? entry.editorNotes : [],
       editorChats: Array.isArray(entry?.editorChats) ? entry.editorChats : [],
+      staleAfterRewrite: entry?.staleAfterRewrite === true,
+      staleReason: entry?.staleReason || '',
+      staleFromFileName: entry?.staleFromFileName || '',
+      staleAt: entry?.staleAt || null,
     });
   } catch {
     res.status(404).json({ error: '章节不存在' });
+  }
+});
+
+// ---- PUT /api/projects/:projectName/chapters/:fileName/stale/confirm ----
+
+app.put('/api/projects/:projectName/chapters/:fileName/stale/confirm', async (req, res) => {
+  const { projectName, fileName } = req.params;
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, fileName);
+  const relativePath = path.relative(chaptersDir, chapterPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  try {
+    await fs.access(chapterPath);
+    const { entries, entry } = await ensureChapterIndexEntry(chaptersDir, fileName);
+    clearRewriteStaleMarker(entry);
+    await writeChapterIndex(chaptersDir, entries);
+    res.json({ ok: true, chapter: entry, chapters: entries });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -640,6 +714,9 @@ app.post('/api/generate', async (req, res) => {
       }
       for (const f of txtFiles) {
         const entry = indexMap[f];
+        if (entry?.staleAfterRewrite === true) {
+          continue;
+        }
         let content;
         // If this chapter has an active version pointing to a variant, load variant content
         if (entry && entry.activeVersionId && entry.activeVersionId !== 'v-original') {
@@ -1026,6 +1103,7 @@ app.post('/api/projects/:projectName/chapters/rebuild-index', async (req, res) =
         }
       }
       newEntries.push({
+        ...(old || {}),
         fileName: f,
         title: old?.title || `第${parseInt(f, 10)}章`,
         createdAt,
@@ -1350,7 +1428,7 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
     await fs.writeFile(chapterPath, variant.content, 'utf-8');
 
     // Update index.json: set activeVersionId and track the version
-    const indexEntries = await readChapterIndex(chaptersDir);
+    let indexEntries = await readChapterIndex(chaptersDir);
     const indexEntry = indexEntries.find((e) => e.fileName === fileName);
     if (indexEntry) {
       indexEntry.activeVersionId = variantId;
@@ -1379,10 +1457,11 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
           createdAt: variant.createdAt,
         });
       }
+      indexEntries = markChaptersStaleAfterRewrite(indexEntries, fileName);
       await writeChapterIndex(chaptersDir, indexEntries);
     }
 
-    res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId, title: indexEntry?.title || variant.title });
+    res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId, title: indexEntry?.title || variant.title, chapters: indexEntries });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

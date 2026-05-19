@@ -500,10 +500,28 @@ label {
 }
 
 .chapter-name {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.chapter-name-text {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.chapter-stale-badge {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border: 1px solid #efd79a;
+  border-radius: 4px;
+  color: #8a6400;
+  background: #fff8e1;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* ---- Current project label ---- */
@@ -653,6 +671,38 @@ label {
   white-space: pre-wrap;
   word-wrap: break-word;
   color: #2c2c2c;
+}
+
+.stale-chapter-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid #efd79a;
+  border-radius: 6px;
+  background: #fffaf0;
+  color: #5f4700;
+}
+
+.stale-chapter-notice strong,
+.stale-chapter-notice span {
+  display: block;
+}
+
+.stale-chapter-notice span {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #8a6400;
+}
+
+.stale-chapter-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .placeholder {

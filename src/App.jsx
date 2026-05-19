@@ -23,6 +23,15 @@ async function safeJsonFetch(url, options) {
   return data;
 }
 
+function normalizeChapters(chapters) {
+  if (!Array.isArray(chapters)) return chapters;
+  return chapters.map((ch) => {
+    if (!ch.fileName && ch.filename) ch.fileName = ch.filename;
+    if (!ch.filename && ch.fileName) ch.filename = ch.fileName;
+    return ch;
+  });
+}
+
 function App() {
   const [projects, setProjects] = useState([]);
   const [currentProject, setCurrentProject] = useState(null);
@@ -175,12 +184,7 @@ function App() {
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`);
       // Normalize: ensure chapters have fileName regardless of backend field name
-      if (data.chapters) {
-        data.chapters = data.chapters.map((ch) => {
-          if (!ch.fileName && ch.filename) ch.fileName = ch.filename;
-          return ch;
-        });
-      }
+      if (data.chapters) data.chapters = normalizeChapters(data.chapters);
       setProjectDetails(data);
       setDisplayContent(data.recentContent || '');
     } catch (err) {
@@ -248,6 +252,15 @@ function App() {
       return;
     }
 
+    const chapters = projectDetails?.chapters || [];
+    const lastChapter = chapters[chapters.length - 1];
+    if (lastChapter?.staleAfterRewrite) {
+      const message = '当前后续章节可能基于旧版本，建议先确认保留或重写。';
+      setError(message);
+      setNotification({ title: '请先检查后续章节', message });
+      return;
+    }
+
     setError('');
     setLoading(true);
     setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
@@ -278,6 +291,7 @@ function App() {
       // Refresh chapter list (don't let failure affect success state)
       try {
         const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+        if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
         setProjectDetails(refreshData);
       } catch (refreshErr) {
         console.warn('刷新章节列表失败:', refreshErr);
@@ -315,6 +329,21 @@ function App() {
       setReadingContent(data.content === '' ? '章节为空' : data.content);
       setEditorNotes(Array.isArray(data.editorNotes) ? data.editorNotes : []);
       setEditorChats(Array.isArray(data.editorChats) ? data.editorChats : []);
+      setProjectDetails((prev) => {
+        if (!prev?.chapters) return prev;
+        const chapters = prev.chapters.map((ch) =>
+          (ch.fileName || ch.filename) === data.fileName
+            ? {
+                ...ch,
+                staleAfterRewrite: data.staleAfterRewrite === true,
+                staleReason: data.staleReason || '',
+                staleFromFileName: data.staleFromFileName || '',
+                staleAt: data.staleAt || null,
+              }
+            : ch
+        );
+        return { ...prev, chapters };
+      });
       // Load variants for this chapter
       handleLoadVariants(data.fileName);
     } catch (err) {
@@ -335,6 +364,7 @@ function App() {
       });
       // Refresh chapter list
       const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+      if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
       setProjectDetails(refreshData);
       setDisplayContent(refreshData.recentContent || '');
       // If reading the deleted chapter, close it
@@ -558,12 +588,7 @@ function App() {
         method: 'POST',
       });
       // Update projectDetails chapters
-      if (data.chapters) {
-        data.chapters = data.chapters.map((ch) => {
-          if (!ch.fileName && ch.filename) ch.fileName = ch.filename;
-          return ch;
-        });
-      }
+      if (data.chapters) data.chapters = normalizeChapters(data.chapters);
       setProjectDetails((prev) => prev ? { ...prev, chapters: data.chapters } : prev);
       // If the reading chapter no longer exists, clear reading
       if (readingChapter && !data.chapters.find((ch) => ch.fileName === readingChapter)) {
@@ -680,7 +705,10 @@ function App() {
       if (data.title) setReadingChapterTitle(data.title);
       setVariantPreview(null);
       // Update projectDetails chapters to reflect new activeVersionId and title
-      if (data.activeVersionId) {
+      if (data.chapters) {
+        const chapters = normalizeChapters(data.chapters);
+        setProjectDetails((prev) => prev ? { ...prev, chapters } : prev);
+      } else if (data.activeVersionId) {
         setProjectDetails((prev) => {
           if (!prev) return prev;
           const chapters = prev.chapters?.map((ch) =>
@@ -697,6 +725,31 @@ function App() {
       setError(err.message);
     } finally {
       setApplyingVariant(false);
+    }
+  };
+
+  const handleConfirmKeepChapter = async () => {
+    if (!currentProject || !readingChapter) return;
+    setError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/stale/confirm`, {
+        method: 'PUT',
+      });
+      if (data.chapters) {
+        const chapters = normalizeChapters(data.chapters);
+        setProjectDetails((prev) => prev ? { ...prev, chapters } : prev);
+      } else if (data.chapter) {
+        setProjectDetails((prev) => {
+          if (!prev?.chapters) return prev;
+          const chapters = prev.chapters.map((ch) =>
+            (ch.fileName || ch.filename) === readingChapter ? { ...ch, ...data.chapter } : ch
+          );
+          return { ...prev, chapters };
+        });
+      }
+      setNotification({ title: '已确认保留', message: '当前章节已恢复为可用正史。' });
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -723,6 +776,10 @@ function App() {
 
   const enhancedPrompt = useMemo(() => buildEnhancedPrompt(userPrompt.trim(), writingPrefs), [userPrompt, writingPrefs]);
   const enhancedRewritePrompt = useMemo(() => buildEnhancedPrompt((rewritePrompt || '').trim(), writingPrefs), [rewritePrompt, writingPrefs]);
+  const readingChapterRecord = useMemo(
+    () => projectDetails?.chapters?.find((ch) => (ch.fileName || ch.filename) === readingChapter) || null,
+    [projectDetails, readingChapter]
+  );
 
   const handleGenProgressDone = useCallback(() => {
     setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
@@ -960,7 +1017,10 @@ function App() {
                               className={'chapter-item' + (cf && readingChapter === cf ? ' active' : '')}
                               onClick={() => cf && handleReadChapter(cf)}
                             >
-                              <span className="chapter-name">{cf ? `${cf.slice(0, 3)} ${ch.title || cf.replace(/\.txt$/, '')}` : '无效章节'}</span>
+                              <span className="chapter-name">
+                                <span className="chapter-name-text">{cf ? `${cf.slice(0, 3)} ${ch.title || cf.replace(/\.txt$/, '')}` : '无效章节'}</span>
+                                {ch.staleAfterRewrite && <span className="chapter-stale-badge">待检查</span>}
+                              </span>
                             </div>
                             <button className="delete-btn chapter-delete" disabled={!cf} onClick={(e) => cf && handleDeleteChapter(cf, e)}>删除</button>
                           </li>
@@ -1258,6 +1318,19 @@ function App() {
                         errorMessage={genProgress.errorMessage}
                         onComplete={handleGenProgressDone}
                       />
+                    </div>
+                  )}
+
+                  {readingChapterRecord?.staleAfterRewrite && !variantPreview && (
+                    <div className="stale-chapter-notice">
+                      <div>
+                        <strong>这章生成于前文重写之前，可能与当前剧情不连续。</strong>
+                        {readingChapterRecord.staleReason && <span>{readingChapterRecord.staleReason}</span>}
+                      </div>
+                      <div className="stale-chapter-actions">
+                        <button className="btn btn-secondary" onClick={handleConfirmKeepChapter}>确认保留</button>
+                        <button className="btn" onClick={() => { if (!showRewriteInput) handleLoadRewritePrompt(); }}>重写本章</button>
+                      </div>
                     </div>
                   )}
 
