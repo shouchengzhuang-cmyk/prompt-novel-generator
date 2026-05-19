@@ -745,7 +745,7 @@ function App() {
 
   return (
     <div className="app">
-      <h1>AI 写作工作台</h1>
+      <h1>小墨匣</h1>
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects ===== */}
         {isSidebarCollapsed ? (
