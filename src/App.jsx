@@ -52,6 +52,7 @@ function App() {
 
   // Reading
   const [readingChapter, setReadingChapter] = useState(null);
+  const [readingChapterTitle, setReadingChapterTitle] = useState('');
   const [readingContent, setReadingContent] = useState('');
 
   // Project settings editor
@@ -108,11 +109,19 @@ function App() {
   }, [notification]);
 
   // Editor Note
-  const [showEditorNote, setShowEditorNote] = useState(false);
   const [editorNoteLoading, setEditorNoteLoading] = useState(false);
   const [editorNoteError, setEditorNoteError] = useState('');
   const [editorNoteResult, setEditorNoteResult] = useState('');
   const editorNoteReqId = useRef(0);
+
+  // Editor room
+  const [editorRoomTab, setEditorRoomTab] = useState('notes');
+  const [editorNotes, setEditorNotes] = useState([]);
+  const [editorChats, setEditorChats] = useState([]);
+  const [editorChatInput, setEditorChatInput] = useState('');
+  const [editorChatSending, setEditorChatSending] = useState(false);
+  const [editorChatError, setEditorChatError] = useState('');
+  const [savingEditorNoteId, setSavingEditorNoteId] = useState('');
 
   // ---- Fetch project list ----
   const fetchProjects = async () => {
@@ -128,6 +137,19 @@ function App() {
     fetchProjects();
   }, []);
 
+  const resetEditorRoom = () => {
+    setEditorRoomTab('notes');
+    setEditorNotes([]);
+    setEditorChats([]);
+    setEditorChatInput('');
+    setEditorChatError('');
+    setSavingEditorNoteId('');
+    setEditorNoteResult('');
+    setEditorNoteError('');
+    setEditorNoteLoading(false);
+    editorNoteReqId.current++;
+  };
+
   // ---- Select a project ----
   const handleSelectProject = async (name) => {
     setCurrentProject(name);
@@ -135,6 +157,7 @@ function App() {
     setLastFilename('');
     setUserPrompt('');
     setReadingChapter(null);
+    setReadingChapterTitle('');
     setReadingContent('');
     setVariants([]);
     setVariantPreview(null);
@@ -143,12 +166,7 @@ function App() {
     setShowSettings(false);
     setEditingProjectName(null);
     setDebugPromptInfo(null);
-    // Clear Editor Note state
-    setShowEditorNote(false);
-    setEditorNoteResult('');
-    setEditorNoteError('');
-    setEditorNoteLoading(false);
-    editorNoteReqId.current++;
+    resetEditorRoom();
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
     setEditCharacters('');
@@ -255,6 +273,7 @@ function App() {
       setDebugPromptInfo(data.debugPromptInfo || null);
       // Auto-select the new chapter for reading
       setReadingChapter(fileName);
+      setReadingChapterTitle(data.title || '');
       setReadingContent(data.content);
       // Refresh chapter list (don't let failure affect success state)
       try {
@@ -277,12 +296,7 @@ function App() {
   const handleReadChapter = async (filename) => {
     setError('');
     setDebugPromptInfo(null);
-    // Clear Editor Note state to prevent stale results from interfering
-    setShowEditorNote(false);
-    setEditorNoteResult('');
-    setEditorNoteError('');
-    setEditorNoteLoading(false);
-    editorNoteReqId.current++;
+    resetEditorRoom();
     // Clear previous chapter state before loading new one
     setVariantPreview(null);
     setVariants([]);
@@ -297,7 +311,10 @@ function App() {
         throw new Error('章节读取失败：后端未返回有效数据');
       }
       setReadingChapter(data.fileName);
+      setReadingChapterTitle(data.title || '');
       setReadingContent(data.content === '' ? '章节为空' : data.content);
+      setEditorNotes(Array.isArray(data.editorNotes) ? data.editorNotes : []);
+      setEditorChats(Array.isArray(data.editorChats) ? data.editorChats : []);
       // Load variants for this chapter
       handleLoadVariants(data.fileName);
     } catch (err) {
@@ -329,6 +346,7 @@ function App() {
         setShowRewriteInput(false);
         setRewritePrompt('');
         setDebugPromptInfo(null);
+        resetEditorRoom();
       }
       setError('章节已删除');
       setTimeout(() => setError(''), 3000);
@@ -366,6 +384,7 @@ function App() {
         setEditCharacters('');
         setEditStyle('');
         setEditSummary('');
+        resetEditorRoom();
       }
       await fetchProjects();
       setError('项目已删除');
@@ -550,6 +569,7 @@ function App() {
       if (readingChapter && !data.chapters.find((ch) => ch.fileName === readingChapter)) {
         setReadingChapter(null);
         setReadingContent('');
+        resetEditorRoom();
       }
       setError('索引已重建');
       setTimeout(() => setError(''), 3000);
@@ -560,8 +580,7 @@ function App() {
 
   // ---- Edit chapter title ----
   const handleStartEditTitle = () => {
-    const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === readingChapter);
-    setEditTitleValue(ch?.title || '');
+    setEditTitleValue(readingChapterTitle);
     setEditingTitle(true);
   };
 
@@ -586,6 +605,7 @@ function App() {
         );
         return { ...prev, chapters: updated };
       });
+      setReadingChapterTitle(trimmed);
       setEditingTitle(false);
     } catch (err) {
       setError(err.message);
@@ -655,8 +675,9 @@ function App() {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/variants/${encodeURIComponent(variantId)}/apply`, {
         method: 'PUT',
       });
-      // Update reading content
+      // Update reading content and title
       setReadingContent(data.content);
+      if (data.title) setReadingChapterTitle(data.title);
       setVariantPreview(null);
       // Update projectDetails chapters to reflect new activeVersionId and title
       if (data.activeVersionId) {
@@ -708,17 +729,33 @@ function App() {
   }, []);
 
   // ---- Editor Note ----
+  const syncCurrentChapterEditorData = (notes, chats) => {
+    setProjectDetails((prev) => {
+      if (!prev || !readingChapter) return prev;
+      const chapters = prev.chapters?.map((ch) =>
+        (ch.fileName || ch.filename) === readingChapter
+          ? {
+              ...ch,
+              editorNotes: notes ?? ch.editorNotes ?? [],
+              editorChats: chats ?? ch.editorChats ?? [],
+            }
+          : ch
+      );
+      return { ...prev, chapters };
+    });
+  };
+
   const handleEditorNote = async () => {
     if (!currentProject || !readingChapter) {
       setEditorNoteError('请先选择项目并阅读章节');
       return;
     }
 
+    setEditorRoomTab('notes');
     const reqId = ++editorNoteReqId.current;
     setEditorNoteLoading(true);
     setEditorNoteError('');
     setEditorNoteResult('');
-    setShowEditorNote(true);
 
     try {
       const url = `/api/editor/note?projectName=${encodeURIComponent(currentProject)}&chapterFileName=${encodeURIComponent(readingChapter)}`;
@@ -735,12 +772,92 @@ function App() {
     }
   };
 
-  const handleCloseEditorNote = () => {
-    setShowEditorNote(false);
-    setEditorNoteResult('');
+  const handleEditorChatKeyDown = (event) => {
+    if (event.nativeEvent?.isComposing || event.isComposing) return;
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      if (!editorChatInput.trim() || editorChatSending) return;
+      handleSendEditorChat();
+    }
+  };
+
+  const handleSendEditorChat = async () => {
+    if (editorChatSending || !currentProject || !readingChapter) return;
+    const trimmed = editorChatInput.trim();
+    if (!trimmed) {
+      setEditorChatError('');
+      return;
+    }
+
+    setEditorChatSending(true);
+    setEditorChatError('');
+    try {
+      const data = await safeJsonFetch('/api/editor-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectName: currentProject,
+          chapterId: readingChapter,
+          fileName: readingChapter,
+          message: trimmed,
+        }),
+      });
+      const nextChats = Array.isArray(data.editorChats)
+        ? data.editorChats
+        : [
+            ...editorChats,
+            { id: `local-${Date.now()}-user`, role: 'user', content: trimmed, createdAt: Date.now() },
+            { id: `local-${Date.now()}-editor`, role: 'editor', content: data.reply || '', createdAt: Date.now() },
+          ];
+      setEditorChats(nextChats);
+      syncCurrentChapterEditorData(editorNotes, nextChats);
+      setEditorChatInput('');
+    } catch (err) {
+      setEditorChatError(err.message);
+    } finally {
+      setEditorChatSending(false);
+    }
+  };
+
+  const handleClearEditorChats = async () => {
+    if (!currentProject || !readingChapter || editorChatSending) return;
+    if (!confirm('确定清空当前章节的编辑对话吗？此操作不可恢复。')) return;
+
+    setEditorChatError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/editor-chats`, {
+        method: 'DELETE',
+      });
+      const nextChats = Array.isArray(data.editorChats) ? data.editorChats : [];
+      setEditorChats(nextChats);
+      syncCurrentChapterEditorData(editorNotes, nextChats);
+    } catch (err) {
+      setEditorChatError(err.message);
+    }
+  };
+
+  const handleSaveEditorNote = async (content, sourceId = 'generated-note') => {
+    if (!currentProject || !readingChapter || !content?.trim()) return;
+    setSavingEditorNoteId(sourceId);
     setEditorNoteError('');
-    setEditorNoteLoading(false);
-    editorNoteReqId.current++;
+    setEditorChatError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/editor-notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+      const nextNotes = Array.isArray(data.editorNotes) ? data.editorNotes : [...editorNotes, data.note].filter(Boolean);
+      setEditorNotes(nextNotes);
+      syncCurrentChapterEditorData(nextNotes, editorChats);
+      setEditorRoomTab('notes');
+      setNotification({ title: '已保存为备注', message: '这条编辑建议已经追加到当前章节。' });
+    } catch (err) {
+      setEditorNoteError(err.message);
+      setEditorChatError(err.message);
+    } finally {
+      setSavingEditorNoteId('');
+    }
   };
 
   return (
@@ -1076,10 +1193,7 @@ function App() {
                         </span>
                       ) : (
                         <>
-                          {(() => {
-                            const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === readingChapter);
-                            return ch?.title || readingChapter;
-                          })()}
+                          {readingChapterTitle || readingChapter}
                           <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400, marginLeft: 10 }}>{readingChapter}</span>
                           <button className="btn-link" style={{ marginLeft: 8, fontSize: 12 }} onClick={handleStartEditTitle}>编辑标题</button>
                         </>
@@ -1090,7 +1204,7 @@ function App() {
                         {showRewriteInput ? '取消重写' : '重写本章'}
                       </button>
                       <button className="btn btn-ai" onClick={handleEditorNote}>
-                        编辑备注
+                        生成编辑备注
                       </button>
                       <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
@@ -1100,7 +1214,7 @@ function App() {
                           复制全文
                         </button>
                       )}
-                      <button className="btn btn-secondary" onClick={() => { setReadingChapter(null); setReadingContent(''); setVariants([]); setVariantPreview(null); setShowRewriteInput(false); setRewritePrompt(''); setDebugPromptInfo(null); }}>
+                      <button className="btn btn-secondary" onClick={() => { setReadingChapter(null); setReadingChapterTitle(''); setReadingContent(''); setVariants([]); setVariantPreview(null); setShowRewriteInput(false); setRewritePrompt(''); setDebugPromptInfo(null); resetEditorRoom(); }}>
                         关闭阅读
                       </button>
                     </div>
@@ -1148,6 +1262,129 @@ function App() {
                   )}
 
                   <div className="reading-content">{variantPreview ? variantPreview.content : readingContent}</div>
+
+                  <div className="editor-room">
+                    <div className="editor-room-header">
+                      <h3>编辑室</h3>
+                      <div className="editor-room-tabs">
+                        <button
+                          className={'editor-room-tab' + (editorRoomTab === 'notes' ? ' active' : '')}
+                          onClick={() => setEditorRoomTab('notes')}
+                        >
+                          编辑备注
+                        </button>
+                        <button
+                          className={'editor-room-tab' + (editorRoomTab === 'chat' ? ' active' : '')}
+                          onClick={() => setEditorRoomTab('chat')}
+                        >
+                          编辑对话
+                        </button>
+                      </div>
+                    </div>
+
+                    {editorRoomTab === 'notes' && (
+                      <div className="editor-room-notes">
+                        <div className="editor-room-toolbar">
+                          <button className="btn btn-ai" onClick={handleEditorNote} disabled={editorNoteLoading}>
+                            {editorNoteLoading ? '生成中...' : '生成本章编辑备注'}
+                          </button>
+                        </div>
+                        {editorNoteError && <div className="error">{editorNoteError}</div>}
+                        {editorNoteLoading && (
+                          <div className="editor-note-loading editor-note-loading-inline">
+                            <div className="editor-note-loading-spinner"></div>
+                            <span>正在生成编辑备注...</span>
+                          </div>
+                        )}
+                        {!editorNoteLoading && editorNoteResult && (
+                          <div className="editor-note-draft">
+                            <div className="editor-note-text">{editorNoteResult}</div>
+                            <button
+                              className="btn btn-secondary"
+                              disabled={savingEditorNoteId === 'generated-note'}
+                              onClick={() => handleSaveEditorNote(editorNoteResult, 'generated-note')}
+                            >
+                              {savingEditorNoteId === 'generated-note' ? '保存中...' : '保存为备注'}
+                            </button>
+                          </div>
+                        )}
+                        <div className="editor-notes-list">
+                          {editorNotes.length > 0 ? (
+                            editorNotes.map((note, index) => (
+                              <div className="editor-note-saved" key={`${readingChapter}-note-${index}`}>
+                                {note}
+                              </div>
+                            ))
+                          ) : (
+                            <p className="hint">暂无编辑备注。可以生成一条，或从编辑对话中保存编辑回复。</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {editorRoomTab === 'chat' && (
+                      <div className="editor-room-chat">
+                        <div className="editor-chat-toolbar">
+                          <span className="hint">当前章节独立保存，共 {editorChats.length} 条消息。</span>
+                          <button className="btn btn-secondary" onClick={handleClearEditorChats} disabled={editorChatSending || editorChats.length === 0}>
+                            清空对话
+                          </button>
+                        </div>
+                        <div className="editor-chat-messages">
+                          {editorChats.length > 0 ? (
+                            editorChats.map((chat) => (
+                              <div className={`editor-chat-row ${chat.role}`} key={chat.id}>
+                                <div className="editor-chat-bubble">
+                                  <div className="editor-chat-meta">
+                                    {chat.role === 'user' ? '你' : '随书编辑'} · {new Date(chat.createdAt).toLocaleString()}
+                                  </div>
+                                  <div className="editor-chat-content">{chat.content}</div>
+                                  {chat.role === 'editor' && (
+                                    <button
+                                      className="btn btn-secondary editor-chat-save"
+                                      disabled={savingEditorNoteId === chat.id}
+                                      onClick={() => handleSaveEditorNote(chat.content, chat.id)}
+                                    >
+                                      {savingEditorNoteId === chat.id ? '保存中...' : '保存为备注'}
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <p className="hint editor-chat-empty">还没有对话。可以问编辑：这一章节奏是否太慢？人物动机是否站得住？</p>
+                          )}
+                          {editorChatSending && (
+                            <div className="editor-chat-row editor">
+                              <div className="editor-chat-bubble">
+                                <div className="editor-note-loading editor-note-loading-inline">
+                                  <div className="editor-note-loading-spinner"></div>
+                                  <span>编辑正在回复...</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        {editorChatError && <div className="error">{editorChatError}</div>}
+                        <div className="editor-chat-input-row">
+                          <div className="editor-chat-input-wrap">
+                            <textarea
+                              value={editorChatInput}
+                              onChange={(e) => setEditorChatInput(e.target.value)}
+                              onKeyDown={handleEditorChatKeyDown}
+                              placeholder="和随书编辑聊聊这一章……"
+                              rows={3}
+                              disabled={editorChatSending}
+                            />
+                            <span className="editor-chat-hint">Enter 发送，Shift + Enter 换行</span>
+                          </div>
+                          <button className="btn" onClick={handleSendEditorChat} disabled={editorChatSending || !editorChatInput.trim()}>
+                            {editorChatSending ? '发送中...' : '发送'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Chapter bottom navigation */}
                   {(() => {
@@ -1245,43 +1482,6 @@ function App() {
           </div>
         </div>
 
-      {/* ===== Editor Note Overlay ===== */}
-      {showEditorNote && (
-        <div className="editor-note-overlay" onClick={handleCloseEditorNote}>
-          <div className="editor-note-panel" onClick={(e) => e.stopPropagation()}>
-            <div className="editor-note-header">
-              <h3>编辑备注</h3>
-              <span className="editor-note-role">后台编辑 → 生成模型</span>
-              <button className="btn btn-secondary" onClick={handleCloseEditorNote}>关闭</button>
-            </div>
-            <div className="editor-note-body">
-
-              {/* Loading state */}
-              {editorNoteLoading && (
-                <div className="editor-note-loading">
-                  <div className="editor-note-loading-spinner"></div>
-                  <span>正在生成编辑备注...</span>
-                </div>
-              )}
-
-              {/* Error state */}
-              {editorNoteError && <div className="error">{editorNoteError}</div>}
-
-              {/* Result */}
-              {!editorNoteLoading && editorNoteResult && (
-                <div className="editor-note-text">{editorNoteResult}</div>
-              )}
-
-              {/* Empty state */}
-              {!editorNoteLoading && !editorNoteResult && !editorNoteError && (
-                <div className="editor-note-empty">
-                  <p>点击"编辑备注"查看后台给生成模型的内部提醒。</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
       {notification && (
         <div className="notification-card">
           <div className="notification-header">
