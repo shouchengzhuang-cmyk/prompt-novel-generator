@@ -1042,11 +1042,11 @@ function App() {
                 </div>
               </details>
 
-              <button className="btn" onClick={handleGenerate} disabled={loading}>
+              <button className="btn" onClick={handleGenerate} disabled={loading || regenerating}>
                 {loading ? '生成中...' : '生成下一段'}
               </button>
               <GenerationProgress
-                visible={genProgress.visible}
+                visible={genProgress.visible && genProgress.mode === 'generate'}
                 mode={genProgress.mode}
                 status={genProgress.status}
                 errorMessage={genProgress.errorMessage}
@@ -1131,7 +1131,7 @@ function App() {
                         userPrompt={enhancedRewritePrompt}
                         fileName={readingChapter}
                       />
-                      <button className="btn" onClick={handleRegenerate} disabled={regenerating}>
+                      <button className="btn" onClick={handleRegenerate} disabled={regenerating || loading}>
                         {regenerating ? '重写中...' : '生成候选版本'}
                       </button>
                       <GenerationProgress
