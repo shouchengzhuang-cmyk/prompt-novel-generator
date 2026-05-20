@@ -118,6 +118,13 @@ function App() {
     return () => clearTimeout(timer);
   }, [notification]);
 
+  // Browser title during generation / rewrite
+  useEffect(() => {
+    const busy = loading || regenerating;
+    document.title = busy ? '生成中...' : '小墨匣';
+    return () => { document.title = '小墨匣'; };
+  }, [loading, regenerating]);
+
   // Editor Note
   const [editorNoteLoading, setEditorNoteLoading] = useState(false);
   const [editorNoteError, setEditorNoteError] = useState('');
