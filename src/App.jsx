@@ -732,8 +732,24 @@ function App() {
           return { ...prev, chapters };
         });
       }
-      setError('已设为主线，建议重算摘要');
-      setTimeout(() => setError(''), 5000);
+
+      // Auto-rebuild summary after variant is applied
+      let summaryFailed = false;
+      try {
+        const summaryData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/summary/rebuild`, {
+          method: 'POST',
+        });
+        setProjectDetails((prev) => prev ? { ...prev, summary: summaryData.summary } : prev);
+      } catch (summaryErr) {
+        summaryFailed = true;
+        console.error('摘要更新失败:', summaryErr);
+      }
+
+      if (summaryFailed) {
+        setNotification({ title: '重写完成', message: '章节已重写，但摘要更新失败，请稍后再试。' });
+      } else {
+        setNotification({ title: '重写完成', message: '重写完成，摘要已同步更新。' });
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1115,9 +1131,6 @@ function App() {
               <div className="current-project-label">
                 当前项目：<strong>{currentProject}</strong>
                 <button className="btn-link" onClick={handleOpenSettings}>编辑设定</button>
-                <button className="btn-link" onClick={handleRebuildSummary} disabled={rebuildingSummary}>
-                  {rebuildingSummary ? '重算中...' : '重算摘要'}
-                </button>
               </div>
 
               {/* Settings Editor */}
