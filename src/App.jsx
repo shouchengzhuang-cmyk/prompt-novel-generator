@@ -139,6 +139,16 @@ function App() {
   const [editorChatSending, setEditorChatSending] = useState(false);
   const [editorChatError, setEditorChatError] = useState('');
   const [savingEditorNoteId, setSavingEditorNoteId] = useState('');
+  const editorChatListRef = useRef(null);
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      editorChatListRef.current?.scrollTo({
+        top: editorChatListRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    });
+  }, [editorChats, editorChatSending]);
 
   // ---- Fetch project list ----
   const fetchProjects = async () => {
@@ -294,6 +304,7 @@ function App() {
       // Debug template info
       setDebugPromptInfo(data.debugPromptInfo || null);
       // Auto-select the new chapter for reading
+      resetEditorRoom();
       setReadingChapter(fileName);
       setReadingChapterTitle(data.title || '');
       setReadingContent(data.content);
@@ -1178,6 +1189,30 @@ function App() {
                     rows={6}
                     placeholder="项目编辑记忆..."
                   />
+                  <details className="advanced-options">
+                    <summary className="advanced-options-summary">
+                      <span className="advanced-options-title">生成高级选项</span>
+                      <span className="advanced-options-arrow">▶</span>
+                    </summary>
+                    <div className="advanced-options-body">
+                      <PromptPreviewPanel
+                        taskType="novel.generateChapter"
+                        projectDetails={projectDetails}
+                        userPrompt={enhancedPrompt}
+                      />
+                      <details className="advanced-options-sub">
+                        <summary className="advanced-options-sub-summary">
+                          高级模板设置
+                        </summary>
+                        <div className="advanced-options-sub-body">
+                          <p className="hint" style={{ fontSize: 12, marginBottom: 8 }}>
+                            一般不用改。只有在你想调整 AI 底层写作模板时再打开。
+                          </p>
+                          <VaultPanel />
+                        </div>
+                      </details>
+                    </div>
+                  </details>
                   <div className="form-actions">
                     <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>
                       {savingSettings ? '保存中...' : '保存设定'}
@@ -1231,31 +1266,6 @@ function App() {
                 prefs={writingPrefs}
                 onChange={setWritingPrefs}
               />
-
-              <details className="advanced-options">
-                <summary className="advanced-options-summary">
-                  <span className="advanced-options-title">高级选项</span>
-                  <span className="advanced-options-arrow">▶</span>
-                </summary>
-                <div className="advanced-options-body">
-                  <PromptPreviewPanel
-                    taskType="novel.generateChapter"
-                    projectDetails={projectDetails}
-                    userPrompt={enhancedPrompt}
-                  />
-                  <details className="advanced-options-sub">
-                    <summary className="advanced-options-sub-summary">
-                      高级模板设置
-                    </summary>
-                    <div className="advanced-options-sub-body">
-                      <p className="hint" style={{ fontSize: 12, marginBottom: 8 }}>
-                        一般不用改。只有在你想调整 AI 底层写作模板时再打开。
-                      </p>
-                      <VaultPanel />
-                    </div>
-                  </details>
-                </div>
-              </details>
 
               <button className="btn" onClick={handleGenerate} disabled={loading || regenerating}>
                 {loading ? '生成中...' : '生成下一段'}
@@ -1435,7 +1445,7 @@ function App() {
                             清空对话
                           </button>
                         </div>
-                        <div className="editor-chat-messages">
+                        <div className="editor-chat-messages" ref={editorChatListRef}>
                           {editorChats.length > 0 ? (
                             editorChats.map((chat) => (
                               <div className={`editor-chat-row ${chat.role}`} key={chat.id}>
