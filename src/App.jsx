@@ -1253,27 +1253,27 @@ function App() {
               {readingChapter && (
                 <div className="reading-section">
                   <div className="reading-header">
-                    <h3>
+                    <div className="reading-title-row">
                       {editingTitle ? (
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div className="reading-title-edit">
                           <input
                             type="text"
                             value={editTitleValue}
                             onChange={(e) => setEditTitleValue(e.target.value)}
-                            style={{ fontSize: 14, padding: '4px 8px', flex: 1, minWidth: 280, borderRadius: 4, border: '1px solid #d9d9d9' }}
+                            className="reading-title-input"
                             autoFocus
                           />
                           <button className="btn" onClick={handleSaveTitle}>保存</button>
                           <button className="btn btn-secondary" onClick={handleCancelEditTitle}>取消</button>
-                        </span>
+                        </div>
                       ) : (
-                        <>
+                        <h3>
                           {readingChapterTitle || readingChapter}
-                          <span style={{ fontSize: 12, color: '#aaa', fontWeight: 400, marginLeft: 10 }}>{readingChapter}</span>
-                          <button className="btn-link" style={{ marginLeft: 8, fontSize: 12 }} onClick={handleStartEditTitle}>编辑标题</button>
-                        </>
+                          <span className="reading-filename">{readingChapter}</span>
+                          <button className="btn-link reading-title-edit-btn" onClick={handleStartEditTitle}>编辑标题</button>
+                        </h3>
                       )}
-                    </h3>
+                    </div>
                     <div className="reading-actions">
                       <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}

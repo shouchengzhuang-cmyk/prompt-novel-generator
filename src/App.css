@@ -640,28 +640,71 @@ label {
 
 .reading-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.reading-header h3 {
+.reading-title-row {
+  width: 100%;
+}
+
+.reading-title-row h3 {
   font-size: 16px;
   color: #333;
   margin: 0;
   font-family: 'SF Mono', Consolas, monospace;
+}
+
+.reading-title-edit {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.reading-title-input {
   flex: 1;
-  min-width: 200px;
-  white-space: normal;
-  overflow: visible;
+  font-size: 14px;
+  padding: 4px 8px;
+  min-width: 0;
+  border-radius: 4px;
+  border: 1px solid #d9d9d9;
+}
+
+.reading-title-input:focus {
+  outline: none;
+  border-color: #4096ff;
+  box-shadow: 0 0 0 2px rgba(64, 150, 255, 0.1);
+}
+
+.reading-filename {
+  font-size: 12px;
+  color: #aaa;
+  font-weight: 400;
+  margin-left: 10px;
+}
+
+.reading-title-edit-btn {
+  margin-left: 8px;
+  font-size: 12px;
 }
 
 .reading-actions {
   display: flex;
-  gap: 12px;
   flex-wrap: wrap;
+  gap: 10px;
+}
+
+@media (max-width: 600px) {
+  .reading-actions .btn {
+    flex: 1 1 calc(50% - 8px);
+  }
+}
+
+@media (max-width: 400px) {
+  .reading-actions .btn {
+    flex: 1 1 100%;
+  }
 }
 
 .reading-content {
