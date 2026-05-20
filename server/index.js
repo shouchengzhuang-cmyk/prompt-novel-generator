@@ -14,6 +14,7 @@ app.use(express.json({ limit: '1mb' }));
 
 const NOVELS_DIR = path.resolve(__dirname, '..', 'novels');
 const RECENT_CHAPTER_LIMIT = 10;
+const EDITOR_CHAT_FULL_CHAPTER_LIMIT = 80000;
 
 // ---- Helpers ----
 
@@ -43,6 +44,22 @@ function safeProjectDir(projectName) {
 
 function isValidChapterFileName(fileName) {
   return /^\d{3,}\.txt$/.test(fileName);
+}
+
+function shouldLoadFullChapterForEditorChat(message) {
+  return /全文|全章|这一章|这章|本章|章节内容|章节正文|正文|最后一个字|最后一句|最后一段|结尾|开头|分析这章|分析本章|看看这章|读一下|写到哪里|讲到哪里|说到哪里/.test(message);
+}
+
+function formatEditorChatFullChapter(chapterContent) {
+  if (chapterContent.length <= EDITOR_CHAT_FULL_CHAPTER_LIMIT) {
+    return chapterContent;
+  }
+
+  const edgeLength = Math.floor(EDITOR_CHAT_FULL_CHAPTER_LIMIT / 2);
+  const head = chapterContent.slice(0, edgeLength);
+  const tail = chapterContent.slice(-edgeLength);
+  const omittedLength = chapterContent.length - head.length - tail.length;
+  return `${head}\n\n…（当前章节过长，中间约省略 ${omittedLength} 字；已保留章节开头和结尾）\n\n${tail}`;
 }
 
 async function callDeepSeek(model, messages) {
@@ -2047,9 +2064,10 @@ app.post('/api/editor-chat', async (req, res) => {
     // index.json 读取失败不影响主流程
   }
 
-  // 判断是否进入分析模式：只有用户明确要求分析、审稿等时才注入全文
+  // 判断是否进入分析模式：只有用户明确要求分析、审稿等时才允许结构化展开。
   const isAnalysisMode = /分析|审稿|修改建议|逐段|评审|人物动机/.test(trimmedMessage)
     || (trimmedMessage.length >= 30 && /问题|节奏|建议/.test(trimmedMessage));
+  const needsFullChapterContext = isAnalysisMode || shouldLoadFullChapterForEditorChat(trimmedMessage);
 
   const recentUserMessages = editorChats
     .filter((chat) => chat.role === 'user')
@@ -2072,19 +2090,21 @@ app.post('/api/editor-chat', async (req, res) => {
     contextText += `## 对话历史（仅用户消息）\n${recentUserMessages.slice(0, 800)}\n\n`;
   }
 
-  if (isAnalysisMode) {
-    // 分析模式：注入完整章节内容 + 已有编辑备注 + 全部最近对话
-    if (editorNotes.length > 0) {
-      contextText += `## 已有编辑备注\n${editorNotes.join('\n\n').slice(0, 2000)}\n\n`;
+  if (needsFullChapterContext) {
+    // 正文询问/分析模式：注入当前章节正文；只有分析模式额外加入编辑备注和最近完整对话。
+    if (isAnalysisMode) {
+      if (editorNotes.length > 0) {
+        contextText += `## 已有编辑备注\n${editorNotes.join('\n\n').slice(0, 2000)}\n\n`;
+      }
+      const allHistory = editorChats.slice(-6).map((chat) => {
+        const roleName = chat.role === 'user' ? '用户' : '随书编辑';
+        return `${roleName}：${chat.content}`;
+      }).join('\n');
+      if (allHistory) {
+        contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
+      }
     }
-    const allHistory = editorChats.slice(-6).map((chat) => {
-      const roleName = chat.role === 'user' ? '用户' : '随书编辑';
-      return `${roleName}：${chat.content}`;
-    }).join('\n');
-    if (allHistory) {
-      contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
-    }
-    contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${chapterContent}\n\n`;
+    contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${formatEditorChatFullChapter(chapterContent)}\n\n`;
   } else {
     // 闲聊模式：只提供章节标题和开头片段作为背景，不注入完整全文
     const preview = chapterContent.slice(0, 400).replace(/\n{3,}/g, '\n\n');
