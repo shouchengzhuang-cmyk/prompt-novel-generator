@@ -1112,20 +1112,26 @@ function App() {
               <div className="editor-room">
                 <div className="editor-room-header">
                   <h3>编辑室</h3>
+                  <span className="editor-room-subtitle">{readingChapter ? (book.chapters.find(c => c.id === readingChapter)?.title || '' ) : ''}</span>
                   <div className="editor-room-tabs">
                     <button
                       className={'editor-room-tab' + (editorRoomTab === 'notes' ? ' active' : '')}
                       onClick={() => setEditorRoomTab('notes')}
                     >
-                      编辑备注
+                      备注
                     </button>
                     <button
                       className={'editor-room-tab' + (editorRoomTab === 'chat' ? ' active' : '')}
                       onClick={() => setEditorRoomTab('chat')}
                     >
-                      编辑对话
+                      对话
                     </button>
                   </div>
+                  {editorRoomTab === 'chat' && (
+                    <button className="btn btn-secondary" style={{ fontSize: 12, padding: '4px 8px', minHeight: 0, flexShrink: 0 }} onClick={handleClearEditorChats} disabled={editorChatSending || editorChats.length === 0}>
+                      清空
+                    </button>
+                  )}
                 </div>
 
                 {editorRoomTab === 'notes' && (
@@ -1171,10 +1177,7 @@ function App() {
                 {editorRoomTab === 'chat' && (
                   <div className="editor-room-chat">
                     <div className="editor-chat-toolbar">
-                      <span className="hint">当前章节独立保存，共 {editorChats.length} 条消息。</span>
-                      <button className="btn btn-secondary" onClick={handleClearEditorChats} disabled={editorChatSending || editorChats.length === 0}>
-                        清空对话
-                      </button>
+                      <span className="hint">共 {editorChats.length} 条消息</span>
                     </div>
                     <div className="editor-chat-messages" ref={editorChatListRef}>
                       {editorChats.length > 0 ? (
@@ -1711,7 +1714,7 @@ function App() {
                       <button
                         className="btn"
                         style={{ width: '100%' }}
-                        onClick={() => setMobileView('editor')}
+                        onClick={() => { setMobileView('editor'); setEditorRoomTab('chat'); }}
                       >
                         进入编辑室
                       </button>
