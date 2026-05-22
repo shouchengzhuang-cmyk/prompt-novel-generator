@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { renderTemplate, extractVariables } from '../utils/templateRenderer';
+import { apiFetch, safeJsonFetch } from '../api';
 
 export default function VaultPanel() {
   const [templates, setTemplates] = useState([]);
@@ -17,8 +18,7 @@ export default function VaultPanel() {
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('/api/vault/templates');
-      const data = await res.json();
+      const data = await safeJsonFetch('/api/vault/templates');
       setTemplates(data.templates || []);
     } catch {
       setError('获取模板列表失败');
@@ -97,7 +97,7 @@ export default function VaultPanel() {
         tags: typeof editForm.tags === 'string' ? editForm.tags.split(',').map((s) => s.trim()).filter(Boolean) : editForm.tags,
         variables: mergedVariables,
       };
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -126,7 +126,7 @@ export default function VaultPanel() {
     if (!selectedId || !confirm('确定删除此模板？')) return;
     setError('');
     try {
-      const res = await fetch(`/api/vault/templates/${selectedId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/vault/templates/${selectedId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('删除失败');
       setSelectedId(null);
       setEditForm(null);

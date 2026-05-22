@@ -723,6 +723,103 @@ label {
   color: #2c2c2c;
 }
 
+/* Reading theme variants */
+.reading-content.reading-theme-warm {
+  background: #faf6ed;
+  border-color: #e0d9c8;
+  color: #2c2c2c;
+}
+.reading-content.reading-theme-gray {
+  background: #f3f4f6;
+  border-color: #d6d9dd;
+  color: #2c2c2c;
+}
+.reading-content.reading-theme-dark {
+  background: #1e1e2e;
+  border-color: #3a3a4a;
+  color: #d4d4dc;
+}
+
+/* Reading font size variants */
+.reading-content.reading-font-small {
+  font-size: 14px;
+}
+.reading-content.reading-font-medium {
+  font-size: 16px;
+}
+.reading-content.reading-font-large {
+  font-size: 18px;
+}
+
+/* Reading settings */
+.reading-settings {
+  margin-bottom: 10px;
+}
+.reading-settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  font-size: 13px;
+  color: #9ca3af;
+  background: none;
+  border: none;
+  cursor: pointer;
+  min-height: 36px;
+}
+.reading-settings-toggle:active {
+  color: #6b7280;
+}
+.reading-settings-panel {
+  padding: 12px 14px;
+  margin-bottom: 4px;
+  background: #f9fafb;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.reading-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.reading-settings-label {
+  font-size: 13px;
+  color: #6b7280;
+  min-width: 32px;
+  flex-shrink: 0;
+}
+.reading-settings-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.reading-settings-chip {
+  padding: 5px 12px;
+  font-size: 12px;
+  border: 1px solid #d9dce3;
+  border-radius: 14px;
+  background: #fff;
+  color: #4b5563;
+  cursor: pointer;
+  min-height: 32px;
+}
+.reading-settings-chip.active {
+  background: #4a6cf7;
+  border-color: #4a6cf7;
+  color: #fff;
+}
+.reading-settings-chip:active {
+  background: #e8ecf4;
+}
+.reading-settings-chip.active:active {
+  background: #3b5de7;
+}
+
 .stale-chapter-notice {
   display: flex;
   align-items: center;
@@ -1594,6 +1691,223 @@ label {
     font-size: 12px;
     padding: 4px 8px;
     min-height: 0;
+  }
+
+  /* 移动端章节页夜间模式 — 全屏覆盖 */
+  .mobile-chapter-dark {
+    background: #0f1119;
+  }
+  .mobile-chapter-dark .app-shell {
+    background: #0f1119;
+  }
+  .mobile-chapter-dark h1 {
+    color: #e5e7eb;
+  }
+  .mobile-chapter-dark .panel {
+    background: #111827;
+    border-color: #2d3748;
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .panel-main {
+    background: #111827;
+  }
+  .mobile-chapter-dark .reading-section {
+    background: #111827;
+  }
+  .mobile-chapter-dark .reading-header,
+  .mobile-chapter-dark .reading-title-row {
+    color: #e5e7eb;
+  }
+  .mobile-chapter-dark .reading-title-row h3 {
+    color: #e5e7eb;
+  }
+  .mobile-chapter-dark .reading-filename {
+    color: #9ca3af;
+  }
+  .mobile-chapter-dark .reading-title-edit-btn {
+    color: #8ba4f8;
+  }
+  .mobile-chapter-dark .reading-content {
+    background: #1a1b2e;
+    border-color: #2d3748;
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .reading-settings-toggle {
+    color: #9ca3af;
+  }
+  .mobile-chapter-dark .reading-settings-panel {
+    background: #161822;
+    border-color: #2d3748;
+  }
+  .mobile-chapter-dark .reading-settings-label {
+    color: #9ca3af;
+  }
+  .mobile-chapter-dark .reading-settings-chip {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .reading-settings-chip.active {
+    background: #4a6cf7;
+    border-color: #4a6cf7;
+    color: #fff;
+  }
+  .mobile-chapter-dark .btn {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .btn:active {
+    background: #323548;
+  }
+  .mobile-chapter-dark .btn-ai {
+    background: #2a2240;
+    border-color: #4a3d6e;
+    color: #b8a8e0;
+  }
+  .mobile-chapter-dark .mobile-back-btn {
+    color: #8ba4f8;
+  }
+  .mobile-chapter-dark .chapter-bottom-nav .btn {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .debug-prompt-info {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #9ca3af;
+  }
+  .mobile-chapter-dark .stale-chapter-notice {
+    background: #2d1f1f;
+    border-color: #4a3535;
+    color: #f0c0c0;
+  }
+  .mobile-chapter-dark .generate-panel-area {
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .generate-panel-area label {
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .writing-controls {
+    background: #161822;
+    border-color: #2d3748;
+  }
+  .mobile-chapter-dark .writing-controls-title {
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .writing-controls-summary {
+    color: #9ca3af;
+  }
+  .mobile-chapter-dark .writing-controls-label {
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .writing-controls-option {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .writing-controls-option.active {
+    background: #2a2240;
+    border-color: #4a6cf7;
+    color: #b8a8e0;
+  }
+  .mobile-chapter-dark .writing-controls-input {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .variants-section {
+    border-color: #2d3748;
+  }
+  .mobile-chapter-dark .variant-item {
+    background: #161822;
+    border-color: #2d3748;
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .variant-meta {
+    color: #9ca3af;
+  }
+  .mobile-chapter-dark .variant-instruction {
+    color: #b8a8e0;
+  }
+  .mobile-chapter-dark .hint {
+    color: #6b7280;
+  }
+  .mobile-chapter-dark .error {
+    color: #f87171;
+  }
+  .mobile-chapter-dark .prompt-input {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .model-option {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .model-option-title {
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .model-option-sub {
+    color: #9ca3af;
+  }
+  .mobile-chapter-dark .model-option.active {
+    background: #2a2240;
+    border-color: #4a6cf7;
+  }
+  .mobile-chapter-dark .model-option.active .model-option-title {
+    color: #b8a8e0;
+  }
+  .mobile-chapter-dark .rewrite-input-area {
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .rewrite-input-area h3 {
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .mobile-section-toggle {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #8ba4f8;
+  }
+  .mobile-chapter-dark .editor-room {
+    background: #111827;
+    border-color: #2d3748;
+  }
+  .mobile-chapter-dark .editor-room-header {
+    background: #161822;
+    border-color: #2d3748;
+  }
+  .mobile-chapter-dark .editor-room-header h3 {
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .editor-room-tab {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #c0c4d0;
+  }
+  .mobile-chapter-dark .editor-room-tab.active {
+    background: #2a2240;
+    border-color: #4a6cf7;
+    color: #b8a8e0;
+  }
+  .mobile-chapter-dark .editor-chat-messages {
+    background: #161822;
+    border-color: #2d3748;
+  }
+  .mobile-chapter-dark .editor-chat-bubble {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #d4d4dc;
+  }
+  .mobile-chapter-dark .editor-chat-input-row {
+    background: #161822;
+  }
+  .mobile-chapter-dark .editor-chat-input-wrap textarea {
+    background: #262836;
+    border-color: #3a3e50;
+    color: #d4d4dc;
   }
 
   /* 移动端书架视图 */

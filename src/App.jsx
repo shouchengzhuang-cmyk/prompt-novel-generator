@@ -4,24 +4,7 @@ import VaultPanel from './components/VaultPanel';
 import PromptPreviewPanel from './components/PromptPreviewPanel';
 import WritingControlPanel from './components/WritingControlPanel';
 import GenerationProgress from './components/GenerationProgress';
-
-async function safeJsonFetch(url, options) {
-  const response = await fetch(url, options);
-  const text = await response.text();
-  let data;
-
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch {
-    throw new Error('接口返回了非 JSON，可能是 Vite 代理或后端路由未命中');
-  }
-
-  if (!response.ok) {
-    throw new Error(data.error || '请求失败');
-  }
-
-  return data;
-}
+import { apiFetch, safeJsonFetch } from './api';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -90,6 +73,14 @@ function App() {
   const [applyingVariant, setApplyingVariant] = useState(false);
   const [showRewriteInput, setShowRewriteInput] = useState(false);
   const [rewritePrompt, setRewritePrompt] = useState('');
+
+  // Reading settings
+  const [readingTheme, setReadingTheme] = useState(() => localStorage.getItem('readingTheme') || 'default');
+  const [readingFontSize, setReadingFontSize] = useState(() => localStorage.getItem('readingFontSize') || 'medium');
+  const [mobileReadingSettingsOpen, setMobileReadingSettingsOpen] = useState(false);
+
+  useEffect(() => { localStorage.setItem('readingTheme', readingTheme); }, [readingTheme]);
+  useEffect(() => { localStorage.setItem('readingFontSize', readingFontSize); }, [readingFontSize]);
 
   // Sidebar layout
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -591,7 +582,7 @@ function App() {
     if (!currentProject) return;
     setError('');
     try {
-      const response = await fetch(`/api/projects/${encodeURIComponent(currentProject)}/backup`);
+      const response = await apiFetch(`/api/projects/${encodeURIComponent(currentProject)}/backup`);
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || '备份下载失败');
@@ -991,7 +982,7 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app${isMobile && mobileView === 'chapter' && readingTheme === 'dark' ? ' mobile-chapter-dark' : ''}`}>
       <h1>小墨匣</h1>
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects (desktop only) ===== */}
@@ -1417,7 +1408,7 @@ function App() {
                 className="prompt-input"
                 value={userPrompt}
                 onChange={(e) => setUserPrompt(e.target.value)}
-                placeholder="请输入本次生成要求，例如：写一段主角在废墟中发现神秘遗迹的情节"
+                placeholder="写下这次续写的方向……"
                 rows={isMobile ? 4 : 6}
               />
 
@@ -1495,9 +1486,11 @@ function App() {
                       )}
                     </div>
                     <div className="reading-actions">
+                      {!isMobile && (
                       <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}
                       </button>
+                      )}
                       {!isMobile && (
                       <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
@@ -1525,8 +1518,8 @@ function App() {
                     </div>
                   )}
 
-                  {/* Rewrite input */}
-                  {showRewriteInput && (
+                  {/* Rewrite input — desktop */}
+                  {!isMobile && showRewriteInput && (
                     <div className="rewrite-input-area">
                       <h3 style={{ fontSize: 14, color: '#555', marginBottom: 6 }}>本次重写要求</h3>
                       <p style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>你可以在原续写要求基础上修改，只影响这次候选版本生成。</p>
@@ -1534,7 +1527,7 @@ function App() {
                         className="prompt-input"
                         value={rewritePrompt}
                         onChange={(e) => setRewritePrompt(e.target.value)}
-                        placeholder="继续写"
+                        placeholder="这次想怎么重写？"
                         rows={4}
                         style={{ marginBottom: 8 }}
                       />
@@ -1570,7 +1563,95 @@ function App() {
                     </div>
                   )}
 
-                  <div className="reading-content">{variantPreview ? variantPreview.content : readingContent}</div>
+                  {/* Reading settings — mobile */}
+                  {isMobile && (
+                    <div className="reading-settings">
+                      <button className="reading-settings-toggle" onClick={() => setMobileReadingSettingsOpen(!mobileReadingSettingsOpen)}>
+                        <span>阅读设置</span>
+                        <span>{mobileReadingSettingsOpen ? '▲' : '▼'}</span>
+                      </button>
+                      {mobileReadingSettingsOpen && (
+                        <div className="reading-settings-panel">
+                          <div className="reading-settings-row">
+                            <span className="reading-settings-label">背景</span>
+                            <div className="reading-settings-chips">
+                              {[
+                                { v: 'default', t: '白' },
+                                { v: 'warm', t: '米黄' },
+                                { v: 'gray', t: '浅灰' },
+                                { v: 'dark', t: '夜间' },
+                              ].map(({ v, t }) => (
+                                <button
+                                  key={v}
+                                  className={'reading-settings-chip' + (readingTheme === v ? ' active' : '')}
+                                  onClick={() => setReadingTheme(v)}
+                                >{t}</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="reading-settings-row">
+                            <span className="reading-settings-label">字号</span>
+                            <div className="reading-settings-chips">
+                              {[
+                                { v: 'small', t: '小' },
+                                { v: 'medium', t: '中' },
+                                { v: 'large', t: '大' },
+                              ].map(({ v, t }) => (
+                                <button
+                                  key={v}
+                                  className={'reading-settings-chip' + (readingFontSize === v ? ' active' : '')}
+                                  onClick={() => setReadingFontSize(v)}
+                                >{t}</button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className={`reading-content reading-theme-${readingTheme} reading-font-${readingFontSize}`}>{variantPreview ? variantPreview.content : readingContent}</div>
+
+                  {/* Mobile: rewrite button after content */}
+                  {isMobile && (
+                    <div style={{ marginTop: 16 }}>
+                      <button className="btn" style={{ width: '100%' }} onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
+                        {showRewriteInput ? '取消重写' : '重写本章'}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Mobile: rewrite panel after content */}
+                  {isMobile && showRewriteInput && (
+                    <div className="rewrite-input-area" ref={(el) => { if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+                      <h3 style={{ fontSize: 14, color: '#555', marginBottom: 6 }}>本次重写要求</h3>
+                      <p style={{ fontSize: 12, color: '#999', marginBottom: 6 }}>你可以在原续写要求基础上修改，只影响这次候选版本生成。</p>
+                      <textarea
+                        className="prompt-input"
+                        value={rewritePrompt}
+                        onChange={(e) => setRewritePrompt(e.target.value)}
+                        placeholder="这次想怎么重写？"
+                        rows={4}
+                        style={{ marginBottom: 8 }}
+                      />
+                      <PromptPreviewPanel
+                        taskType="novel.rewriteChapter"
+                        projectDetails={projectDetails}
+                        userPrompt={enhancedRewritePrompt}
+                        fileName={readingChapter}
+                      />
+                      <button className="btn" onClick={handleRegenerate} disabled={regenerating || loading}>
+                        {regenerating ? '重写中...' : '生成候选版本'}
+                      </button>
+                      <GenerationProgress
+                        visible={genProgress.visible && genProgress.mode === 'rewrite'}
+                        mode="rewrite"
+                        status={genProgress.status}
+                        errorMessage={genProgress.errorMessage}
+                        onComplete={handleGenProgressDone}
+                      />
+                    </div>
+                  )}
 
                   {/* Editor room: desktop always, mobile only in editor view */}
                   {(!isMobile || mobileView === 'editor') && (

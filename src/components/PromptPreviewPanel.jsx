@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 export default function PromptPreviewPanel({ taskType, projectDetails, userPrompt, fileName }) {
   const [expanded, setExpanded] = useState(false);
@@ -16,7 +17,7 @@ export default function PromptPreviewPanel({ taskType, projectDetails, userPromp
     const params = new URLSearchParams({ taskType, userPrompt: userPrompt || '' });
     if (fileName) params.set('fileName', fileName);
 
-    fetch(`/api/projects/${encodeURIComponent(projectDetails.projectName)}/prompt-preview?${params}`)
+    apiFetch(`/api/projects/${encodeURIComponent(projectDetails.projectName)}/prompt-preview?${params}`)
       .then((r) => r.json())
       .then((data) => {
         if (data.error) {

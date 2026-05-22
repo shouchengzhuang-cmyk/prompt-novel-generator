@@ -3,16 +3,19 @@ const fs = require('fs/promises');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 const cors = require('cors');
-const archiver = require('archiver');
+const { ZipArchive } = require('archiver');
 
 const vaultRoutes = require('./routes/vault');
 const { buildPrompt } = require('./services/promptBuilder');
 
 const app = express();
-app.use(cors());
+const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json({ limit: '1mb' }));
 
-const NOVELS_DIR = path.resolve(__dirname, '..', 'novels');
+const NOVELS_DIR = process.env.NOVELS_DIR
+  ? path.resolve(process.env.NOVELS_DIR)
+  : path.resolve(__dirname, '..', 'novels');
 const RECENT_CHAPTER_LIMIT = 10;
 const EDITOR_CHAT_FULL_CHAPTER_LIMIT = 80000;
 
@@ -1257,55 +1260,91 @@ app.get('/api/projects/:projectName/backup', async (req, res) => {
     return res.status(404).json({ error: '项目不存在' });
   }
 
+  const backupFiles = [];
+  const addBackupFile = async (filePath, archiveName) => {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isFile()) {
+        backupFiles.push({ filePath, archiveName });
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        throw err;
+      }
+    }
+  };
+
   try {
-    const archive = archiver('zip', { zlib: { level: 9 } });
+    // Root markdown files (world.md, characters.md, style.md, summary.md, editorial-memory.md)
+    for (const f of ['world.md', 'characters.md', 'style.md', 'summary.md', 'editorial-memory.md']) {
+      await addBackupFile(path.join(projectDir, f), f);
+    }
+
+    // chapters/index.json and all .txt files
+    const chaptersDir = path.join(projectDir, 'chapters');
+    try {
+      const chapterEntries = await fs.readdir(chaptersDir, { withFileTypes: true });
+      for (const entry of chapterEntries) {
+        if (entry.isFile() && (entry.name.endsWith('.txt') || entry.name === 'index.json')) {
+          backupFiles.push({
+            filePath: path.join(chaptersDir, entry.name),
+            archiveName: `chapters/${entry.name}`,
+          });
+        }
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        throw err;
+      }
+    }
+
+    // chapters/variants/*.json
+    const variantsDir = path.join(chaptersDir, 'variants');
+    try {
+      const variantEntries = await fs.readdir(variantsDir, { withFileTypes: true });
+      for (const entry of variantEntries) {
+        if (entry.isFile() && entry.name.endsWith('.json')) {
+          backupFiles.push({
+            filePath: path.join(variantsDir, entry.name),
+            archiveName: `chapters/variants/${entry.name}`,
+          });
+        }
+      }
+    } catch (err) {
+      if (err.code !== 'ENOENT') {
+        throw err;
+      }
+    }
+
+    if (backupFiles.length === 0) {
+      return res.status(404).json({ error: '项目中没有可备份的文件' });
+    }
+
+    const archive = new ZipArchive({ zlib: { level: 9 } });
     const dateStr = new Date().toISOString().slice(0, 10);
     const filename = `${projectName}-backup-${dateStr}.zip`;
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
 
+    archive.on('warning', (err) => {
+      if (err.code !== 'ENOENT') {
+        archive.emit('error', err);
+      }
+    });
+
+    archive.on('error', (err) => {
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message || '备份打包失败' });
+      } else {
+        res.destroy(err);
+      }
+    });
+
     archive.pipe(res);
 
-    // Root markdown files (world.md, characters.md, style.md, summary.md, editorial-memory.md)
-    for (const f of ['world.md', 'characters.md', 'style.md', 'summary.md', 'editorial-memory.md']) {
-      const fp = path.join(projectDir, f);
-      try {
-        await fs.access(fp);
-        archive.file(fp, { name: f });
-      } catch {
-        // optional file, skip if missing
-      }
-    }
-
-    // chapters/index.json and all .txt files
-    const chaptersDir = path.join(projectDir, 'chapters');
-    try {
-      await fs.access(chaptersDir);
-      const ci = await fs.readdir(chaptersDir);
-      for (const f of ci) {
-        const fp = path.join(chaptersDir, f);
-        const stat = await fs.stat(fp);
-        if (stat.isFile() && (f.endsWith('.txt') || f === 'index.json')) {
-          archive.file(fp, { name: `chapters/${f}` });
-        }
-      }
-    } catch {
-      // no chapters directory
-    }
-
-    // chapters/variants/*.json
-    const variantsDir = path.join(chaptersDir, 'variants');
-    try {
-      await fs.access(variantsDir);
-      const vi = await fs.readdir(variantsDir);
-      for (const f of vi) {
-        if (f.endsWith('.json')) {
-          archive.file(path.join(variantsDir, f), { name: `chapters/variants/${f}` });
-        }
-      }
-    } catch {
-      // no variants directory
+    for (const file of backupFiles) {
+      archive.file(file.filePath, { name: file.archiveName });
     }
 
     await archive.finalize();
