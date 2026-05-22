@@ -46,7 +46,7 @@ export default function PromptPreviewPanel({ taskType, projectDetails, userPromp
 
   const templateLabel = previewData?.templateTitle
     ? previewData.usedFallback
-      ? `${previewData.templateTitle}（旧版内置 Prompt fallback）`
+      ? '内置默认模板'
       : previewData.templateTitle
     : '';
 
@@ -70,8 +70,8 @@ export default function PromptPreviewPanel({ taskType, projectDetails, userPromp
           {previewData && !fetchError && (
             <>
               <div className="prompt-preview-meta">
-                模板：{previewData.templateTitle || '旧版内置 Prompt'}
-                {previewData.usedFallback && '（fallback）'}
+                模板：{previewData.templateTitle || '内置默认模板'}
+                {previewData.usedFallback && '（默认）'}
                 ｜任务类型：{previewData.taskType}
               </div>
               <div className="prompt-preview-section">

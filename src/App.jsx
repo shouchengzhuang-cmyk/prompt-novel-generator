@@ -138,6 +138,7 @@ function App() {
   const [editorNoteError, setEditorNoteError] = useState('');
   const [editorNoteResult, setEditorNoteResult] = useState('');
   const editorNoteReqId = useRef(0);
+  const generatingRef = useRef(false);
 
   // Editor room
   const [editorRoomTab, setEditorRoomTab] = useState('notes');
@@ -272,7 +273,7 @@ function App() {
 
   // ---- Generate ----
   const handleGenerate = async () => {
-    if (loading || regenerating) return;
+    if (loading || regenerating || generatingRef.current) return;
     if (!currentProject) {
       setError('请先选择一个项目');
       return;
@@ -293,6 +294,7 @@ function App() {
 
     setError('');
     setLoading(true);
+    generatingRef.current = true;
     setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
     try {
       const data = await safeJsonFetch('/api/generate', {
@@ -303,6 +305,7 @@ function App() {
           userPrompt: enhancedPrompt,
           model,
         }),
+        timeout: 180000,
       });
       const fileName = data.fileName || data.filename;
 
@@ -320,20 +323,33 @@ function App() {
       setReadingChapterTitle(data.title || '');
       setReadingContent(data.content);
       // Refresh chapter list (don't let failure affect success state)
+      let refreshFailed = false;
       try {
         const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
         if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
         setProjectDetails(refreshData);
       } catch (refreshErr) {
+        refreshFailed = true;
         console.warn('刷新章节列表失败:', refreshErr);
       }
       setGenProgress(prev => ({ ...prev, status: 'success' }));
-      setNotification({ title: '这一章写好了', message: `新章节已保存（${fileName}）` });
+      if (refreshFailed) {
+        setNotification({ title: '这一章写好了', message: `章节已保存（${fileName}），但列表刷新失败，请手动刷新。` });
+      } else {
+        setNotification({ title: '这一章写好了', message: `新章节已保存（${fileName}）` });
+      }
     } catch (err) {
-      setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
-      setNotification({ title: '生成失败', message: err.message });
+      const isNetworkOrTimeout = err.name === 'AbortError' || err instanceof TypeError;
+      if (isNetworkOrTimeout) {
+        setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: '网络异常或请求超时' });
+        setNotification({ title: '网络异常', message: '请求超时或网络中断，章节可能已保存。请刷新页面确认，不要重复点击生成。' });
+      } else {
+        setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
+        setNotification({ title: '生成失败', message: err.message });
+      }
     } finally {
       setLoading(false);
+      generatingRef.current = false;
     }
   };
 
@@ -1509,12 +1525,10 @@ function App() {
                     </div>
                   </div>
 
-                  {/* Debug template info */}
-                  {debugPromptInfo && (
+                  {/* Debug template info — only shown when a custom Vault template was used */}
+                  {debugPromptInfo && !debugPromptInfo.usedFallback && (
                     <div className="debug-prompt-info">
-                      {debugPromptInfo.usedFallback
-                        ? '本次使用模板：旧版内置 Prompt（Vault 模板未命中）'
-                        : `本次使用模板：${debugPromptInfo.templateTitle || '未知'}`}
+                      本次使用模板：{debugPromptInfo.templateTitle || '未知'}
                     </div>
                   )}
 
@@ -1855,11 +1869,9 @@ function App() {
                                 <span className="variant-instruction">
                                   续写要求：{promptSummary.slice(0, 100)}{promptSummary.length > 100 ? '...' : ''}
                                 </span>
-                                {v._debugPromptInfo && (
+                                {v._debugPromptInfo && !v._debugPromptInfo.usedFallback && (
                                   <span className="debug-prompt-info debug-prompt-info-inline">
-                                    {v._debugPromptInfo.usedFallback
-                                      ? '旧版内置 Prompt（Vault 模板未命中）'
-                                      : `模板：${v._debugPromptInfo.templateTitle || '未知'}`}
+                                    模板：{v._debugPromptInfo.templateTitle || '未知'}
                                   </span>
                                 )}
                               </div>
