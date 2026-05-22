@@ -4,6 +4,11 @@
   box-sizing: border-box;
 }
 
+html, body, #root {
+  width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     'Helvetica Neue', Arial, 'Noto Sans SC', sans-serif;
@@ -16,6 +21,7 @@ body {
   max-width: 1200px;
   margin: 0 auto;
   padding: 20px;
+  overflow-x: hidden;
 }
 
 .app h1 {
@@ -2107,6 +2113,69 @@ label {
   .mobile-chapter-empty {
     text-align: center;
     padding: 20px 0;
+  }
+}
+
+/* ---- Responsive: mobile form + overflow ---- */
+
+@media (max-width: 768px) {
+  .app {
+    padding: 12px;
+  }
+
+  .panel {
+    padding: 12px;
+  }
+
+  .container {
+    width: 100%;
+  }
+
+  /* 新建项目表单：降低 textarea 高度，避免首屏被巨大输入框占据 */
+  .create-panel textarea {
+    min-height: 90px;
+  }
+  .create-panel textarea:nth-of-type(3) {
+    min-height: 120px;
+  }
+  .create-panel textarea:nth-of-type(4) {
+    min-height: 70px;
+  }
+
+  /* 表单底部操作按钮 */
+  .form-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .form-actions .btn {
+    flex: 1 1 auto;
+    min-width: 80px;
+  }
+
+  /* 移动端书架/项目视图强制全宽 */
+  .mobile-shelf-view,
+  .mobile-project-view {
+    width: 100%;
+    max-width: 100%;
+    padding: 12px;
+  }
+
+  .mobile-project-tools {
+    gap: 6px;
+  }
+
+  .mobile-project-tools .btn {
+    font-size: 11px;
+    padding: 5px 8px;
+    min-height: 0;
+  }
+
+  .reading-content {
+    max-height: none;
+    padding: 12px 14px;
+    font-size: 15px;
+    line-height: 1.8;
+    min-height: 150px;
   }
 }
 
