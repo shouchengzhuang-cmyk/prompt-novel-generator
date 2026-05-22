@@ -1490,9 +1490,11 @@ function App() {
                           复制全文
                         </button>
                       )}
+                      {!isMobile && (
                       <button className="btn btn-secondary" onClick={() => { setReadingChapter(null); setReadingChapterTitle(''); setReadingContent(''); setVariants([]); setVariantPreview(null); setShowRewriteInput(false); setRewritePrompt(''); setDebugPromptInfo(null); resetEditorRoom(); }}>
                         关闭阅读
                       </button>
+                      )}
                     </div>
                   </div>
 
@@ -1693,8 +1695,8 @@ function App() {
                         <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           上一章
                         </button>
-                        <button className="btn btn-secondary" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                          回目录
+                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { setMobileView('home'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
+                          {isMobile ? '目录' : '回目录'}
                         </button>
                         <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           下一章
