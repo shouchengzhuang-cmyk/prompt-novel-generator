@@ -155,6 +155,7 @@ function App() {
   const [editorChatError, setEditorChatError] = useState('');
   const [savingEditorNoteId, setSavingEditorNoteId] = useState('');
   const editorChatListRef = useRef(null);
+  const readingSectionRef = useRef(null);
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -1458,7 +1459,7 @@ function App() {
 
               {/* Reading Section */}
               {readingChapter && (
-                <div className="reading-section">
+                <div className="reading-section" ref={readingSectionRef}>
                   <div className="reading-header">
                     <div className="reading-title-row">
                       {editingTitle ? (
@@ -1485,10 +1486,12 @@ function App() {
                       <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}
                       </button>
+                      {!isMobile && (
                       <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
                       </button>
-                      {displayContent && (
+                      )}
+                      {!isMobile && displayContent && (
                         <button className="btn btn-success" onClick={handleCopyFull}>
                           复制全文
                         </button>
@@ -1772,7 +1775,15 @@ function App() {
                               <div className="variant-actions">
                                 <button
                                   className={'btn' + (variantPreview?.id === v.id ? ' active' : '')}
-                                  onClick={() => handlePreviewVariant(v)}
+                                  onClick={() => {
+                                    handlePreviewVariant(v);
+                                    if (isMobile) {
+                                      setMobileVariantsOpen(false);
+                                      requestAnimationFrame(() => {
+                                        readingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                      });
+                                    }
+                                  }}
                                 >
                                   {variantPreview?.id === v.id ? '关闭正文' : '查看正文'}
                                 </button>
