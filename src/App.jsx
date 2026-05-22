@@ -95,6 +95,10 @@ function App() {
   const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
   const [isChaptersCollapsed, setIsChaptersCollapsed] = useState(false);
 
+  // Mobile view routing: 'home' | 'chapter' | 'editor'  (仅移动端使用)
+  const [mobileView, setMobileView] = useState('home');
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
+
   // Writing preferences
   const [writingPrefs, setWritingPrefs] = useState({
     style: '',
@@ -124,6 +128,15 @@ function App() {
     document.title = busy ? '生成中...' : '小墨匣';
     return () => { document.title = '小墨匣'; };
   }, [loading, regenerating]);
+
+  // Detect mobile viewport
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 900px)');
+    const handler = (e) => setIsMobile(e.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // Editor Note
   const [editorNoteLoading, setEditorNoteLoading] = useState(false);
@@ -194,6 +207,7 @@ function App() {
     setEditingProjectName(null);
     setDebugPromptInfo(null);
     resetEditorRoom();
+    setMobileView('home');
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
     setEditCharacters('');
@@ -961,8 +975,8 @@ function App() {
     <div className="app">
       <h1>小墨匣</h1>
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-        {/* ===== Left Panel: Projects ===== */}
-        {isSidebarCollapsed ? (
+        {/* ===== Left Panel: Projects (desktop always, mobile home only) ===== */}
+        {!(isMobile && mobileView !== 'home') && (isSidebarCollapsed && !isMobile ? (
           <button
             className="sidebar-collapsed-toggle"
             onClick={() => setIsSidebarCollapsed(false)}
@@ -972,6 +986,7 @@ function App() {
           </button>
         ) : (
           <aside className="panel panel-left sidebar">
+            {!isMobile && (
             <button
               className="sidebar-collapsed-toggle sidebar-collapse-button"
               onClick={() => setIsSidebarCollapsed(true)}
@@ -979,6 +994,7 @@ function App() {
             >
               ‹
             </button>
+            )}
 
             <section className="sidebar-section">
               <div className="sidebar-section-header">
@@ -1010,7 +1026,7 @@ function App() {
                     ))}
                   </div>
 
-                  <button className="btn btn-secondary" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>
+                  <button className="btn btn-secondary" onClick={() => { setShowCreateForm(true); setCreateError(''); if (isMobile) setMobileView('chapter'); }}>
                     + 创建项目
                   </button>
                 </div>
@@ -1055,7 +1071,12 @@ function App() {
                           <li key={key} className={`chapter-item-wrap${!cf ? ' disabled' : ''}`}>
                             <div
                               className={'chapter-item' + (cf && readingChapter === cf ? ' active' : '')}
-                              onClick={() => cf && handleReadChapter(cf)}
+                              onClick={() => {
+                              if (cf) {
+                                handleReadChapter(cf);
+                                if (isMobile) setMobileView('chapter');
+                              }
+                            }}
                             >
                               <span className="chapter-name">
                                 <span className="chapter-name-text">{cf ? `${cf.slice(0, 3)} ${ch.title || cf.replace(/\.txt$/, '')}` : '无效章节'}</span>
@@ -1075,10 +1096,148 @@ function App() {
               </section>
             )}
           </aside>
-        )}
+        ))}
 
-        {/* ===== Main Panel: Generate + Reading ===== */}
+        {/* ===== Main Panel (desktop always, mobile hidden on home) ===== */}
+        {!(isMobile && mobileView === 'home') && (
         <div className="panel panel-main">
+          {/* Mobile: editor view — standalone */}
+          {isMobile && mobileView === 'editor' && readingChapter ? (
+            <div className="mobile-editor-view">
+              <button className="mobile-back-btn" onClick={() => setMobileView('chapter')}>
+                ← 返回章节
+              </button>
+              <div className="editor-room">
+                <div className="editor-room-header">
+                  <h3>编辑室</h3>
+                  <div className="editor-room-tabs">
+                    <button
+                      className={'editor-room-tab' + (editorRoomTab === 'notes' ? ' active' : '')}
+                      onClick={() => setEditorRoomTab('notes')}
+                    >
+                      编辑备注
+                    </button>
+                    <button
+                      className={'editor-room-tab' + (editorRoomTab === 'chat' ? ' active' : '')}
+                      onClick={() => setEditorRoomTab('chat')}
+                    >
+                      编辑对话
+                    </button>
+                  </div>
+                </div>
+
+                {editorRoomTab === 'notes' && (
+                  <div className="editor-room-notes">
+                    <div className="editor-room-toolbar">
+                      <button className="btn btn-ai" onClick={handleEditorNote} disabled={editorNoteLoading}>
+                        {editorNoteLoading ? '生成中...' : '生成本章编辑备注'}
+                      </button>
+                    </div>
+                    {editorNoteError && <div className="error">{editorNoteError}</div>}
+                    {editorNoteLoading && (
+                      <div className="editor-note-loading editor-note-loading-inline">
+                        <div className="editor-note-loading-spinner"></div>
+                        <span>正在生成编辑备注...</span>
+                      </div>
+                    )}
+                    {!editorNoteLoading && editorNoteResult && (
+                      <div className="editor-note-draft">
+                        <div className="editor-note-text">{editorNoteResult}</div>
+                        <button
+                          className="btn btn-secondary"
+                          disabled={savingEditorNoteId === 'generated-note'}
+                          onClick={() => handleSaveEditorNote(editorNoteResult, 'generated-note')}
+                        >
+                          {savingEditorNoteId === 'generated-note' ? '保存中...' : '保存为备注'}
+                        </button>
+                      </div>
+                    )}
+                    <div className="editor-notes-list">
+                      {editorNotes.length > 0 ? (
+                        editorNotes.map((note, index) => (
+                          <div className="editor-note-saved" key={`${readingChapter}-note-${index}`}>
+                            {note}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="hint">暂无编辑备注。可以生成一条，或从编辑对话中保存编辑回复。</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {editorRoomTab === 'chat' && (
+                  <div className="editor-room-chat">
+                    <div className="editor-chat-toolbar">
+                      <span className="hint">当前章节独立保存，共 {editorChats.length} 条消息。</span>
+                      <button className="btn btn-secondary" onClick={handleClearEditorChats} disabled={editorChatSending || editorChats.length === 0}>
+                        清空对话
+                      </button>
+                    </div>
+                    <div className="editor-chat-messages" ref={editorChatListRef}>
+                      {editorChats.length > 0 ? (
+                        editorChats.map((chat) => (
+                          <div className={`editor-chat-row ${chat.role}`} key={chat.id}>
+                            <div className="editor-chat-bubble">
+                              <div className="editor-chat-meta">
+                                {chat.role === 'user' ? '你' : '随书编辑'} · {new Date(chat.createdAt).toLocaleString()}
+                              </div>
+                              <div className="editor-chat-content">{chat.content}</div>
+                              {chat.role === 'editor' && (
+                                <button
+                                  className="btn btn-secondary editor-chat-save"
+                                  disabled={savingEditorNoteId === chat.id}
+                                  onClick={() => handleSaveEditorNote(chat.content, chat.id)}
+                                >
+                                  {savingEditorNoteId === chat.id ? '保存中...' : '保存为备注'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="hint editor-chat-empty">还没有对话。可以问编辑：这一章节奏是否太慢？人物动机是否站得住？</p>
+                      )}
+                      {editorChatSending && (
+                        <div className="editor-chat-row editor">
+                          <div className="editor-chat-bubble">
+                            <div className="editor-note-loading editor-note-loading-inline">
+                              <div className="editor-note-loading-spinner"></div>
+                              <span>编辑正在回复...</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    {editorChatError && <div className="error">{editorChatError}</div>}
+                    <div className="editor-chat-input-row">
+                      <div className="editor-chat-input-wrap">
+                        <textarea
+                          value={editorChatInput}
+                          onChange={(e) => setEditorChatInput(e.target.value)}
+                          onKeyDown={handleEditorChatKeyDown}
+                          placeholder="和随书编辑聊聊这一章……"
+                          rows={3}
+                          disabled={editorChatSending}
+                        />
+                        <span className="editor-chat-hint">Enter 发送，Shift + Enter 换行</span>
+                      </div>
+                      <button className="btn" onClick={handleSendEditorChat} disabled={editorChatSending || !editorChatInput.trim()}>
+                        {editorChatSending ? '发送中...' : '发送'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+          <>
+          {/* Mobile: back button on chapter view */}
+          {isMobile && mobileView === 'chapter' && (
+            <button className="mobile-back-btn" onClick={() => setMobileView('home')}>
+              ← 返回列表
+            </button>
+          )}
           {showCreateForm ? (
             <div className="create-panel">
               <h2>创建新项目</h2>
@@ -1378,6 +1537,8 @@ function App() {
 
                   <div className="reading-content">{variantPreview ? variantPreview.content : readingContent}</div>
 
+                  {/* Editor room: desktop always, mobile only in editor view */}
+                  {(!isMobile || mobileView === 'editor') && (
                   <div className="editor-room">
                     <div className="editor-room-header">
                       <h3>编辑室</h3>
@@ -1500,6 +1661,7 @@ function App() {
                       </div>
                     )}
                   </div>
+                  )}
 
                   {/* Chapter bottom navigation */}
                   {(() => {
@@ -1525,6 +1687,19 @@ function App() {
                       </div>
                     );
                   })()}
+
+                  {/* Mobile: enter editor room button */}
+                  {isMobile && (
+                    <div style={{ marginTop: 12 }}>
+                      <button
+                        className="btn"
+                        style={{ width: '100%' }}
+                        onClick={() => setMobileView('editor')}
+                      >
+                        进入编辑室
+                      </button>
+                    </div>
+                  )}
 
                   {/* Variants list */}
                   {variants.length > 0 && (
@@ -1594,7 +1769,10 @@ function App() {
           )}
             </>
           )}
+          </>
+          )}
           </div>
+          )}
         </div>
 
       {notification && (
