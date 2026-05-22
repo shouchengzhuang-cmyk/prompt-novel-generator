@@ -2083,6 +2083,7 @@ label {
     border-bottom: 1px solid #f0f0f0;
     cursor: pointer;
     min-height: 48px;
+    position: relative;
   }
   .mobile-chapter-item:active {
     background: #f5f7fa;
@@ -2093,6 +2094,56 @@ label {
   .mobile-chapter-item.disabled {
     opacity: 0.4;
     cursor: default;
+  }
+  .mobile-chapter-menu-btn {
+    margin-left: auto;
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: #999;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .mobile-chapter-menu-btn:active {
+    background: rgba(0,0,0,0.06);
+    color: #333;
+  }
+  .mobile-chapter-item.active .mobile-chapter-menu-btn {
+    color: #777;
+  }
+  .mobile-chapter-menu-dropdown {
+    position: absolute;
+    right: 8px;
+    top: 40px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.14);
+    overflow: hidden;
+    z-index: 10;
+    min-width: 88px;
+  }
+  .mobile-chapter-menu-delete {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    background: none;
+    font-size: 13px;
+    color: #e53e3e;
+    cursor: pointer;
+    text-align: center;
+    min-height: 40px;
+  }
+  .mobile-chapter-menu-delete:active {
+    background: #fef2f2;
   }
   .mobile-chapter-index {
     font-size: 12px;

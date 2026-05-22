@@ -93,6 +93,7 @@ function App() {
   const [mobileGenerateOpen, setMobileGenerateOpen] = useState(false);
   const [mobileVariantsOpen, setMobileVariantsOpen] = useState(false);
   const [mobileShelfMenu, setMobileShelfMenu] = useState(null);
+  const [mobileChapterMenu, setMobileChapterMenu] = useState(null);
 
   // Writing preferences
   const [writingPrefs, setWritingPrefs] = useState({
@@ -131,6 +132,34 @@ function App() {
     setIsMobile(mq.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  // ---- Mobile history navigation ----
+  const navigateTo = useCallback((view) => {
+    window.history.pushState({ mobileView: view }, '', '');
+    setMobileView(view);
+    setMobileGenerateOpen(false);
+    setMobileVariantsOpen(false);
+    setMobileChapterMenu(null);
+    setMobileShelfMenu(null);
+  }, []);
+
+  // Seed initial history state so the first back press can be handled in-app
+  useEffect(() => {
+    if (!window.history.state || !window.history.state.mobileView) {
+      window.history.replaceState({ mobileView: 'shelf' }, '', '');
+    }
+    const handlePopState = (event) => {
+      if (event.state && event.state.mobileView) {
+        setMobileView(event.state.mobileView);
+        setMobileGenerateOpen(false);
+        setMobileVariantsOpen(false);
+        setMobileChapterMenu(null);
+        setMobileShelfMenu(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
   // Editor Note
@@ -204,7 +233,7 @@ function App() {
     setEditingProjectName(null);
     setDebugPromptInfo(null);
     resetEditorRoom();
-    if (isMobile) setMobileView('project');
+    if (isMobile) navigateTo('project');
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
     setEditCharacters('');
@@ -483,6 +512,12 @@ function App() {
       setMobileGenerateOpen(false);
       setMobileVariantsOpen(false);
     }
+  };
+
+  // Mobile chapter list: delete chapter with menu cleanup
+  const handleMobileDeleteChapter = async (filename) => {
+    setMobileChapterMenu(null);
+    await handleDeleteChapter(filename, { stopPropagation() {} });
   };
 
   // ---- Copy full text ----
@@ -1100,7 +1135,7 @@ function App() {
                               onClick={() => {
                               if (cf) {
                                 handleReadChapter(cf);
-                                if (isMobile) { setMobileView('chapter'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }
+                                if (isMobile) { navigateTo('chapter'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }
                               }
                             }}
                             >
@@ -1130,7 +1165,7 @@ function App() {
           {/* Mobile: editor view — standalone */}
           {isMobile && mobileView === 'editor' && readingChapter ? (
             <div className="mobile-editor-view">
-              <button className="mobile-back-btn" onClick={() => setMobileView('chapter')}>
+              <button className="mobile-back-btn" onClick={() => window.history.back()}>
                 ← 返回章节
               </button>
               <div className="editor-room">
@@ -1259,7 +1294,7 @@ function App() {
           <>
           {/* Mobile: back button on chapter view */}
           {isMobile && mobileView === 'chapter' && (
-            <button className="mobile-back-btn" onClick={() => { setMobileView('project'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }}>
+            <button className="mobile-back-btn" onClick={() => window.history.back()}>
               ← 返回列表
             </button>
           )}
@@ -1806,7 +1841,7 @@ function App() {
                         <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           上一章
                         </button>
-                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { setMobileView('project'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
+                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { window.history.back(); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
                           {isMobile ? '目录' : '回目录'}
                         </button>
                         <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
@@ -1822,7 +1857,7 @@ function App() {
                       <button
                         className="btn"
                         style={{ width: '100%' }}
-                        onClick={() => { setMobileView('editor'); setEditorRoomTab('chat'); }}
+                        onClick={() => { navigateTo('editor'); setEditorRoomTab('chat'); }}
                       >
                         进入编辑室
                       </button>
@@ -1987,7 +2022,7 @@ function App() {
         {/* ===== Mobile: Project View (chapter list) ===== */}
         {isMobile && mobileView === 'project' && currentProject && (
           <div className="panel mobile-project-view">
-            <button className="mobile-back-btn" onClick={() => setMobileView('shelf')}>
+            <button className="mobile-back-btn" onClick={() => window.history.back()}>
               ← 返回书架
             </button>
             <h2 className="mobile-project-title">{currentProject}</h2>
@@ -2026,14 +2061,15 @@ function App() {
                 {projectDetails.chapters.map((ch, index) => {
                   const cf = ch.fileName || ch.filename;
                   const key = cf || `chapter-${index}`;
+                  const menuOpen = mobileChapterMenu === cf;
                   return (
                     <li
                       key={key}
                       className={'mobile-chapter-item' + (cf && readingChapter === cf ? ' active' : '') + (!cf ? ' disabled' : '')}
                       onClick={() => {
-                        if (cf) {
+                        if (cf && !menuOpen) {
                           handleReadChapter(cf);
-                          setMobileView('chapter');
+                          navigateTo('chapter');
                           setMobileGenerateOpen(false);
                           setMobileVariantsOpen(false);
                         }
@@ -2042,6 +2078,25 @@ function App() {
                       <span className="mobile-chapter-index">{cf ? cf.slice(0, 3) : '--'}</span>
                       <span className="mobile-chapter-title">{cf ? (ch.title || cf.replace(/\.txt$/, '')) : '无效章节'}</span>
                       {ch.staleAfterRewrite && <span className="chapter-stale-badge">待检查</span>}
+                      {cf && (
+                        <>
+                          <button
+                            className="mobile-chapter-menu-btn"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setMobileChapterMenu(menuOpen ? null : cf);
+                            }}
+                          >⋯</button>
+                          {menuOpen && (
+                            <div className="mobile-chapter-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                className="mobile-chapter-menu-delete"
+                                onClick={() => handleMobileDeleteChapter(cf)}
+                              >删除章节</button>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </li>
                   );
                 })}
@@ -2049,7 +2104,7 @@ function App() {
             ) : (
               <div className="mobile-chapter-empty">
                 <p className="hint">暂无章节</p>
-                <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { setMobileView('chapter'); setMobileGenerateOpen(true); }}>
+                <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { navigateTo('chapter'); setMobileGenerateOpen(true); }}>
                   开始写第一章
                 </button>
               </div>
