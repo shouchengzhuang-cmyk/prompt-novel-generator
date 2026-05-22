@@ -1093,52 +1093,49 @@ app.post('/api/generate', async (req, res) => {
     });
     await writeChapterIndex(chaptersDir, indexEntries);
 
-    // 6b. Update summary after the chapter is safely saved.
-    try {
-      const oldSummary = await fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => '');
-      const summaryMessages = [
-        {
-          role: 'system',
-          content:
-            '你是长篇小说剧情摘要维护助手。你只更新剧情事实，不写正文，不评价作品。' +
-            '请把旧摘要和新章节内容合并压缩为新的 summary.md，使用中文，总长度控制在 800 字以内。',
-        },
-        {
-          role: 'user',
-          content:
-            '请根据旧 summary.md 和新章节内容，输出新的剧情摘要。\n\n' +
-            '要求：\n' +
-            '1. 不要写正文。\n' +
-            '2. 不要评价作品。\n' +
-            '3. 只更新剧情事实。\n' +
-            '4. 必须保留：已发生的关键事件、人物关系变化、重要物品/地点/秘密/伏笔、未解决悬念、当前时间线、下一章可接的位置。\n' +
-            '5. 总长度控制在 800 字以内。\n\n' +
-            `## 旧 summary.md\n${oldSummary || '（暂无）'}\n\n` +
-            `## 新章节 ${filename}\n${content}`,
-        },
-      ];
-      const updatedSummary = await callDeepSeek('deepseek-v4-flash', summaryMessages);
-      await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
+    // 6. 立即返回成功响应，摘要和编辑记忆改为后台异步更新
+    res.json({ content, fileName: filename, title, debugPromptInfo });
 
-      // 6c. Update editorial-memory.md (non-critical, errors are logged)
+    // 6b. 后台异步更新 summary.md（不阻塞响应）
+    setImmediate(async () => {
       try {
-        await updateEditorialMemoryForChapter(projectName, filename);
-        console.log(`[编辑记忆] 已更新章节 ${filename}`);
-      } catch (memErr) {
-        console.warn(`[编辑记忆] 更新失败（不影响主流程）: ${memErr.message}`);
+        const oldSummary = await fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => '');
+        const summaryMessages = [
+          {
+            role: 'system',
+            content:
+              '你是长篇小说剧情摘要维护助手。你只更新剧情事实，不写正文，不评价作品。' +
+              '请把旧摘要和新章节内容合并压缩为新的 summary.md，使用中文，总长度控制在 800 字以内。',
+          },
+          {
+            role: 'user',
+            content:
+              '请根据旧 summary.md 和新章节内容，输出新的剧情摘要。\n\n' +
+              '要求：\n' +
+              '1. 不要写正文。\n' +
+              '2. 不要评价作品。\n' +
+              '3. 只更新剧情事实。\n' +
+              '4. 必须保留：已发生的关键事件、人物关系变化、重要物品/地点/秘密/伏笔、未解决悬念、当前时间线、下一章可接的位置。\n' +
+              '5. 总长度控制在 800 字以内。\n\n' +
+              `## 旧 summary.md\n${oldSummary || '（暂无）'}\n\n` +
+              `## 新章节 ${filename}\n${content}`,
+          },
+        ];
+        const updatedSummary = await callDeepSeek('deepseek-v4-flash', summaryMessages);
+        await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
+        console.log(`[摘要] 后台已更新项目=${projectName} 章节=${filename}`);
+      } catch (summaryErr) {
+        console.warn(`[摘要] 后台更新失败（不影响主流程）: ${summaryErr.message}`);
       }
 
-      res.json({ content, fileName: filename, title, summaryUpdated: true, debugPromptInfo });
-    } catch (summaryErr) {
-      res.json({
-        content,
-        fileName: filename,
-        title,
-        summaryUpdated: false,
-        summaryError: summaryErr.message || '摘要更新失败',
-        debugPromptInfo,
-      });
-    }
+      // 6c. 后台异步更新 editorial-memory.md
+      try {
+        await updateEditorialMemoryForChapter(projectName, filename);
+        console.log(`[编辑记忆] 后台已更新章节 ${filename}`);
+      } catch (memErr) {
+        console.warn(`[编辑记忆] 后台更新失败（不影响主流程）: ${memErr.message}`);
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message || '服务器内部错误' });
   }
