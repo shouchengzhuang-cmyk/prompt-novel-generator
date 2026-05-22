@@ -3,7 +3,9 @@ const fs = require('fs/promises');
 const express = require('express');
 const router = express.Router();
 
-const VAULT_DIR = path.resolve(__dirname, '..', 'data', 'vault');
+const VAULT_DIR = process.env.VAULT_DIR
+  ? path.resolve(process.env.VAULT_DIR)
+  : path.resolve(__dirname, '..', 'data', 'vault');
 const VAULT_FILE = path.join(VAULT_DIR, 'templates.json');
 
 async function ensureDir(dir) {

@@ -1,7 +1,10 @@
 const path = require('path');
 const fs = require('fs/promises');
 
-const VAULT_FILE = path.resolve(__dirname, '..', 'data', 'vault', 'templates.json');
+const VAULT_DIR = process.env.VAULT_DIR
+  ? path.resolve(process.env.VAULT_DIR)
+  : path.resolve(__dirname, '..', 'data', 'vault');
+const VAULT_FILE = path.join(VAULT_DIR, 'templates.json');
 
 // ===== Legacy fallback (when Vault template not found) =====
 
