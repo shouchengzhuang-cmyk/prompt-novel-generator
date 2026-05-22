@@ -1113,7 +1113,7 @@ function App() {
               <div className="editor-room">
                 <div className="editor-room-header">
                   <h3>编辑室</h3>
-                  <span className="editor-room-subtitle">{readingChapter ? (book.chapters.find(c => c.id === readingChapter)?.title || '' ) : ''}</span>
+                  <span className="editor-room-subtitle">{readingChapterTitle || readingChapter || ''}</span>
                   <div className="editor-room-tabs">
                     <button
                       className={'editor-room-tab' + (editorRoomTab === 'notes' ? ' active' : '')}
