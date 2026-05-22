@@ -1351,8 +1351,15 @@ label {
   .panel-main {
     width: 100%;
   }
-  .model-select {
-    grid-template-columns: 1fr;
+  .model-option {
+    padding: 10px 10px;
+    gap: 6px;
+  }
+  .model-option-title {
+    font-size: 13px;
+  }
+  .model-option-sub {
+    font-size: 10px;
   }
   .reading-content {
     max-height: none;

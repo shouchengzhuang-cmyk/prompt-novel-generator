@@ -1432,7 +1432,7 @@ function App() {
                   />
                   <span className="model-option-text">
                     <span className="model-option-title">快速模式</span>
-                    <span className="model-option-sub">deepseek-v4-flash · 速度更快，适合日常续写</span>
+                    <span className="model-option-sub">{isMobile ? 'v4-flash · 日常续写' : 'deepseek-v4-flash · 速度更快，适合日常续写'}</span>
                   </span>
                 </label>
                 <label className={'model-option' + (model === 'deepseek-v4-pro' ? ' active' : '')}>
@@ -1445,7 +1445,7 @@ function App() {
                   />
                   <span className="model-option-text">
                     <span className="model-option-title">深度模式</span>
-                    <span className="model-option-sub">deepseek-v4-pro · 复杂剧情与长线伏笔</span>
+                    <span className="model-option-sub">{isMobile ? 'v4-pro · 长线代笔' : 'deepseek-v4-pro · 复杂剧情与长线伏笔'}</span>
                   </span>
                 </label>
               </div>
