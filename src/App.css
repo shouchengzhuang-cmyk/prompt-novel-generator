@@ -1432,6 +1432,14 @@ label {
     font-size: 16px;
   }
 
+  /* 移动端续写输入框压缩高度 */
+  .prompt-input {
+    min-height: 120px;
+    max-height: 180px;
+    overflow-y: auto;
+    resize: vertical;
+  }
+
   /* 移动端返回按钮 */
   .mobile-back-btn {
     display: inline-flex;

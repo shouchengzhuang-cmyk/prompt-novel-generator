@@ -1418,7 +1418,7 @@ function App() {
                 value={userPrompt}
                 onChange={(e) => setUserPrompt(e.target.value)}
                 placeholder="请输入本次生成要求，例如：写一段主角在废墟中发现神秘遗迹的情节"
-                rows={6}
+                rows={isMobile ? 4 : 6}
               />
 
               <div className="model-select">
