@@ -2116,22 +2116,75 @@ label {
   }
 }
 
-/* ---- Responsive: mobile form + overflow ---- */
+/* ---- Responsive: mobile layout ---- */
 
 @media (max-width: 768px) {
+  /* 全局重置：根容器不容忍任何溢出 */
   .app {
     padding: 12px;
+    max-width: 100%;
+  }
+
+  /* 退化为块级布局，移除 flex 对移动端视图的宽度约束 */
+  .container {
+    display: block;
+    width: 100%;
+    gap: 0;
   }
 
   .panel {
     padding: 12px;
+    width: 100%;
+    max-width: 100%;
   }
 
-  .container {
+  /* 标题居中 */
+  .app h1 {
+    font-size: 22px;
+    margin-bottom: 14px;
+  }
+
+  /* 移动端书架：全宽独立页面 */
+  .mobile-shelf-view,
+  .mobile-project-view {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    padding: 14px 12px;
+    margin: 0 0 12px 0;
+    box-sizing: border-box;
+  }
+
+  .shelf-title {
+    font-size: 20px;
+    text-align: center;
+    margin-bottom: 4px;
+  }
+
+  .shelf-subtitle {
+    text-align: center;
+  }
+
+  /* 书架网格：两列，卡片宽高比舒适 */
+  .bookshelf-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 12px;
     width: 100%;
   }
 
-  /* 新建项目表单：降低 textarea 高度，避免首屏被巨大输入框占据 */
+  .book-cover {
+    aspect-ratio: 3 / 4;
+    border-radius: 8px;
+  }
+
+  .btn-create-project {
+    width: 100%;
+    margin-top: 20px;
+    min-height: 48px;
+  }
+
+  /* 新建项目表单：降低 textarea 高度 */
   .create-panel textarea {
     min-height: 90px;
   }
@@ -2152,14 +2205,7 @@ label {
     min-width: 80px;
   }
 
-  /* 移动端书架/项目视图强制全宽 */
-  .mobile-shelf-view,
-  .mobile-project-view {
-    width: 100%;
-    max-width: 100%;
-    padding: 12px;
-  }
-
+  /* 项目视图工具按钮 */
   .mobile-project-tools {
     gap: 6px;
   }
@@ -2187,6 +2233,25 @@ label {
   }
   .panel {
     padding: 10px;
+  }
+  .mobile-shelf-view,
+  .mobile-project-view {
+    padding: 12px 10px;
+    width: 100%;
+    max-width: 100%;
+  }
+  .app h1 {
+    font-size: 20px;
+    margin-bottom: 10px;
+  }
+  .shelf-title {
+    font-size: 18px;
+  }
+  .shelf-subtitle {
+    font-size: 11px;
+  }
+  .bookshelf-grid {
+    gap: 14px 10px;
   }
   .btn {
     font-size: 13px;
