@@ -1986,7 +1986,30 @@ function App() {
               <button className="btn btn-secondary" onClick={handleOpenSettings}>编辑设定</button>
               <button className="btn btn-secondary" onClick={handleRefresh}>刷新</button>
             </div>
-            {projectDetails?.chapters && projectDetails.chapters.length > 0 ? (
+
+            {/* Settings Editor — mobile project view */}
+            {showSettings && (
+              <div className="settings-panel">
+                <h3>项目设定</h3>
+                <label>世界观设定</label>
+                <textarea className="settings-input" value={editWorld} onChange={(e) => setEditWorld(e.target.value)} rows={3} placeholder="世界观设定..." />
+                <label>人物设定</label>
+                <textarea className="settings-input" value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} rows={3} placeholder="人物设定..." />
+                <label>写作规则</label>
+                <textarea className="settings-input" value={editStyle} onChange={(e) => setEditStyle(e.target.value)} rows={5} placeholder="写作规则、文风要求..." />
+                <label>剧情摘要</label>
+                <textarea className="settings-input" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} rows={5} placeholder="剧情摘要..." />
+                <label>项目编辑记忆</label>
+                <div className="settings-hint">记录跨章节人物关系、伏笔、长期写作风险和编辑判断。不同于剧情摘要：摘要记录剧情事实，这里记录编辑分析。</div>
+                <textarea className="settings-input" value={editEditorialMemory} onChange={(e) => setEditEditorialMemory(e.target.value)} rows={6} placeholder="项目编辑记忆..." />
+                <div className="form-actions">
+                  <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
+                  <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>关闭</button>
+                </div>
+              </div>
+            )}
+
+            {!showSettings && (projectDetails?.chapters && projectDetails.chapters.length > 0 ? (
               <ul className="mobile-chapter-list">
                 {projectDetails.chapters.map((ch, index) => {
                   const cf = ch.fileName || ch.filename;
@@ -2018,7 +2041,7 @@ function App() {
                   开始写第一章
                 </button>
               </div>
-            )}
+            ))}
           </div>
         )}
 
