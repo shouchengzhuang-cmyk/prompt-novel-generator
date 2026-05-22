@@ -1441,6 +1441,36 @@ label {
     color: #3b5de7;
   }
 
+  /* 移动端折叠面板切换按钮 */
+  .mobile-section-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 14px;
+    margin-top: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #4a6cf7;
+    background: #f0f4ff;
+    border: 1px solid #d0d8ff;
+    border-radius: 8px;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .mobile-section-toggle:hover {
+    background: #e6ecff;
+  }
+
+  /* 移动端章节页：正文优先显示 */
+  .panel-main {
+    display: flex;
+    flex-direction: column;
+  }
+  .panel-main > .reading-section {
+    order: -1;
+  }
+
   /* 移动端编辑器视图 */
   .mobile-editor-view .editor-room {
     border: none;

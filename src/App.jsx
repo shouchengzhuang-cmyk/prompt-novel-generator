@@ -98,6 +98,8 @@ function App() {
   // Mobile view routing: 'home' | 'chapter' | 'editor'  (仅移动端使用)
   const [mobileView, setMobileView] = useState('home');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
+  const [mobileGenerateOpen, setMobileGenerateOpen] = useState(false);
+  const [mobileVariantsOpen, setMobileVariantsOpen] = useState(false);
 
   // Writing preferences
   const [writingPrefs, setWritingPrefs] = useState({
@@ -1074,7 +1076,7 @@ function App() {
                               onClick={() => {
                               if (cf) {
                                 handleReadChapter(cf);
-                                if (isMobile) setMobileView('chapter');
+                                if (isMobile) { setMobileView('chapter'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }
                               }
                             }}
                             >
@@ -1234,7 +1236,7 @@ function App() {
           <>
           {/* Mobile: back button on chapter view */}
           {isMobile && mobileView === 'chapter' && (
-            <button className="mobile-back-btn" onClick={() => setMobileView('home')}>
+            <button className="mobile-back-btn" onClick={() => { setMobileView('home'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }}>
               ← 返回列表
             </button>
           )}
@@ -1294,7 +1296,7 @@ function App() {
             </div>
           ) : (
             <>
-              <h2>生成小说</h2>
+              {!isMobile && <h2>生成小说</h2>}
 
               {currentProject ? (
             <>
@@ -1383,6 +1385,17 @@ function App() {
                 </div>
               )}
 
+              {/* Mobile: generate settings toggle */}
+              {isMobile && (
+                <button
+                  className="mobile-section-toggle"
+                  onClick={() => setMobileGenerateOpen(!mobileGenerateOpen)}
+                >
+                  续写设置 {mobileGenerateOpen ? '▲' : '▼'}
+                </button>
+              )}
+              {!(isMobile && !mobileGenerateOpen) && (
+              <div className="generate-panel-area">
               <label>续写要求</label>
               <textarea
                 className="prompt-input"
@@ -1437,6 +1450,8 @@ function App() {
                 onComplete={handleGenProgressDone}
               />
               {error && <div className="error">{error}</div>}
+              </div>
+              )}
 
               {/* Reading Section */}
               {readingChapter && (
@@ -1675,13 +1690,13 @@ function App() {
                     const nextFn = next ? (next.fileName || next.filename) : null;
                     return (
                       <div className="chapter-bottom-nav">
-                        <button className="btn" disabled={!prev} onClick={() => prevFn && handleReadChapter(prevFn)}>
+                        <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           上一章
                         </button>
                         <button className="btn btn-secondary" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
                           回目录
                         </button>
-                        <button className="btn" disabled={!next} onClick={() => nextFn && handleReadChapter(nextFn)}>
+                        <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           下一章
                         </button>
                       </div>
@@ -1703,6 +1718,16 @@ function App() {
 
                   {/* Variants list */}
                   {variants.length > 0 && (
+                    <>
+                      {isMobile && (
+                        <button
+                          className="mobile-section-toggle"
+                          onClick={() => setMobileVariantsOpen(!mobileVariantsOpen)}
+                        >
+                          候选版本（{variants.length}） {mobileVariantsOpen ? '▲' : '▼'}
+                        </button>
+                      )}
+                      {!(isMobile && !mobileVariantsOpen) && (
                     <div className="variants-section">
                       <div className="panel-header" style={{ marginTop: 16 }}>
                         <h3>候选版本（{variants.length}）</h3>
@@ -1760,6 +1785,8 @@ function App() {
                         });
                       })()}
                     </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
