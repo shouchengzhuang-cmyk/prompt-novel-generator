@@ -34,6 +34,7 @@ function normalizeChapters(chapters) {
 
 function App() {
   const [projects, setProjects] = useState([]);
+  const [projectChapterCounts, setProjectChapterCounts] = useState({});
   const [currentProject, setCurrentProject] = useState(null);
   const [projectDetails, setProjectDetails] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -95,11 +96,12 @@ function App() {
   const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
   const [isChaptersCollapsed, setIsChaptersCollapsed] = useState(false);
 
-  // Mobile view routing: 'home' | 'chapter' | 'editor'  (仅移动端使用)
-  const [mobileView, setMobileView] = useState('home');
+  // Mobile view routing: 'shelf' | 'project' | 'chapter' | 'editor'
+  const [mobileView, setMobileView] = useState('shelf');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
   const [mobileGenerateOpen, setMobileGenerateOpen] = useState(false);
   const [mobileVariantsOpen, setMobileVariantsOpen] = useState(false);
+  const [mobileShelfMenu, setMobileShelfMenu] = useState(null);
 
   // Writing preferences
   const [writingPrefs, setWritingPrefs] = useState({
@@ -210,7 +212,7 @@ function App() {
     setEditingProjectName(null);
     setDebugPromptInfo(null);
     resetEditorRoom();
-    setMobileView('home');
+    if (isMobile) setMobileView('project');
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
     setEditCharacters('');
@@ -222,6 +224,7 @@ function App() {
       // Normalize: ensure chapters have fileName regardless of backend field name
       if (data.chapters) data.chapters = normalizeChapters(data.chapters);
       setProjectDetails(data);
+      setProjectChapterCounts(prev => ({ ...prev, [name]: data.chapters ? data.chapters.length : 0 }));
       setDisplayContent(data.recentContent || '');
     } catch (err) {
       setError(err.message);
@@ -425,7 +428,7 @@ function App() {
   // ---- Delete a project ----
   const handleDeleteProject = async (name, e) => {
     e.stopPropagation();
-    if (!confirm(`确定删除项目【${name}】吗？这会删除该项目的所有章节和设定，且不可恢复。`)) return;
+    if (!confirm(`确定删除项目【${name}】吗？这会删除该项目的所有章节和设定，且不可恢复。`)) return false;
     setError('');
     try {
       await safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`, {
@@ -457,8 +460,21 @@ function App() {
       await fetchProjects();
       setError('项目已删除');
       setTimeout(() => setError(''), 3000);
+      return true;
     } catch (err) {
       setError(err.message);
+      return false;
+    }
+  };
+
+  // Mobile shelf: delete project with view state cleanup
+  const handleShelfDeleteProject = async (name) => {
+    setMobileShelfMenu(null);
+    const ok = await handleDeleteProject(name, { stopPropagation() {} });
+    if (ok && isMobile) {
+      setMobileView('shelf');
+      setMobileGenerateOpen(false);
+      setMobileVariantsOpen(false);
     }
   };
 
@@ -978,8 +994,8 @@ function App() {
     <div className="app">
       <h1>小墨匣</h1>
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
-        {/* ===== Left Panel: Projects (desktop always, mobile home only) ===== */}
-        {!(isMobile && mobileView !== 'home') && (isSidebarCollapsed && !isMobile ? (
+        {/* ===== Left Panel: Projects (desktop only) ===== */}
+        {!isMobile && (isSidebarCollapsed ? (
           <button
             className="sidebar-collapsed-toggle"
             onClick={() => setIsSidebarCollapsed(false)}
@@ -1029,7 +1045,7 @@ function App() {
                     ))}
                   </div>
 
-                  <button className="btn btn-secondary" onClick={() => { setShowCreateForm(true); setCreateError(''); if (isMobile) setMobileView('chapter'); }}>
+                  <button className="btn btn-secondary" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>
                     + 创建项目
                   </button>
                 </div>
@@ -1101,8 +1117,8 @@ function App() {
           </aside>
         ))}
 
-        {/* ===== Main Panel (desktop always, mobile hidden on home) ===== */}
-        {!(isMobile && mobileView === 'home') && (
+        {/* ===== Main Panel (desktop always, mobile hidden on shelf/project) ===== */}
+        {!(isMobile && (mobileView === 'shelf' || mobileView === 'project')) && (
         <div className="panel panel-main">
           {/* Mobile: editor view — standalone */}
           {isMobile && mobileView === 'editor' && readingChapter ? (
@@ -1177,9 +1193,6 @@ function App() {
 
                 {editorRoomTab === 'chat' && (
                   <div className="editor-room-chat">
-                    <div className="editor-chat-toolbar">
-                      <span className="hint">共 {editorChats.length} 条消息</span>
-                    </div>
                     <div className="editor-chat-messages" ref={editorChatListRef}>
                       {editorChats.length > 0 ? (
                         editorChats.map((chat) => (
@@ -1202,7 +1215,7 @@ function App() {
                           </div>
                         ))
                       ) : (
-                        <p className="hint editor-chat-empty">还没有对话。可以问编辑：这一章节奏是否太慢？人物动机是否站得住？</p>
+                        <p className="hint editor-chat-empty">暂无对话</p>
                       )}
                       {editorChatSending && (
                         <div className="editor-chat-row editor">
@@ -1223,10 +1236,9 @@ function App() {
                           onChange={(e) => setEditorChatInput(e.target.value)}
                           onKeyDown={handleEditorChatKeyDown}
                           placeholder="和随书编辑聊聊这一章……"
-                          rows={3}
+                          rows={1}
                           disabled={editorChatSending}
                         />
-                        <span className="editor-chat-hint">Enter 发送，Shift + Enter 换行</span>
                       </div>
                       <button className="btn" onClick={handleSendEditorChat} disabled={editorChatSending || !editorChatInput.trim()}>
                         {editorChatSending ? '发送中...' : '发送'}
@@ -1240,7 +1252,7 @@ function App() {
           <>
           {/* Mobile: back button on chapter view */}
           {isMobile && mobileView === 'chapter' && (
-            <button className="mobile-back-btn" onClick={() => { setMobileView('home'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }}>
+            <button className="mobile-back-btn" onClick={() => { setMobileView('project'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }}>
               ← 返回列表
             </button>
           )}
@@ -1624,7 +1636,6 @@ function App() {
                     {editorRoomTab === 'chat' && (
                       <div className="editor-room-chat">
                         <div className="editor-chat-toolbar">
-                          <span className="hint">当前章节独立保存，共 {editorChats.length} 条消息。</span>
                           <button className="btn btn-secondary" onClick={handleClearEditorChats} disabled={editorChatSending || editorChats.length === 0}>
                             清空对话
                           </button>
@@ -1651,7 +1662,7 @@ function App() {
                               </div>
                             ))
                           ) : (
-                            <p className="hint editor-chat-empty">还没有对话。可以问编辑：这一章节奏是否太慢？人物动机是否站得住？</p>
+                            <p className="hint editor-chat-empty">暂无对话</p>
                           )}
                           {editorChatSending && (
                             <div className="editor-chat-row editor">
@@ -1675,8 +1686,7 @@ function App() {
                               rows={3}
                               disabled={editorChatSending}
                             />
-                            <span className="editor-chat-hint">Enter 发送，Shift + Enter 换行</span>
-                          </div>
+                              </div>
                           <button className="btn" onClick={handleSendEditorChat} disabled={editorChatSending || !editorChatInput.trim()}>
                             {editorChatSending ? '发送中...' : '发送'}
                           </button>
@@ -1701,7 +1711,7 @@ function App() {
                         <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           上一章
                         </button>
-                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { setMobileView('home'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
+                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { setMobileView('project'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
                           {isMobile ? '目录' : '回目录'}
                         </button>
                         <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
@@ -1816,6 +1826,121 @@ function App() {
           )}
           </div>
           )}
+
+        {/* ===== Mobile: Shelf View ===== */}
+        {isMobile && mobileView === 'shelf' && (
+          <div className="panel mobile-shelf-view">
+            {showCreateForm ? (
+              <div className="create-panel">
+                <h2>创建新项目</h2>
+                <label>项目名</label>
+                <input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="输入项目名称" />
+                <label>世界观设定</label>
+                <textarea value={newWorld} onChange={(e) => setNewWorld(e.target.value)} placeholder="描述世界观设定..." rows={4} />
+                <label>人物设定</label>
+                <textarea value={newCharacters} onChange={(e) => setNewCharacters(e.target.value)} placeholder="描述主要人物..." rows={4} />
+                <label>写作规则 / 风格要求</label>
+                <textarea value={newStyle} onChange={(e) => setNewStyle(e.target.value)} placeholder="文风要求、篇幅要求、写作规则…" rows={4} />
+                <label>剧情摘要（可选）</label>
+                <textarea value={newSummary} onChange={(e) => setNewSummary(e.target.value)} placeholder="剧情摘要…" rows={3} />
+                {createError && <div className="error">{createError}</div>}
+                <div className="form-actions">
+                  <button className="btn" disabled={creating} onClick={handleCreateProject}>{creating ? '创建中...' : '创建'}</button>
+                  <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); setNewProjectName(''); setNewWorld(''); setNewCharacters(''); setNewStyle(''); setNewSummary(''); }}>取消</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <h2 className="shelf-title">我的书架</h2>
+                <p className="shelf-subtitle">选择一个故事继续写</p>
+                <div className="bookshelf-grid">
+                  {projects.length === 0 && (
+                    <p className="hint" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>还没有项目，创建一个吧</p>
+                  )}
+                  {projects.map((name) => {
+                    const count = projectChapterCounts[name];
+                    const menuOpen = mobileShelfMenu === name;
+                    return (
+                    <div key={name} className="book-item" onClick={() => { setMobileShelfMenu(null); handleSelectProject(name); }}>
+                      <div className={'book-cover' + (currentProject === name ? ' current' : '')}>
+                        <span className="book-cover-char">{name.charAt(0)}</span>
+                        <button
+                          className="book-menu-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMobileShelfMenu(menuOpen ? null : name);
+                          }}
+                        >⋯</button>
+                        {menuOpen && (
+                          <div className="book-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                            <button className="book-menu-delete" onClick={() => handleShelfDeleteProject(name)}>删除</button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="book-title">{name}</div>
+                      <div className="book-meta">{count != null ? `${count} 章` : ''}</div>
+                    </div>
+                    );
+                  })}
+                </div>
+                <button className="btn-create-project" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>
+                  + 创建新项目
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ===== Mobile: Project View (chapter list) ===== */}
+        {isMobile && mobileView === 'project' && currentProject && (
+          <div className="panel mobile-project-view">
+            <button className="mobile-back-btn" onClick={() => setMobileView('shelf')}>
+              ← 返回书架
+            </button>
+            <h2 className="mobile-project-title">{currentProject}</h2>
+            <div className="mobile-project-tools">
+              <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
+                {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
+              </button>
+              <button className="btn btn-secondary" onClick={handleOpenSettings}>编辑设定</button>
+              <button className="btn btn-secondary" onClick={handleRefresh}>刷新</button>
+            </div>
+            {projectDetails?.chapters && projectDetails.chapters.length > 0 ? (
+              <ul className="mobile-chapter-list">
+                {projectDetails.chapters.map((ch, index) => {
+                  const cf = ch.fileName || ch.filename;
+                  const key = cf || `chapter-${index}`;
+                  return (
+                    <li
+                      key={key}
+                      className={'mobile-chapter-item' + (cf && readingChapter === cf ? ' active' : '') + (!cf ? ' disabled' : '')}
+                      onClick={() => {
+                        if (cf) {
+                          handleReadChapter(cf);
+                          setMobileView('chapter');
+                          setMobileGenerateOpen(false);
+                          setMobileVariantsOpen(false);
+                        }
+                      }}
+                    >
+                      <span className="mobile-chapter-index">{cf ? cf.slice(0, 3) : '--'}</span>
+                      <span className="mobile-chapter-title">{cf ? (ch.title || cf.replace(/\.txt$/, '')) : '无效章节'}</span>
+                      {ch.staleAfterRewrite && <span className="chapter-stale-badge">待检查</span>}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="mobile-chapter-empty">
+                <p className="hint">暂无章节</p>
+                <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { setMobileView('chapter'); setMobileGenerateOpen(true); }}>
+                  开始写第一章
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         </div>
 
       {notification && (
