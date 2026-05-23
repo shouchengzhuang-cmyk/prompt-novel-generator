@@ -1530,30 +1530,39 @@ label {
 
 /* Streaming preview */
 .streaming-preview {
-  margin-top: 16px;
-  border: 1px solid #e3e7ef;
-  border-radius: 8px;
+  margin: 16px 0;
+  border: 2px solid #818cf8;
+  border-radius: 10px;
   overflow: hidden;
+  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.08);
+  animation: streamingPreviewIn 0.3s ease;
+}
+
+@keyframes streamingPreviewIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .streaming-preview-header {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background: #f0f4ff;
-  border-bottom: 1px solid #e3e7ef;
-  font-size: 13px;
-  color: #4a6cf7;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+  border-bottom: 1px solid #cfd8ff;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4338ca;
 }
 
 .streaming-preview-content {
-  padding: 16px;
-  max-height: 420px;
+  padding: 20px 24px;
+  max-height: 50vh;
+  min-height: 100px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  line-height: 1.9;
+  line-height: 2;
   font-size: 15px;
   color: #2f3640;
   background: #fff;
@@ -1613,6 +1622,20 @@ label {
     width: 44px;
     height: 44px;
     font-size: 20px;
+  }
+  .streaming-preview {
+    margin: 12px 0;
+    border-radius: 8px;
+  }
+  .streaming-preview-header {
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+  .streaming-preview-content {
+    padding: 14px 16px;
+    max-height: 55vh;
+    font-size: 16px;
+    line-height: 1.85;
   }
   .app {
     padding: 12px;
@@ -1937,6 +1960,19 @@ label {
   }
   .mobile-chapter-dark .generate-panel-area label {
     color: #c0c4d0;
+  }
+  .mobile-chapter-dark .streaming-preview {
+    border-color: #4a4a6a;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  }
+  .mobile-chapter-dark .streaming-preview-header {
+    background: linear-gradient(135deg, #1e2040 0%, #252850 100%);
+    border-bottom-color: #3a3a5a;
+    color: #a5b4fc;
+  }
+  .mobile-chapter-dark .streaming-preview-content {
+    background: #1e1e2e;
+    color: #d4d4dc;
   }
   .mobile-chapter-dark .writing-controls {
     background: #161822;

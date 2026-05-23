@@ -169,6 +169,7 @@ function App() {
   const editorNoteReqId = useRef(0);
   const generatingRef = useRef(false);
   const [streamingContent, setStreamingContent] = useState('');
+  const [streamingChapterNum, setStreamingChapterNum] = useState('');
 
   // Editor room
   const [editorRoomTab, setEditorRoomTab] = useState('notes');
@@ -182,6 +183,7 @@ function App() {
   const editorChatListRef = useRef(null);
   const readingSectionRef = useRef(null);
   const readingContentRef = useRef(null);
+  const streamingPreviewRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -215,6 +217,13 @@ function App() {
   useEffect(() => {
     setShowScrollTop(false);
   }, [readingChapter]);
+
+  // 流式预览出现时自动滚动到可见区域
+  useEffect(() => {
+    if (streamingContent && streamingPreviewRef.current) {
+      streamingPreviewRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [streamingContent ? 'has-content' : 'empty']);
 
   const handleScrollToTop = () => {
     if (isMobile) {
@@ -356,10 +365,18 @@ function App() {
       return;
     }
 
+    // 计算下一章编号
+    const nums = chapters
+      .map((ch) => parseInt((ch.fileName || ch.filename || '').replace('.txt', ''), 10))
+      .filter((n) => !isNaN(n));
+    const nextNum = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+    const nextNumStr = String(nextNum).padStart(3, '0');
+
     setError('');
     setLoading(true);
     generatingRef.current = true;
     setStreamingContent('');
+    setStreamingChapterNum(nextNumStr);
     setGenProgress({ visible: true, mode: 'generate', status: 'streaming', errorMessage: '' });
 
     let fileName, content, title, debugInfo;
@@ -399,7 +416,6 @@ function App() {
             const event = JSON.parse(trimmed.slice(6));
             if (event.type === 'chunk') {
               streamedContent += event.content;
-              setStreamingContent(streamedContent);
             } else if (event.type === 'done') {
               fileName = event.fileName;
               content = event.content;
@@ -412,12 +428,18 @@ function App() {
             if (e.message && !e.message.includes('JSON')) throw e;
           }
         }
+
+        // 每次 reader.read() 后统一更新状态，让 React 在 await 间隙渲染
+        if (streamedContent) {
+          setStreamingContent(streamedContent);
+        }
       }
 
       if (!fileName) throw new Error('流式生成未完成');
     } catch (streamErr) {
       console.warn('流式生成失败，回退到普通生成:', streamErr);
       setStreamingContent('');
+      setStreamingChapterNum('');
 
       // 回退到非流式生成
       setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
@@ -453,6 +475,7 @@ function App() {
 
     // 公共完成逻辑
     setStreamingContent('');
+    setStreamingChapterNum('');
     setDisplayContent((prev) => {
       const sep = prev ? '\n\n' : '';
       return prev + sep + '--- ' + fileName + ' ---\n' + content;
@@ -1568,6 +1591,17 @@ function App() {
                 </div>
               )}
 
+              {/* 流式生成预览 — 移动端在续写设置上方，桌面端在最前面 */}
+              {(streamingContent || (loading && streamingChapterNum)) && (
+                <div className="streaming-preview" ref={streamingPreviewRef}>
+                  <div className="streaming-preview-header">
+                    <div className="editor-note-loading-spinner"></div>
+                    <span>第 {streamingChapterNum} 章 生成中...</span>
+                  </div>
+                  <div className="streaming-preview-content">{streamingContent || '（正在连接模型，请稍候...）'}</div>
+                </div>
+              )}
+
               {/* Mobile: generate settings toggle */}
               {isMobile && (
                 <button
@@ -1634,17 +1668,6 @@ function App() {
               />
               {error && <div className="error">{error}</div>}
               </div>
-              )}
-
-              {/* Streaming preview */}
-              {streamingContent && (
-                <div className="streaming-preview">
-                  <div className="streaming-preview-header">
-                    <div className="editor-note-loading-spinner"></div>
-                    <span>正在生成...</span>
-                  </div>
-                  <div className="streaming-preview-content">{streamingContent}</div>
-                </div>
               )}
 
               {/* Reading Section */}
