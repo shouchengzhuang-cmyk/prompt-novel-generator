@@ -49,10 +49,6 @@ function isValidChapterFileName(fileName) {
   return /^\d{3,}\.txt$/.test(fileName);
 }
 
-function shouldLoadFullChapterForEditorChat(message) {
-  return /全文|全章|这一章|这章|本章|章节内容|章节正文|正文|最后一个字|最后一句|最后一段|结尾|开头|分析这章|分析本章|看看这章|读一下|写到哪里|讲到哪里|说到哪里/.test(message);
-}
-
 function formatEditorChatFullChapter(chapterContent) {
   if (chapterContent.length <= EDITOR_CHAT_FULL_CHAPTER_LIMIT) {
     return chapterContent;
@@ -907,137 +903,141 @@ app.put('/api/projects/:projectName', async (req, res) => {
   }
 });
 
-// ---- POST /api/generate ----
+// ---- 生成上下文准备（供 /api/generate 和 /api/generate-stream 共用）----
 
-app.post('/api/generate', async (req, res) => {
-  const { projectName, userPrompt, model } = req.body;
-
+async function prepareGenerationContext({ projectName, userPrompt, model }) {
   if (!projectName || !projectName.trim()) {
-    return res.status(400).json({ error: '缺少项目名' });
+    const err = new Error('缺少项目名');
+    err.statusCode = 400;
+    throw err;
   }
   if (!userPrompt || !userPrompt.trim()) {
-    return res.status(400).json({ error: '缺少续写要求' });
+    const err = new Error('缺少续写要求');
+    err.statusCode = 400;
+    throw err;
   }
 
   const allowedModels = ['deepseek-v4-flash', 'deepseek-v4-pro'];
   const effectiveModel = allowedModels.includes(model) ? model : 'deepseek-v4-flash';
 
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
+  const projectDir = safeProjectDir(projectName);
   const chaptersDir = path.join(projectDir, 'chapters');
 
-  try {
-    // 1. Read context files
-    const [world, characters, summary, style] = await Promise.all([
-      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
-    ]);
-    const editorialMemoryForPrompt = await readEditorialMemory(projectName);
+  // 1. Read context files
+  const [world, characters, summary, style] = await Promise.all([
+    fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
+    fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+  ]);
+  const editorialMemoryForPrompt = await readEditorialMemory(projectName);
 
-    // 2. Read latest chapters for context (respecting activeVersionId)
-    let recentChapters = [];
-    try {
-      await ensureDir(chaptersDir);
-      const files = await fs.readdir(chaptersDir);
-      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort().slice(-RECENT_CHAPTER_LIMIT);
-      const indexEntries = await readChapterIndex(chaptersDir);
-      const indexMap = {};
-      for (const entry of indexEntries) {
-        indexMap[entry.fileName] = entry;
+  // 2. Read latest chapters for context (respecting activeVersionId)
+  let recentChapters = [];
+  try {
+    await ensureDir(chaptersDir);
+    const files = await fs.readdir(chaptersDir);
+    const txtFiles = files.filter((f) => f.endsWith('.txt')).sort().slice(-RECENT_CHAPTER_LIMIT);
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const indexMap = {};
+    for (const entry of indexEntries) {
+      indexMap[entry.fileName] = entry;
+    }
+    for (const f of txtFiles) {
+      const entry = indexMap[f];
+      if (entry?.staleAfterRewrite === true) {
+        continue;
       }
-      for (const f of txtFiles) {
-        const entry = indexMap[f];
-        if (entry?.staleAfterRewrite === true) {
-          continue;
-        }
-        let content;
-        // If this chapter has an active version pointing to a variant, load variant content
-        if (entry && entry.activeVersionId && entry.activeVersionId !== 'v-original') {
-          const variants = await readVariants(chaptersDir, f);
-          const activeVariant = variants.find((v) => v.id === entry.activeVersionId);
-          if (activeVariant) {
-            content = activeVariant.content;
-          } else {
-            content = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
-          }
+      let content;
+      if (entry && entry.activeVersionId && entry.activeVersionId !== 'v-original') {
+        const variants = await readVariants(chaptersDir, f);
+        const activeVariant = variants.find((v) => v.id === entry.activeVersionId);
+        if (activeVariant) {
+          content = activeVariant.content;
         } else {
           content = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
         }
-        recentChapters.push({ filename: f, content });
+      } else {
+        content = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
       }
-    } catch {
-      await ensureDir(chaptersDir);
+      recentChapters.push({ filename: f, content });
     }
+  } catch {
+    await ensureDir(chaptersDir);
+  }
 
-    // 3. Build messages from Vault template
-    const recentChaptersText = recentChapters.map((ch) => `--- ${ch.filename} ---\n${ch.content}`).join('\n\n');
-    const promptInfo = await buildPrompt('novel.generateChapter', {
-      world: world || '',
-      characters: characters || '',
-      style: style || '',
-      summary: summary || '',
-      editorialMemory: editorialMemoryForPrompt || '',
-      recentChapters: recentChaptersText,
-      userPrompt: userPrompt.trim(),
-    });
-    const { systemContent, userContent, templateId, templateTitle, usedFallback } = promptInfo;
-    const debugPromptInfo = { taskType: 'novel.generateChapter', templateId, templateTitle, usedFallback };
+  // 3. Build messages from Vault template
+  const recentChaptersText = recentChapters.map((ch) => `--- ${ch.filename} ---\n${ch.content}`).join('\n\n');
+  const promptInfo = await buildPrompt('novel.generateChapter', {
+    world: world || '',
+    characters: characters || '',
+    style: style || '',
+    summary: summary || '',
+    editorialMemory: editorialMemoryForPrompt || '',
+    recentChapters: recentChaptersText,
+    userPrompt: userPrompt.trim(),
+  });
+  const { systemContent, userContent, templateId, templateTitle, usedFallback } = promptInfo;
+  const debugPromptInfo = { taskType: 'novel.generateChapter', templateId, templateTitle, usedFallback };
 
-    console.log(`[生成] 项目=${projectName} taskType=novel.generateChapter templateId=${templateId || '(无)'} usedFallback=${usedFallback}`);
-    if (usedFallback) {
-      console.warn(`[生成] ⚠ 项目=${projectName} taskType=novel.generateChapter 使用了 fallback 生成，未使用 Vault 模板`);
-    }
+  console.log(`[生成] 项目=${projectName} taskType=novel.generateChapter templateId=${templateId || '(无)'} usedFallback=${usedFallback}`);
+  if (usedFallback) {
+    console.warn(`[生成] ⚠ 项目=${projectName} taskType=novel.generateChapter 使用了 fallback 生成，未使用 Vault 模板`);
+  }
 
-    const messages = [
-      { role: 'system', content: systemContent },
-      { role: 'user', content: userContent },
-    ];
+  const messages = [
+    { role: 'system', content: systemContent },
+    { role: 'user', content: userContent },
+  ];
 
-    // 3b. Inject editorial-memory.md into user prompt (after summary, before recent chapters)
-    if (editorialMemoryForPrompt) {
-      const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForPrompt, 2000);
-      if (selectedMemory) {
-        const sectionText = `\n\n## 项目编辑记忆\n${selectedMemory}\n\n`;
-        let currentContent = messages[1].content;
-        // Try to insert before recent chapters section
-        const chapterHeaders = ['## 最近章节', '## 前文章节', '## 前文'];
-        let injected = false;
-        for (const h of chapterHeaders) {
-          if (currentContent.includes(h)) {
-            currentContent = currentContent.replace(h, sectionText + h);
-            injected = true;
-            break;
-          }
-        }
-        if (!injected) {
-          // Fallback: inject before user prompt section
-          currentContent = currentContent.replace('## 本次续写要求', sectionText + '## 本次续写要求');
-        }
-        messages[1] = { role: 'user', content: currentContent };
-        console.log(`[编辑记忆] 已并入生成 prompt (${selectedMemory.length} 字)`);
-      }
-    }
-
-    // 4a. Generate editor note from latest chapter and append to messages
-    try {
-      if (recentChapters.length > 0) {
-        const lastCh = recentChapters[recentChapters.length - 1];
-        const note = await buildEditorNote(projectName, lastCh.filename);
-        if (note) {
-          const suffix = `\n\n【后台编辑给下一章生成模型的提醒】\n${note}\n\n以上是内部编辑提醒，只用于指导生成，不要出现在正文中。`;
-          messages[1] = { role: 'user', content: messages[1].content + suffix };
-          console.log(`[编辑备注] 已并入生成 prompt`);
+  // 3b. Inject editorial-memory.md into user prompt
+  if (editorialMemoryForPrompt) {
+    const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForPrompt, 2000);
+    if (selectedMemory) {
+      const sectionText = `\n\n## 项目编辑记忆\n${selectedMemory}\n\n`;
+      let currentContent = messages[1].content;
+      const chapterHeaders = ['## 最近章节', '## 前文章节', '## 前文'];
+      let injected = false;
+      for (const h of chapterHeaders) {
+        if (currentContent.includes(h)) {
+          currentContent = currentContent.replace(h, sectionText + h);
+          injected = true;
+          break;
         }
       }
-    } catch (noteErr) {
-      console.warn(`[编辑备注] 生成失败（不影响主流程）: ${noteErr.message}`);
+      if (!injected) {
+        currentContent = currentContent.replace('## 本次续写要求', sectionText + '## 本次续写要求');
+      }
+      messages[1] = { role: 'user', content: currentContent };
+      console.log(`[编辑记忆] 已并入生成 prompt (${selectedMemory.length} 字)`);
     }
+  }
+
+  // 4. Generate editor note from latest chapter and append to messages
+  try {
+    if (recentChapters.length > 0) {
+      const lastCh = recentChapters[recentChapters.length - 1];
+      const note = await buildEditorNote(projectName, lastCh.filename);
+      if (note) {
+        const suffix = `\n\n【后台编辑给下一章生成模型的提醒】\n${note}\n\n以上是内部编辑提醒，只用于指导生成，不要出现在正文中。`;
+        messages[1] = { role: 'user', content: messages[1].content + suffix };
+        console.log(`[编辑备注] 已并入生成 prompt`);
+      }
+    }
+  } catch (noteErr) {
+    console.warn(`[编辑备注] 生成失败（不影响主流程）: ${noteErr.message}`);
+  }
+
+  return { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo };
+}
+
+// ---- POST /api/generate ----
+
+app.post('/api/generate', async (req, res) => {
+  const { projectName, userPrompt, model } = req.body;
+
+  try {
+    const { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo } = await prepareGenerationContext({ projectName, userPrompt, model });
 
     // 4. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
@@ -1138,6 +1138,202 @@ app.post('/api/generate', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message || '服务器内部错误' });
+  }
+});
+
+// ---- POST /api/generate-stream (流式生成) ----
+
+app.post('/api/generate-stream', async (req, res) => {
+  const { projectName, userPrompt, model } = req.body;
+
+  // 设置 SSE 响应头
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+
+  const sendEvent = (data) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  let projectDir, chaptersDir, fullContent;
+  try {
+    const ctx = await prepareGenerationContext({ projectName, userPrompt, model });
+    projectDir = ctx.projectDir;
+    chaptersDir = ctx.chaptersDir;
+
+    // 流式调用 DeepSeek
+    const dsResponse = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: ctx.effectiveModel,
+        messages: ctx.messages,
+        stream: true,
+      }),
+    });
+
+    if (!dsResponse.ok) {
+      const errData = await dsResponse.json().catch(() => ({}));
+      sendEvent({ type: 'error', message: errData.error?.message || 'DeepSeek API 请求失败' });
+      res.end();
+      return;
+    }
+
+    // 读取 DeepSeek 的 SSE 流，逐块转发给前端
+    fullContent = '';
+    const reader = dsResponse.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+          const payload = trimmed.slice(6);
+          if (payload === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(payload);
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              fullContent += delta;
+              sendEvent({ type: 'chunk', content: delta });
+            }
+          } catch {
+            // 跳过无法解析的行
+          }
+        }
+      }
+    } finally {
+      try { reader.releaseLock(); } catch {}
+    }
+
+    if (!fullContent) {
+      sendEvent({ type: 'error', message: 'API 返回内容为空' });
+      res.end();
+      return;
+    }
+
+    // 泄漏检测
+    const LEAK_PHRASES = [
+      '后台编辑给下一章生成模型的提醒',
+      '内部编辑提醒',
+      '编辑备注',
+      '只用于指导生成',
+      '不要出现在正文中',
+    ];
+    if (LEAK_PHRASES.some((p) => fullContent.includes(p))) {
+      sendEvent({ type: 'error', message: '生成内容包含编辑备注泄漏词，已拦截保存。请重试。' });
+      res.end();
+      return;
+    }
+
+    // 保存章节
+    await ensureDir(chaptersDir);
+    let nextNum = 1;
+    try {
+      const files = await fs.readdir(chaptersDir);
+      const nums = files
+        .filter((f) => /^\d+\.txt$/.test(f))
+        .map((f) => parseInt(f, 10));
+      if (nums.length > 0) {
+        nextNum = Math.max(...nums) + 1;
+      }
+    } catch {
+      // first chapter
+    }
+
+    const filename = String(nextNum).padStart(3, '0') + '.txt';
+    await fs.writeFile(path.join(chaptersDir, filename), fullContent, 'utf-8');
+
+    // 提取标题并更新 index.json
+    const title = extractTitleFromContent(fullContent, nextNum);
+    const indexEntries = await readChapterIndex(chaptersDir);
+    const now = new Date().toISOString();
+    indexEntries.push({
+      fileName: filename,
+      title,
+      createdAt: now,
+      userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
+      activeVersionId: 'v-original',
+      versions: [
+        {
+          id: 'v-original',
+          title,
+          userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
+          createdAt: now,
+        },
+      ],
+    });
+    await writeChapterIndex(chaptersDir, indexEntries);
+
+    console.log(`[流式生成] 已保存章节 ${filename}`);
+
+    // 发送完成事件（包含完整内容和元数据）
+    sendEvent({ type: 'done', fileName: filename, title, content: fullContent, debugPromptInfo: ctx.debugPromptInfo });
+
+    // 后台异步更新
+    setImmediate(async () => {
+      try {
+        const oldSummary = await fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => '');
+        const summaryMessages = [
+          {
+            role: 'system',
+            content:
+              '你是长篇小说剧情摘要维护助手。你只更新剧情事实，不写正文，不评价作品。' +
+              '请把旧摘要和新章节内容合并压缩为新的 summary.md，使用中文，总长度控制在 800 字以内。',
+          },
+          {
+            role: 'user',
+            content:
+              '请根据旧 summary.md 和新章节内容，输出新的剧情摘要。\n\n' +
+              '要求：\n' +
+              '1. 不要写正文。\n' +
+              '2. 不要评价作品。\n' +
+              '3. 只更新剧情事实。\n' +
+              '4. 必须保留：已发生的关键事件、人物关系变化、重要物品/地点/秘密/伏笔、未解决悬念、当前时间线、下一章可接的位置。\n' +
+              '5. 总长度控制在 800 字以内。\n\n' +
+              `## 旧 summary.md\n${oldSummary || '（暂无）'}\n\n` +
+              `## 新章节 ${filename}\n${fullContent}`,
+          },
+        ];
+        const updatedSummary = await callDeepSeek('deepseek-v4-flash', summaryMessages);
+        await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
+        console.log(`[流式生成] 后台已更新摘要 项目=${projectName} 章节=${filename}`);
+      } catch (summaryErr) {
+        console.warn(`[流式生成] 后台摘要更新失败: ${summaryErr.message}`);
+      }
+
+      try {
+        await updateEditorialMemoryForChapter(projectName, filename);
+        console.log(`[流式生成] 后台已更新编辑记忆 章节=${filename}`);
+      } catch (memErr) {
+        console.warn(`[流式生成] 后台编辑记忆更新失败: ${memErr.message}`);
+      }
+    });
+
+    res.end();
+  } catch (err) {
+    console.error(`[流式生成] 错误:`, err);
+    if (!res.writableEnded) {
+      sendEvent({ type: 'error', message: err.message || '服务器内部错误' });
+      res.end();
+    }
   }
 });
 
@@ -2029,7 +2225,8 @@ function truncateAtSentence(text, maxLen) {
 // ---- POST /api/editor-chat ----
 
 app.post('/api/editor-chat', async (req, res) => {
-  const { projectName, chapterId, fileName, message } = req.body;
+  const { projectName, chapterId, fileName, message, contextMode = 'light' } = req.body;
+  const effectiveMode = ['light', 'normal', 'full'].includes(contextMode) ? contextMode : 'light';
   const trimmedMessage = typeof message === 'string' ? message.trim() : '';
 
   if (!projectName) {
@@ -2100,51 +2297,57 @@ app.post('/api/editor-chat', async (req, res) => {
     // index.json 读取失败不影响主流程
   }
 
-  // 判断是否进入分析模式：只有用户明确要求分析、审稿等时才允许结构化展开。
-  const isAnalysisMode = /分析|审稿|修改建议|逐段|评审|人物动机/.test(trimmedMessage)
-    || (trimmedMessage.length >= 30 && /问题|节奏|建议/.test(trimmedMessage));
-  const needsFullChapterContext = isAnalysisMode || shouldLoadFullChapterForEditorChat(trimmedMessage);
-
+  // 根据 contextMode 构建不同粒度的上下文
   const recentUserMessages = editorChats
     .filter((chat) => chat.role === 'user')
     .slice(-4)
     .map((chat) => `用户：${chat.content}`)
     .join('\n');
 
-  let contextText = '';
-  if (world) contextText += `## 世界观设定\n${world.slice(0, 600)}\n\n`;
-  if (characters) contextText += `## 人物设定\n${characters.slice(0, 600)}\n\n`;
-  if (style) contextText += `## 写作规则\n${style.slice(0, 400)}\n\n`;
-  if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 600)}\n\n`;
-  if (editorialMemoryForChat) {
-    const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 800);
-    if (selectedMemory) {
-      contextText += `## 项目编辑记忆\n${selectedMemory}\n\n`;
-    }
-  }
-  if (recentUserMessages) {
-    contextText += `## 对话历史（仅用户消息）\n${recentUserMessages.slice(0, 800)}\n\n`;
-  }
+  const allHistory = editorChats.slice(-6).map((chat) => {
+    const roleName = chat.role === 'user' ? '用户' : '随书编辑';
+    return `${roleName}：${chat.content}`;
+  }).join('\n');
 
-  if (needsFullChapterContext) {
-    // 正文询问/分析模式：注入当前章节正文；只有分析模式额外加入编辑备注和最近完整对话。
-    if (isAnalysisMode) {
-      if (editorNotes.length > 0) {
-        contextText += `## 已有编辑备注\n${editorNotes.join('\n\n').slice(0, 2000)}\n\n`;
+  let contextText = '';
+
+  if (effectiveMode === 'light') {
+    // 闲聊模式：只发送项目名、章节标题、章节摘要、最近用户消息、编辑记忆摘要
+    contextText += `## 当前章节\n项目：${projectName}\n章节：${chapterTitle}（${resolvedFileName}）\n\n`;
+    if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 600)}\n\n`;
+    if (editorialMemoryForChat) {
+      const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 800);
+      if (selectedMemory) {
+        contextText += `## 编辑记忆摘要\n${selectedMemory}\n\n`;
       }
-      const allHistory = editorChats.slice(-6).map((chat) => {
-        const roleName = chat.role === 'user' ? '用户' : '随书编辑';
-        return `${roleName}：${chat.content}`;
-      }).join('\n');
-      if (allHistory) {
-        contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
-      }
+    }
+    if (recentUserMessages) {
+      contextText += `## 对话历史（仅用户消息）\n${recentUserMessages.slice(0, 800)}\n\n`;
+    }
+  } else if (effectiveMode === 'normal') {
+    // 分析模式：发送章节全文、必要设定、最近完整对话
+    if (world) contextText += `## 世界观设定\n${world.slice(0, 800)}\n\n`;
+    if (characters) contextText += `## 人物设定\n${characters.slice(0, 800)}\n\n`;
+    if (allHistory) {
+      contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
     }
     contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${formatEditorChatFullChapter(chapterContent)}\n\n`;
-  } else {
-    // 闲聊模式：只提供章节标题和开头片段作为背景，不注入完整全文
-    const preview = chapterContent.slice(0, 400).replace(/\n{3,}/g, '\n\n');
-    contextText += `## 当前章节\n项目：${projectName}\n章节：${chapterTitle}（${resolvedFileName}）\n开头片段：${preview}${chapterContent.length > 400 ? '\n（以上为章节开头片段，完整内容未加载）' : ''}\n\n`;
+  } else if (effectiveMode === 'full') {
+    // 全文模式：发送章节全文、世界观、人物、写作规则、剧情摘要、编辑记忆
+    if (world) contextText += `## 世界观设定\n${world.slice(0, 2000)}\n\n`;
+    if (characters) contextText += `## 人物设定\n${characters.slice(0, 2000)}\n\n`;
+    if (style) contextText += `## 写作规则\n${style.slice(0, 1200)}\n\n`;
+    if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 1200)}\n\n`;
+    if (editorialMemoryForChat) {
+      const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 2000);
+      if (selectedMemory) {
+        contextText += `## 项目编辑记忆\n${selectedMemory}\n\n`;
+      }
+    }
+    if (allHistory) {
+      contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
+    }
+    contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${formatEditorChatFullChapter(chapterContent)}\n\n`;
   }
 
   contextText += `## 用户本次问题\n${trimmedMessage}`;
@@ -2167,9 +2370,11 @@ app.post('/api/editor-chat', async (req, res) => {
         '6. 用户问后续写法时，直接讨论后续方向，不要先回头审稿。\n' +
         '7. 不要以”用户说……”开头。不要复述你的任务，不要解释你将怎么分析。直接回话。\n' +
         '8. 闲聊回复 80～180 字，一般问题不超过 250 字。\n\n' +
-        '三、分析模式（仅以下情况允许打破默认规则）\n' +
-        '只有用户明确要求分析、审稿、列问题、给修改建议、逐段评审、判断节奏或人物动机时，\n' +
-        '才可以使用小标题、列点、结构化分析。即使进入分析模式，也要先给简短判断再展开。',
+        '三、分析回复规则（仅以下情况允许打破默认回复规则）\n' +
+        '当用户明确要求分析、审稿、列问题、给修改建议、逐段评审、判断节奏或人物动机时，\n' +
+        '才可以使用小标题、列点、结构化分析。即使如此，也要先给简短判断再展开。\n' +
+        '当前对话的上下文模式由用户在前端选择——你收到的背景信息可能较少（闲聊模式）或完整（全量模式），\n' +
+        '但你的回复风格始终由用户消息的内容决定，而非上下文多寡。',
     },
     {
       role: 'user',

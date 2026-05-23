@@ -19,13 +19,24 @@ const STAGES = {
 export default function GenerationProgress({ visible, mode, status, errorMessage, onComplete }) {
   const [percent, setPercent] = useState(0);
   const [label, setLabel] = useState('');
+  const [dots, setDots] = useState('');
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+
+  // 流式状态的点动画
+  useEffect(() => {
+    if (status !== 'streaming') return;
+    const timer = setInterval(() => {
+      setDots(prev => prev.length >= 3 ? '' : prev + '.');
+    }, 400);
+    return () => clearInterval(timer);
+  }, [status]);
 
   useEffect(() => {
     if (!visible) {
       setPercent(0);
       setLabel('');
+      setDots('');
       return;
     }
 
@@ -41,7 +52,7 @@ export default function GenerationProgress({ visible, mode, status, errorMessage
       return () => { cancelled = true; clearAll(); };
     }
 
-    if (status === 'error') {
+    if (status === 'error' || status === 'streaming') {
       return () => { cancelled = true; clearAll(); };
     }
 
@@ -87,15 +98,24 @@ export default function GenerationProgress({ visible, mode, status, errorMessage
 
   const isError = status === 'error';
   const isSuccess = status === 'success';
+  const isStreaming = status === 'streaming';
 
   return (
-    <div className={`gen-progress${isError ? ' gen-progress--error' : ''}${isSuccess ? ' gen-progress--success' : ''}`}>
-      <div className="gen-progress-bar-track">
-        <div className="gen-progress-bar-fill" style={{ width: `${percent}%` }} />
-      </div>
-      <div className="gen-progress-label">
-        {isError ? (errorMessage || '生成失败') : label}
-      </div>
+    <div className={`gen-progress${isError ? ' gen-progress--error' : ''}${isSuccess ? ' gen-progress--success' : ''}${isStreaming ? ' gen-progress--streaming' : ''}`}>
+      {isStreaming ? (
+        <div className="gen-progress-label">
+          正在生成{dots}
+        </div>
+      ) : (
+        <>
+          <div className="gen-progress-bar-track">
+            <div className="gen-progress-bar-fill" style={{ width: `${percent}%` }} />
+          </div>
+          <div className="gen-progress-label">
+            {isError ? (errorMessage || '生成失败') : label}
+          </div>
+        </>
+      )}
     </div>
   );
 }

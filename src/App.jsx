@@ -168,6 +168,7 @@ function App() {
   const [editorNoteResult, setEditorNoteResult] = useState('');
   const editorNoteReqId = useRef(0);
   const generatingRef = useRef(false);
+  const [streamingContent, setStreamingContent] = useState('');
 
   // Editor room
   const [editorRoomTab, setEditorRoomTab] = useState('notes');
@@ -176,9 +177,12 @@ function App() {
   const [editorChatInput, setEditorChatInput] = useState('');
   const [editorChatSending, setEditorChatSending] = useState(false);
   const [editorChatError, setEditorChatError] = useState('');
+  const [editorChatContextMode, setEditorChatContextMode] = useState('light');
   const [savingEditorNoteId, setSavingEditorNoteId] = useState('');
   const editorChatListRef = useRef(null);
   const readingSectionRef = useRef(null);
+  const readingContentRef = useRef(null);
+  const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
     requestAnimationFrame(() => {
@@ -188,6 +192,37 @@ function App() {
       });
     });
   }, [editorChats, editorChatSending]);
+
+  // 章节内容区域滚动监听（桌面端使用 content div 的 onScroll，移动端使用 window scroll）
+  const handleReadingContentScroll = () => {
+    if (readingContentRef.current) {
+      setShowScrollTop(readingContentRef.current.scrollTop > 300);
+    }
+  };
+
+  useEffect(() => {
+    if (!isMobile || !readingChapter) {
+      setShowScrollTop(false);
+      return;
+    }
+    const handleScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [isMobile, readingChapter]);
+
+  // 章节切换时重置滚动状态
+  useEffect(() => {
+    setShowScrollTop(false);
+  }, [readingChapter]);
+
+  const handleScrollToTop = () => {
+    if (isMobile) {
+      readingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      readingContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   // ---- Fetch project list ----
   const fetchProjects = async () => {
@@ -324,9 +359,14 @@ function App() {
     setError('');
     setLoading(true);
     generatingRef.current = true;
-    setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
+    setStreamingContent('');
+    setGenProgress({ visible: true, mode: 'generate', status: 'streaming', errorMessage: '' });
+
+    let fileName, content, title, debugInfo;
+
     try {
-      const data = await safeJsonFetch('/api/generate', {
+      // 优先使用流式生成
+      const response = await apiFetch('/api/generate-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -334,52 +374,115 @@ function App() {
           userPrompt: enhancedPrompt,
           model,
         }),
-        timeout: 180000,
       });
-      const fileName = data.fileName || data.filename;
 
-      setDisplayContent((prev) => {
-        const sep = prev ? '\n\n' : '';
-        return prev + sep + '--- ' + fileName + ' ---\n' + data.content;
-      });
-      setLastFilename(fileName);
-      setUserPrompt('');
-      // Debug template info
-      setDebugPromptInfo(data.debugPromptInfo || null);
-      // Auto-select the new chapter for reading
-      resetEditorRoom();
-      setReadingChapter(fileName);
-      setReadingChapterTitle(data.title || '');
-      setReadingContent(data.content);
-      // Refresh chapter list (don't let failure affect success state)
-      let refreshFailed = false;
+      if (!response.ok) throw new Error('流式接口返回错误状态');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamedContent = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+          try {
+            const event = JSON.parse(trimmed.slice(6));
+            if (event.type === 'chunk') {
+              streamedContent += event.content;
+              setStreamingContent(streamedContent);
+            } else if (event.type === 'done') {
+              fileName = event.fileName;
+              content = event.content;
+              title = event.title;
+              debugInfo = event.debugPromptInfo;
+            } else if (event.type === 'error') {
+              throw new Error(event.message);
+            }
+          } catch (e) {
+            if (e.message && !e.message.includes('JSON')) throw e;
+          }
+        }
+      }
+
+      if (!fileName) throw new Error('流式生成未完成');
+    } catch (streamErr) {
+      console.warn('流式生成失败，回退到普通生成:', streamErr);
+      setStreamingContent('');
+
+      // 回退到非流式生成
+      setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
       try {
-        const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
-        if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
-        setProjectDetails(refreshData);
-      } catch (refreshErr) {
-        refreshFailed = true;
-        console.warn('刷新章节列表失败:', refreshErr);
+        const data = await safeJsonFetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectName: currentProject,
+            userPrompt: enhancedPrompt,
+            model,
+          }),
+          timeout: 180000,
+        });
+        fileName = data.fileName || data.filename;
+        content = data.content;
+        title = data.title || '';
+        debugInfo = data.debugPromptInfo || null;
+      } catch (err) {
+        const isNetworkOrTimeout = err.name === 'AbortError' || err instanceof TypeError;
+        if (isNetworkOrTimeout) {
+          setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: '网络异常或请求超时' });
+          setNotification({ title: '网络异常', message: '请求超时或网络中断，章节可能已保存。请刷新页面确认，不要重复点击生成。' });
+        } else {
+          setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
+          setNotification({ title: '生成失败', message: err.message });
+        }
+        setLoading(false);
+        generatingRef.current = false;
+        return;
       }
-      setGenProgress(prev => ({ ...prev, status: 'success' }));
-      if (refreshFailed) {
-        setNotification({ title: '这一章写好了', message: `章节已保存（${fileName}），但列表刷新失败，请手动刷新。` });
-      } else {
-        setNotification({ title: '这一章写好了', message: `新章节已保存（${fileName}）` });
-      }
-    } catch (err) {
-      const isNetworkOrTimeout = err.name === 'AbortError' || err instanceof TypeError;
-      if (isNetworkOrTimeout) {
-        setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: '网络异常或请求超时' });
-        setNotification({ title: '网络异常', message: '请求超时或网络中断，章节可能已保存。请刷新页面确认，不要重复点击生成。' });
-      } else {
-        setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
-        setNotification({ title: '生成失败', message: err.message });
-      }
-    } finally {
-      setLoading(false);
-      generatingRef.current = false;
     }
+
+    // 公共完成逻辑
+    setStreamingContent('');
+    setDisplayContent((prev) => {
+      const sep = prev ? '\n\n' : '';
+      return prev + sep + '--- ' + fileName + ' ---\n' + content;
+    });
+    setLastFilename(fileName);
+    setUserPrompt('');
+    setDebugPromptInfo(debugInfo || null);
+    resetEditorRoom();
+    setReadingChapter(fileName);
+    setReadingChapterTitle(title || '');
+    setReadingContent(content);
+
+    let refreshFailed = false;
+    try {
+      const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+      if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
+      setProjectDetails(refreshData);
+    } catch (refreshErr) {
+      refreshFailed = true;
+      console.warn('刷新章节列表失败:', refreshErr);
+    }
+    setGenProgress(prev => ({ ...prev, status: 'success' }));
+    if (refreshFailed) {
+      setNotification({ title: '这一章写好了', message: `章节已保存（${fileName}），但列表刷新失败，请手动刷新。` });
+    } else {
+      setNotification({ title: '这一章写好了', message: `新章节已保存（${fileName}）` });
+    }
+
+    setLoading(false);
+    generatingRef.current = false;
   };
 
   // ---- Read a chapter ----
@@ -977,6 +1080,7 @@ function App() {
           chapterId: readingChapter,
           fileName: readingChapter,
           message: trimmed,
+          contextMode: editorChatContextMode,
         }),
       });
       const finalChats = Array.isArray(data.editorChats)
@@ -1271,6 +1375,27 @@ function App() {
                       )}
                     </div>
                     {editorChatError && <div className="error">{editorChatError}</div>}
+                    <div className="editor-chat-mode-row">
+                      <div className="editor-chat-mode-btns">
+                        {[
+                          { mode: 'light', label: '省 token', desc: '只读摘要，适合闲聊' },
+                          { mode: 'normal', label: '标准', desc: '读取章节，适合分析' },
+                          { mode: 'full', label: '全量', desc: '读取完整设定，消耗较高' },
+                        ].map(({ mode, label }) => (
+                          <button
+                            key={mode}
+                            className={`btn btn-mode${editorChatContextMode === mode ? ' active' : ''}`}
+                            disabled={editorChatSending}
+                            onClick={() => setEditorChatContextMode(mode)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="editor-chat-mode-hint">
+                        {editorChatContextMode === 'light' ? '只读摘要，适合闲聊' : editorChatContextMode === 'normal' ? '读取章节，适合分析' : '读取完整设定，消耗较高'}
+                      </span>
+                    </div>
                     <div className="editor-chat-input-row">
                       <div className="editor-chat-input-wrap">
                         <textarea
@@ -1511,6 +1636,17 @@ function App() {
               </div>
               )}
 
+              {/* Streaming preview */}
+              {streamingContent && (
+                <div className="streaming-preview">
+                  <div className="streaming-preview-header">
+                    <div className="editor-note-loading-spinner"></div>
+                    <span>正在生成...</span>
+                  </div>
+                  <div className="streaming-preview-content">{streamingContent}</div>
+                </div>
+              )}
+
               {/* Reading Section */}
               {readingChapter && (
                 <div className="reading-section" ref={readingSectionRef}>
@@ -1659,7 +1795,17 @@ function App() {
                     </div>
                   )}
 
-                  <div className={`reading-content reading-theme-${readingTheme} reading-font-${readingFontSize}`}>{variantPreview ? variantPreview.content : readingContent}</div>
+                  <div
+                    className={`reading-content reading-theme-${readingTheme} reading-font-${readingFontSize}`}
+                    ref={readingContentRef}
+                    onScroll={handleReadingContentScroll}
+                  >{variantPreview ? variantPreview.content : readingContent}</div>
+
+                  {showScrollTop && (
+                    <button className="scroll-to-top-btn" onClick={handleScrollToTop} title="回到开头" aria-label="回到开头">
+                      &uarr;
+                    </button>
+                  )}
 
                   {/* Mobile: rewrite button after content */}
                   {isMobile && (
@@ -1806,6 +1952,27 @@ function App() {
                           )}
                         </div>
                         {editorChatError && <div className="error">{editorChatError}</div>}
+                        <div className="editor-chat-mode-row">
+                          <div className="editor-chat-mode-btns">
+                            {[
+                              { mode: 'light', label: '省 token', desc: '只读摘要，适合闲聊' },
+                              { mode: 'normal', label: '标准', desc: '读取章节，适合分析' },
+                              { mode: 'full', label: '全量', desc: '读取完整设定，消耗较高' },
+                            ].map(({ mode, label }) => (
+                              <button
+                                key={mode}
+                                className={`btn btn-mode${editorChatContextMode === mode ? ' active' : ''}`}
+                                disabled={editorChatSending}
+                                onClick={() => setEditorChatContextMode(mode)}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          <span className="editor-chat-mode-hint">
+                            {editorChatContextMode === 'light' ? '只读摘要，适合闲聊' : editorChatContextMode === 'normal' ? '读取章节，适合分析' : '读取完整设定，消耗较高'}
+                          </span>
+                        </div>
                         <div className="editor-chat-input-row">
                           <div className="editor-chat-input-wrap">
                             <textarea
