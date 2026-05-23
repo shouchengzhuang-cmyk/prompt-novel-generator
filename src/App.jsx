@@ -901,6 +901,8 @@ function App() {
       });
       // Add new variant to list, embedding debug prompt info for display
       setVariants((prev) => [...prev, { ...data.variant, _debugPromptInfo: data.debugPromptInfo }]);
+      // Reload variants from server to ensure list is in sync
+      handleLoadVariants(readingChapter);
       setShowRewriteInput(false);
       setRewritePrompt('');
       setGenProgress(prev => ({ ...prev, status: 'success' }));
