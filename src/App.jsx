@@ -144,6 +144,57 @@ function App() {
     setMobileShelfMenu(null);
   }, []);
 
+  // Unified mobile back button: uses internal state transitions, not browser history
+  const handleAppBack = () => {
+    // Close overlays/panels first
+    if (showSettings) {
+      setShowSettings(false);
+      return;
+    }
+    if (showCreateForm) {
+      setShowCreateForm(false);
+      setCreateError('');
+      setNewProjectName('');
+      setNewWorld('');
+      setNewCharacters('');
+      setNewStyle('');
+      setNewSummary('');
+      return;
+    }
+    if (mobileView === 'editor') {
+      setMobileView('chapter');
+      return;
+    }
+    if (mobileView === 'chapter' || readingChapter) {
+      setReadingChapter(null);
+      setReadingChapterTitle('');
+      setReadingContent('');
+      setVariants([]);
+      setVariantPreview(null);
+      setShowRewriteInput(false);
+      setRewritePrompt('');
+      setDebugPromptInfo(null);
+      resetEditorRoom();
+      setMobileView('project');
+      return;
+    }
+    if (mobileView === 'project' || currentProject) {
+      setCurrentProject(null);
+      setProjectDetails(null);
+      setDisplayContent('');
+      setReadingChapter(null);
+      setReadingChapterTitle('');
+      setReadingContent('');
+      setVariants([]);
+      setVariantPreview(null);
+      setShowRewriteInput(false);
+      setRewritePrompt('');
+      setMobileView('shelf');
+      return;
+    }
+    // Already at shelf — no-op
+  };
+
   // Seed initial history state so the first back press can be handled in-app
   useEffect(() => {
     if (!window.history.state || !window.history.state.mobileView) {
@@ -151,11 +202,39 @@ function App() {
     }
     const handlePopState = (event) => {
       if (event.state && event.state.mobileView) {
-        setMobileView(event.state.mobileView);
+        const view = event.state.mobileView;
+        setMobileView(view);
         setMobileGenerateOpen(false);
         setMobileVariantsOpen(false);
         setMobileChapterMenu(null);
         setMobileShelfMenu(null);
+        // Clear chapter state when leaving chapter/editor level
+        if (view === 'project' || view === 'shelf') {
+          setReadingChapter(null);
+          setReadingChapterTitle('');
+          setReadingContent('');
+          setVariants([]);
+          setVariantPreview(null);
+          setShowRewriteInput(false);
+          setRewritePrompt('');
+          setDebugPromptInfo(null);
+          // resetEditorRoom cannot be called here reliably, inline the resets
+          setEditorRoomTab('notes');
+          setEditorNotes([]);
+          setEditorChats([]);
+          setEditorChatInput('');
+          setEditorChatError('');
+          setSavingEditorNoteId('');
+          setEditorNoteResult('');
+          setEditorNoteError('');
+          setEditorNoteLoading(false);
+        }
+        // Clear project state when going back to shelf
+        if (view === 'shelf') {
+          setCurrentProject(null);
+          setProjectDetails(null);
+          setDisplayContent('');
+        }
       }
     };
     window.addEventListener('popstate', handlePopState);
@@ -1290,7 +1369,7 @@ function App() {
           {/* Mobile: editor view — standalone */}
           {isMobile && mobileView === 'editor' && readingChapter ? (
             <div className="mobile-editor-view">
-              <button className="mobile-back-btn" onClick={() => window.history.back()}>
+              <button className="mobile-back-btn" onClick={handleAppBack}>
                 ← 返回章节
               </button>
               <div className="editor-room">
@@ -1440,7 +1519,7 @@ function App() {
           <>
           {/* Mobile: back button on chapter view */}
           {isMobile && mobileView === 'chapter' && (
-            <button className="mobile-back-btn" onClick={() => window.history.back()}>
+            <button className="mobile-back-btn" onClick={handleAppBack}>
               ← 返回列表
             </button>
           )}
@@ -2022,7 +2101,7 @@ function App() {
                         <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           上一章
                         </button>
-                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { window.history.back(); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
+                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { handleAppBack(); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
                           {isMobile ? '目录' : '回目录'}
                         </button>
                         <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
@@ -2203,7 +2282,7 @@ function App() {
         {/* ===== Mobile: Project View (chapter list) ===== */}
         {isMobile && mobileView === 'project' && currentProject && (
           <div className="panel mobile-project-view">
-            <button className="mobile-back-btn" onClick={() => window.history.back()}>
+            <button className="mobile-back-btn" onClick={handleAppBack}>
               ← 返回书架
             </button>
             <h2 className="mobile-project-title">{currentProject}</h2>
