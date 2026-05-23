@@ -168,7 +168,6 @@ function App() {
   const [editorNoteResult, setEditorNoteResult] = useState('');
   const editorNoteReqId = useRef(0);
   const generatingRef = useRef(false);
-  const [streamingContent, setStreamingContent] = useState('');
   const [streamingChapterNum, setStreamingChapterNum] = useState('');
 
   // Editor room
@@ -183,7 +182,6 @@ function App() {
   const editorChatListRef = useRef(null);
   const readingSectionRef = useRef(null);
   const readingContentRef = useRef(null);
-  const streamingPreviewRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -217,13 +215,6 @@ function App() {
   useEffect(() => {
     setShowScrollTop(false);
   }, [readingChapter]);
-
-  // 流式预览出现时自动滚动到可见区域
-  useEffect(() => {
-    if (streamingContent && streamingPreviewRef.current) {
-      streamingPreviewRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [streamingContent ? 'has-content' : 'empty']);
 
   const handleScrollToTop = () => {
     if (isMobile) {
@@ -375,8 +366,11 @@ function App() {
     setError('');
     setLoading(true);
     generatingRef.current = true;
-    setStreamingContent('');
     setStreamingChapterNum(nextNumStr);
+    // 立即进入临时章节状态，在阅读区显示生成进度
+    setReadingChapter('_streaming');
+    setReadingChapterTitle('第 ' + nextNumStr + ' 章 生成中...');
+    setReadingContent('');
     setGenProgress({ visible: true, mode: 'generate', status: 'streaming', errorMessage: '' });
 
     let fileName, content, title, debugInfo;
@@ -429,16 +423,18 @@ function App() {
           }
         }
 
-        // 每次 reader.read() 后统一更新状态，让 React 在 await 间隙渲染
+        // 每轮 read() 后更新阅读区正文，让 React 在 await 间隙渲染
         if (streamedContent) {
-          setStreamingContent(streamedContent);
+          setReadingContent(streamedContent);
         }
       }
 
       if (!fileName) throw new Error('流式生成未完成');
     } catch (streamErr) {
       console.warn('流式生成失败，回退到普通生成:', streamErr);
-      setStreamingContent('');
+      setReadingChapter(null);
+      setReadingChapterTitle('');
+      setReadingContent('');
       setStreamingChapterNum('');
 
       // 回退到非流式生成
@@ -474,7 +470,6 @@ function App() {
     }
 
     // 公共完成逻辑
-    setStreamingContent('');
     setStreamingChapterNum('');
     setDisplayContent((prev) => {
       const sep = prev ? '\n\n' : '';
@@ -484,6 +479,7 @@ function App() {
     setUserPrompt('');
     setDebugPromptInfo(debugInfo || null);
     resetEditorRoom();
+    // 从临时章节转为正式章节
     setReadingChapter(fileName);
     setReadingChapterTitle(title || '');
     setReadingContent(content);
@@ -1591,17 +1587,6 @@ function App() {
                 </div>
               )}
 
-              {/* 流式生成预览 — 移动端在续写设置上方，桌面端在最前面 */}
-              {(streamingContent || (loading && streamingChapterNum)) && (
-                <div className="streaming-preview" ref={streamingPreviewRef}>
-                  <div className="streaming-preview-header">
-                    <div className="editor-note-loading-spinner"></div>
-                    <span>第 {streamingChapterNum} 章 生成中...</span>
-                  </div>
-                  <div className="streaming-preview-content">{streamingContent || '（正在连接模型，请稍候...）'}</div>
-                </div>
-              )}
-
               {/* Mobile: generate settings toggle */}
               {isMobile && (
                 <button
@@ -1690,23 +1675,27 @@ function App() {
                       ) : (
                         <h3>
                           {readingChapterTitle || readingChapter}
-                          <span className="reading-filename">{readingChapter}</span>
-                          <button className="btn-link reading-title-edit-btn" onClick={handleStartEditTitle}>编辑标题</button>
+                          {readingChapter !== '_streaming' && (
+                            <span className="reading-filename">{readingChapter}</span>
+                          )}
+                          {readingChapter !== '_streaming' && (
+                            <button className="btn-link reading-title-edit-btn" onClick={handleStartEditTitle}>编辑标题</button>
+                          )}
                         </h3>
                       )}
                     </div>
                     <div className="reading-actions">
-                      {!isMobile && (
+                      {readingChapter !== '_streaming' && !isMobile && (
                       <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}
                       </button>
                       )}
-                      {!isMobile && (
+                      {readingChapter !== '_streaming' && !isMobile && (
                       <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
                       </button>
                       )}
-                      {!isMobile && displayContent && (
+                      {readingChapter !== '_streaming' && !isMobile && displayContent && (
                         <button className="btn btn-success" onClick={handleCopyFull}>
                           复制全文
                         </button>
@@ -1831,7 +1820,7 @@ function App() {
                   )}
 
                   {/* Mobile: rewrite button after content */}
-                  {isMobile && (
+                  {readingChapter !== '_streaming' && isMobile && (
                     <div style={{ marginTop: 16 }}>
                       <button className="btn" style={{ width: '100%' }} onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}
