@@ -2285,6 +2285,7 @@ function App() {
               <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
                 {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
               </button>
+              <button className="btn btn-secondary" onClick={handleBackup}>导出备份</button>
               <button className="btn btn-secondary" onClick={handleOpenSettings}>编辑设定</button>
               <button className="btn btn-secondary" onClick={handleRefresh}>刷新</button>
             </div>
