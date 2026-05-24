@@ -103,6 +103,13 @@ function App() {
     characterConsistency: 'strict',
   });
 
+  // Outline (chapter planning)
+  const [outline, setOutline] = useState([]);
+  const [showOutline, setShowOutline] = useState(false);
+  const [outlineText, setOutlineText] = useState('');
+  const [outlineSaving, setOutlineSaving] = useState(false);
+  const [outlineError, setOutlineError] = useState('');
+
   // Debug: current generation template info
   const [debugPromptInfo, setDebugPromptInfo] = useState(null);
 
@@ -189,6 +196,7 @@ function App() {
       setVariantPreview(null);
       setShowRewriteInput(false);
       setRewritePrompt('');
+      setShowOutline(false);
       setMobileView('shelf');
       return;
     }
@@ -336,6 +344,10 @@ function App() {
     setRewritePrompt('');
     setShowSettings(false);
     setEditingProjectName(null);
+    setShowOutline(false);
+    setOutline([]);
+    setOutlineText('');
+    setOutlineError('');
     setDebugPromptInfo(null);
     resetEditorRoom();
     if (isMobile) navigateTo('project');
@@ -784,6 +796,49 @@ function App() {
       setError(err.message);
     } finally {
       setSavingSettings(false);
+    }
+  };
+
+  // ---- Outline ----
+  const handleLoadOutline = async () => {
+    if (!currentProject) return;
+    setOutlineError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/outline`);
+      const list = Array.isArray(data.outline) ? data.outline : [];
+      setOutline(list);
+      setOutlineText(JSON.stringify(list, null, 2));
+    } catch (err) {
+      setOutlineError(err.message);
+    }
+  };
+
+  const handleSaveOutline = async () => {
+    if (!currentProject) return;
+    setOutlineError('');
+    let parsed;
+    try {
+      parsed = JSON.parse(outlineText);
+      if (!Array.isArray(parsed)) throw new Error('内容必须是 JSON 数组');
+    } catch (err) {
+      setOutlineError('JSON 格式错误：' + err.message);
+      return;
+    }
+    setOutlineSaving(true);
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/outline`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outline: parsed }),
+      });
+      setOutline(data.outline);
+      setOutlineText(JSON.stringify(data.outline, null, 2));
+      setOutlineError('已保存');
+      setTimeout(() => setOutlineError(''), 3000);
+    } catch (err) {
+      setOutlineError(err.message);
+    } finally {
+      setOutlineSaving(false);
     }
   };
 
@@ -1577,6 +1632,7 @@ function App() {
               <div className="current-project-label">
                 当前项目：<strong>{currentProject}</strong>
                 <button className="btn-link" onClick={handleOpenSettings}>编辑设定</button>
+                <button className="btn-link" onClick={() => { setShowOutline(!showOutline); if (!showOutline) handleLoadOutline(); }}>章节规划</button>
               </div>
 
               {/* Settings Editor */}
@@ -1653,6 +1709,36 @@ function App() {
                       {savingSettings ? '保存中...' : '保存设定'}
                     </button>
                     <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>
+                      关闭
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Outline Editor */}
+              {showOutline && (
+                <div className="settings-panel">
+                  <h3>章节规划</h3>
+                  <p className="hint" style={{ marginBottom: 8 }}>
+                    用 JSON 数组编辑章节规划。每项包含 number（章节编号）、goal（本章目标）、keyEvents（关键事件数组）、characterChanges（人物变化）、status（planned/writing/written/revising）。生成下一章时会自动注入对应编号的规划。
+                  </p>
+                  <textarea
+                    className="settings-input"
+                    value={outlineText}
+                    onChange={(e) => { setOutlineText(e.target.value); setOutlineError(''); }}
+                    rows={12}
+                    placeholder={`[\n  {\n    "number": 1,\n    "goal": "本章目标",\n    "keyEvents": ["事件1", "事件2"],\n    "characterChanges": "人物变化",\n    "status": "planned"\n  }\n]`}
+                  />
+                  {outlineError && (
+                    <div className={outlineError === '已保存' ? '' : 'error'} style={outlineError === '已保存' ? { color: '#52c41a', marginTop: 4, fontSize: 13 } : { marginTop: 4 }}>
+                      {outlineError}
+                    </div>
+                  )}
+                  <div className="form-actions" style={{ marginTop: 8 }}>
+                    <button className="btn" onClick={handleSaveOutline} disabled={outlineSaving}>
+                      {outlineSaving ? '保存中...' : '保存规划'}
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => { setShowOutline(false); setOutlineError(''); }}>
                       关闭
                     </button>
                   </div>
@@ -2278,6 +2364,7 @@ function App() {
               </button>
               <button className="btn btn-secondary" onClick={handleBackup}>导出备份</button>
               <button className="btn btn-secondary" onClick={handleOpenSettings}>编辑设定</button>
+              <button className="btn btn-secondary" onClick={() => { setShowOutline(!showOutline); if (!showOutline) handleLoadOutline(); }}>章节规划</button>
               <button className="btn btn-secondary" onClick={handleRefresh}>刷新</button>
             </div>
 
@@ -2299,6 +2386,36 @@ function App() {
                 <div className="form-actions">
                   <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
                   <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>关闭</button>
+                </div>
+              </div>
+            )}
+
+            {/* Outline Editor — mobile */}
+            {showOutline && (
+              <div className="settings-panel">
+                <h3>章节规划</h3>
+                <p className="hint" style={{ marginBottom: 8, fontSize: 12 }}>
+                  JSON 数组，每项：number、goal、keyEvents、characterChanges、status。
+                </p>
+                <textarea
+                  className="settings-input"
+                  value={outlineText}
+                  onChange={(e) => { setOutlineText(e.target.value); setOutlineError(''); }}
+                  rows={10}
+                  placeholder={`[\n  {\n    "number": 1,\n    "goal": "本章目标",\n    "keyEvents": ["事件1"],\n    "characterChanges": "人物变化",\n    "status": "planned"\n  }\n]`}
+                />
+                {outlineError && (
+                  <div className={outlineError === '已保存' ? '' : 'error'} style={outlineError === '已保存' ? { color: '#52c41a', marginTop: 4, fontSize: 13 } : { marginTop: 4 }}>
+                    {outlineError}
+                  </div>
+                )}
+                <div className="form-actions" style={{ marginTop: 8 }}>
+                  <button className="btn" onClick={handleSaveOutline} disabled={outlineSaving}>
+                    {outlineSaving ? '保存中...' : '保存规划'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => { setShowOutline(false); setOutlineError(''); }}>
+                    关闭
+                  </button>
                 </div>
               </div>
             )}

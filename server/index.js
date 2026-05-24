@@ -237,6 +237,31 @@ async function writeEditorialMemory(projectName, content) {
   await fs.writeFile(filePath, content, 'utf-8');
 }
 
+// ---- Outline (chapter planning) ----
+
+function getOutlinePath(projectName) {
+  return path.join(safeProjectDir(projectName), 'outline.json');
+}
+
+async function readOutline(projectName) {
+  try {
+    const raw = await fs.readFile(getOutlinePath(projectName), 'utf-8');
+    const data = JSON.parse(raw);
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeOutline(projectName, outline) {
+  if (!Array.isArray(outline)) {
+    throw new Error('outline 必须是数组');
+  }
+  const filePath = getOutlinePath(projectName);
+  await ensureDir(path.dirname(filePath));
+  await fs.writeFile(filePath, JSON.stringify(outline, null, 2), 'utf-8');
+}
+
 /**
  * Replace or append a full chapter memory block (including markers) in editorial-memory.md.
  * fullBlock must contain `<!-- chapter-memory:start fileName -->` and `<!-- chapter-memory:end fileName -->`.
@@ -1011,6 +1036,37 @@ async function prepareGenerationContext({ projectName, userPrompt, model }) {
       messages[1] = { role: 'user', content: currentContent };
       console.log(`[编辑记忆] 已并入生成 prompt (${selectedMemory.length} 字)`);
     }
+  }
+
+  // 3c. Inject chapter plan from outline.json
+  try {
+    const chapterFiles = await fs.readdir(chaptersDir);
+    const nums = chapterFiles
+      .filter((f) => /^\d+\.txt$/.test(f))
+      .map((f) => parseInt(f, 10))
+      .filter((n) => !isNaN(n));
+    const nextNum = nums.length > 0 ? Math.max(...nums) + 1 : 1;
+
+    const outline = await readOutline(projectName);
+    const plan = outline.find((item) => item.number === nextNum);
+    if (plan) {
+      let planText = `\n\n## 本章规划\n目标：${plan.goal || ''}\n`;
+      if (Array.isArray(plan.keyEvents) && plan.keyEvents.length > 0) {
+        planText += `关键事件：\n${plan.keyEvents.map((e) => `- ${e}`).join('\n')}\n`;
+      }
+      if (plan.characterChanges) {
+        planText += `人物变化：${plan.characterChanges}\n`;
+      }
+      if (plan.status) {
+        planText += `状态：${plan.status}\n`;
+      }
+      let currentContent = messages[1].content;
+      currentContent = currentContent.replace('## 本次续写要求', planText + '## 本次续写要求');
+      messages[1] = { role: 'user', content: currentContent };
+      console.log(`[章节规划] 已并入第${nextNum}章规划`);
+    }
+  } catch (outlineErr) {
+    console.warn(`[章节规划] 注入失败（不影响主流程）: ${outlineErr.message}`);
   }
 
   // 4. Generate editor note from latest chapter and append to messages
@@ -2080,6 +2136,49 @@ app.post('/api/projects/:projectName/summary/rebuild', async (req, res) => {
   } catch (err) {
     // On any error, old summary.md is preserved (no write occurred)
     res.status(500).json({ error: err.message || '摘要重建失败' });
+  }
+});
+
+// ---- GET /api/projects/:projectName/outline ----
+
+app.get('/api/projects/:projectName/outline', async (req, res) => {
+  const { projectName } = req.params;
+
+  try {
+    safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    const outline = await readOutline(projectName);
+    res.json({ outline });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- PUT /api/projects/:projectName/outline ----
+
+app.put('/api/projects/:projectName/outline', async (req, res) => {
+  const { projectName } = req.params;
+  const { outline } = req.body;
+
+  try {
+    safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  if (!Array.isArray(outline)) {
+    return res.status(400).json({ error: 'outline 必须是数组' });
+  }
+
+  try {
+    await writeOutline(projectName, outline);
+    res.json({ ok: true, outline });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
