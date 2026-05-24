@@ -218,16 +218,7 @@ function App() {
           setShowRewriteInput(false);
           setRewritePrompt('');
           setDebugPromptInfo(null);
-          // resetEditorRoom cannot be called here reliably, inline the resets
-          setEditorRoomTab('notes');
-          setEditorNotes([]);
-          setEditorChats([]);
-          setEditorChatInput('');
-          setEditorChatError('');
-          setSavingEditorNoteId('');
-          setEditorNoteResult('');
-          setEditorNoteError('');
-          setEditorNoteLoading(false);
+          resetEditorRoom();
         }
         // Clear project state when going back to shelf
         if (view === 'shelf') {
