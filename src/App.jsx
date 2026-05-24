@@ -1781,11 +1781,6 @@ function App() {
                           复制全文
                         </button>
                       )}
-                      {!isMobile && (
-                      <button className="btn btn-secondary" onClick={() => { setReadingChapter(null); setReadingChapterTitle(''); setReadingContent(''); setVariants([]); setVariantPreview(null); setShowRewriteInput(false); setRewritePrompt(''); setDebugPromptInfo(null); resetEditorRoom(); }}>
-                        关闭阅读
-                      </button>
-                      )}
                     </div>
                   </div>
 
