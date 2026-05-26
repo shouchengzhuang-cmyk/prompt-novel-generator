@@ -1,39 +1,35 @@
 # CLAUDE.md — 项目协作规则
 
-## 语言要求
+## Language
 
-本项目优先使用**简体中文**进行交流。
+Communicate with the user in **English** by default. Use simple, clear English.
 
-### 必须使用中文的场景
-- 任务计划和设计方案
-- 修改说明和变更记录
-- TODO 和进度跟踪
-- 总结报告和验证结果
-- 错误分析和根因定位
-- UI 界面文案（按钮、标签、提示、错误消息等）
-- 代码注释（解释 WHY 时）
-- 与用户的所有对话
+### Keep in English
+- Code identifiers (variables, functions, classes, components)
+- API routes and paths (e.g. `/api/projects`)
+- File paths and file names
+- npm/pnpm package and dependency names
+- Shell commands and scripts
+- Original compiler/runtime error messages
+- Third-party library and framework names (React, Vite, Express, DeepSeek, etc.)
+- Technical abbreviations (API, JSON, URL, CSS, etc.)
+- Version numbers
 
-### 保留英文的场景
-- 代码本身（变量名、函数名、类名、组件名）
-- API 路径和路由（如 `/api/projects`）
-- 文件路径和文件名
-- npm/pnpm 包名和依赖名
-- shell 命令和脚本
-- 编译/运行时错误原文
-- 第三方库和框架的名称（React、Vite、Express、DeepSeek 等）
-- 技术缩写（API、JSON、URL、CSS 等）
-- 版本号
+### Keep in Simplified Chinese
+- User-facing UI copy (buttons, labels, tooltips, error messages) — keep as-is; do not translate unless the user explicitly asks
 
-## 修改原则
+### Fallback
+- If the user writes in Chinese and clearly asks for Chinese, reply in Chinese
 
-1. 不要为了中文化而修改变量名、函数名、接口字段、文件路径。
-2. 面向用户的网页文案优先使用中文。
-3. 面向开发者的解释、报告、步骤优先使用中文。
-4. 技术词可以中英混用（API、JSON、React、Vite 等）。
-5. 修改后要说明改了哪些文件、每个文件改了什么、如何验证。
-6. 如果运行了构建或测试，要明确写出命令和结果。
-7. 不要在回复中使用大段英文说明。
+## Modifications
+
+1. Do not rename variables, functions, interface fields, or file paths for language reasons.
+2. User-facing UI copy stays in Simplified Chinese unless the user asks otherwise.
+3. Developer-facing explanations, reports, and steps use English.
+4. Technical terms may mix English with Chinese when replying in Chinese.
+5. After making changes, state which files changed, what changed in each, and how to verify.
+6. If you ran a build or tests, state the command and result.
+7. Do not modify any project source code unless explicitly asked.
 
 ## 项目约束
 
@@ -42,3 +38,70 @@
 - 不修改 `novels/` 目录
 - 不使用 `DELETE` 请求（除非用户明确要求）
 - 不新增依赖（除非用户明确要求）
+
+
+# CLAUDE.md
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" �?"Write tests for invalid inputs, then make them pass"
+- "Fix the bug" �?"Write a test that reproduces it, then make it pass"
+- "Refactor X" �?"Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] �?verify: [check]
+2. [Step] �?verify: [check]
+3. [Step] �?verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
