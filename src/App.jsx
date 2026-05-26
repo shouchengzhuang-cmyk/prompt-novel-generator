@@ -1708,7 +1708,9 @@ function App() {
               <div className="current-project-label">
                 当前项目：<strong>{currentProject}</strong>
                 <button className="btn-link" onClick={handleOpenSettings}>编辑设定</button>
+                {!isMobile && (
                 <button className="btn-link" onClick={() => { setShowOutline(!showOutline); if (!showOutline) handleLoadOutline(); }}>章节规划</button>
+                )}
               </div>
 
               {/* Settings Editor */}
@@ -2440,7 +2442,6 @@ function App() {
               </button>
               <button className="btn btn-secondary" onClick={handleBackup}>导出备份</button>
               <button className="btn btn-secondary" onClick={handleOpenSettings}>编辑设定</button>
-              <button className="btn btn-secondary" onClick={() => { setShowOutline(!showOutline); if (!showOutline) handleLoadOutline(); }}>章节规划</button>
               <button className="btn btn-secondary" onClick={handleRefresh}>刷新</button>
             </div>
 
