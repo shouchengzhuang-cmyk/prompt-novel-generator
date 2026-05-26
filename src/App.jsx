@@ -152,11 +152,14 @@ function App() {
   }, []);
 
   // Unified mobile back button: uses internal state transitions, not browser history
+  // Unified back handler — used by both popstate and back button
+  // Returns 'overlay' (closed a panel), 'view' (changed view), or 'none' (at root)
   const handleAppBack = () => {
-    // Close overlays/panels first
+    // 1) Close floating panels / overlays first
     if (showSettings) {
       setShowSettings(false);
-      return;
+      setEditingProjectName(null);
+      return 'overlay';
     }
     if (showCreateForm) {
       setShowCreateForm(false);
@@ -166,11 +169,21 @@ function App() {
       setNewCharacters('');
       setNewStyle('');
       setNewSummary('');
-      return;
+      return 'overlay';
     }
+    if (showOutline) {
+      setShowOutline(false);
+      return 'overlay';
+    }
+    if (editingTitle) {
+      setEditingTitle(false);
+      return 'overlay';
+    }
+
+    // 2) View hierarchy: editor → chapter → project → shelf
     if (mobileView === 'editor') {
       setMobileView('chapter');
-      return;
+      return 'view';
     }
     if (mobileView === 'chapter' || readingChapter) {
       setReadingChapter(null);
@@ -183,7 +196,7 @@ function App() {
       setDebugPromptInfo(null);
       resetEditorRoom();
       setMobileView('project');
-      return;
+      return 'view';
     }
     if (mobileView === 'project' || currentProject) {
       setCurrentProject(null);
@@ -197,45 +210,45 @@ function App() {
       setShowRewriteInput(false);
       setRewritePrompt('');
       setShowOutline(false);
+      setShowSettings(false);
+      setEditingProjectName(null);
       setMobileView('shelf');
-      return;
+      return 'view';
     }
-    // Already at shelf — no-op
+
+    // 3) Already at shelf — nothing further
+    return 'none';
   };
 
-  // Seed initial history state so the first back press can be handled in-app
+  // Keep ref current for popstate listener
+  handleAppBackRef.current = handleAppBack;
+
+  // Convenience wrapper for back-button clicks
+  const onBackClick = () => {
+    handleAppBack();
+  };
+
+  // Seed initial history & handle popstate (browser back / mobile swipe-back)
   useEffect(() => {
+    // Ensure a guard entry so the first back doesn't exit the app
     if (!window.history.state || !window.history.state.mobileView) {
       window.history.replaceState({ mobileView: 'shelf' }, '', '');
+      window.history.pushState({ mobileView: 'shelf', guard: true }, '', '');
     }
+
     const handlePopState = (event) => {
       if (event.state && event.state.mobileView) {
-        const view = event.state.mobileView;
-        setMobileView(view);
-        setMobileGenerateOpen(false);
-        setMobileVariantsOpen(false);
-        setMobileChapterMenu(null);
-        setMobileShelfMenu(null);
-        // Clear chapter state when leaving chapter/editor level
-        if (view === 'project' || view === 'shelf') {
-          setReadingChapter(null);
-          setReadingChapterTitle('');
-          setReadingContent('');
-          setVariants([]);
-          setVariantPreview(null);
-          setShowRewriteInput(false);
-          setRewritePrompt('');
-          setDebugPromptInfo(null);
-          resetEditorRoom();
+        const result = handleAppBackRef.current();
+        if (result === 'none') {
+          // At shelf root — push a guard so the next back doesn't exit
+          window.history.pushState({ mobileView: 'shelf', guard: true }, '', '');
         }
-        // Clear project state when going back to shelf
-        if (view === 'shelf') {
-          setCurrentProject(null);
-          setProjectDetails(null);
-          setDisplayContent('');
-        }
+      } else {
+        // Hit boundary (no app state) — push guard to stay in-app
+        window.history.pushState({ mobileView: 'shelf', guard: true }, '', '');
       }
     };
+
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
@@ -260,6 +273,7 @@ function App() {
   const editorChatListRef = useRef(null);
   const readingSectionRef = useRef(null);
   const readingContentRef = useRef(null);
+  const handleAppBackRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
@@ -1015,24 +1029,86 @@ function App() {
       setError('续写要求不能为空');
       return;
     }
+
+    // Save original chapter state in case streaming fails
+    const origChapter = readingChapter;
+    const origTitle = readingChapterTitle;
+    const origContent = readingContent;
+
     setRegenerating(true);
     setError('');
-    setGenProgress({ visible: true, mode: 'rewrite', status: 'running', errorMessage: '' });
+    setReadingChapter('_streaming');
+    setReadingChapterTitle('重写生成中...');
+    setReadingContent('');
+    setGenProgress({ visible: true, mode: 'rewrite', status: 'streaming', errorMessage: '' });
+
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/regenerate`, {
+      const response = await apiFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(origChapter)}/regenerate-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, userPrompt: enhancedRewritePrompt }),
       });
-      // Add new variant to list, embedding debug prompt info for display
-      setVariants((prev) => [...prev, { ...data.variant, _debugPromptInfo: data.debugPromptInfo }]);
-      // Reload variants from server to ensure list is in sync
-      handleLoadVariants(readingChapter);
+
+      if (!response.ok) {
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = {}; }
+        throw new Error(data.error || '重写请求失败');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let streamedContent = '';
+      let doneVariant = null;
+      let doneDebugInfo = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+          try {
+            const event = JSON.parse(trimmed.slice(6));
+            if (event.type === 'chunk') {
+              streamedContent += event.content;
+              setReadingContent(streamedContent);
+            } else if (event.type === 'done') {
+              doneVariant = event.variant;
+              doneDebugInfo = event.debugPromptInfo;
+            } else if (event.type === 'error') {
+              throw new Error(event.message);
+            }
+          } catch (e) {
+            if (e.message && !e.message.includes('JSON')) throw e;
+          }
+        }
+      }
+
+      if (!doneVariant) {
+        throw new Error('重写未完成');
+      }
+
+      // Success: restore readingChapter, update title from variant, keep streamed content
+      setReadingChapter(origChapter);
+      setReadingChapterTitle(doneVariant.title || origTitle);
+      setVariants((prev) => [...prev, { ...doneVariant, _debugPromptInfo: doneDebugInfo }]);
+      handleLoadVariants(origChapter);
       setShowRewriteInput(false);
       setRewritePrompt('');
       setGenProgress(prev => ({ ...prev, status: 'success' }));
       setNotification({ title: '候选版本写好了', message: '可以查看并决定是否采用。' });
     } catch (err) {
+      setReadingChapter(origChapter);
+      setReadingChapterTitle(origTitle);
+      setReadingContent(origContent);
       setGenProgress({ visible: true, mode: 'rewrite', status: 'error', errorMessage: err.message });
       setNotification({ title: '生成失败', message: err.message });
     } finally {
@@ -1415,7 +1491,7 @@ function App() {
           {/* Mobile: editor view — standalone */}
           {isMobile && mobileView === 'editor' && readingChapter ? (
             <div className="mobile-editor-view">
-              <button className="mobile-back-btn" onClick={handleAppBack}>
+              <button className="mobile-back-btn" onClick={onBackClick}>
                 ← 返回章节
               </button>
               <div className="editor-room">
@@ -1565,7 +1641,7 @@ function App() {
           <>
           {/* Mobile: back button on chapter view */}
           {isMobile && mobileView === 'chapter' && (
-            <button className="mobile-back-btn" onClick={handleAppBack}>
+            <button className="mobile-back-btn" onClick={onBackClick}>
               ← 返回列表
             </button>
           )}
@@ -2173,7 +2249,7 @@ function App() {
                         <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           上一章
                         </button>
-                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { handleAppBack(); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
+                        <button className="btn btn-secondary" onClick={() => { if (isMobile) { onBackClick(); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
                           {isMobile ? '目录' : '回目录'}
                         </button>
                         <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
@@ -2354,7 +2430,7 @@ function App() {
         {/* ===== Mobile: Project View (chapter list) ===== */}
         {isMobile && mobileView === 'project' && currentProject && (
           <div className="panel mobile-project-view">
-            <button className="mobile-back-btn" onClick={handleAppBack}>
+            <button className="mobile-back-btn" onClick={onBackClick}>
               ← 返回书架
             </button>
             <h2 className="mobile-project-title">{currentProject}</h2>
