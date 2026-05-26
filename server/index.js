@@ -853,6 +853,75 @@ app.put('/api/projects/:projectName/chapters/:fileName/title', async (req, res) 
   }
 });
 
+// ---- PUT /api/projects/:projectName/chapters/:fileName/content (更新章节正文) ----
+
+app.put('/api/projects/:projectName/chapters/:fileName/content', async (req, res) => {
+  const { projectName, fileName } = req.params;
+  const { title, content } = req.body;
+
+  if (!isValidChapterFileName(fileName)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  if (typeof content !== 'string') {
+    return res.status(400).json({ error: 'content 必须为字符串' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  const chaptersDir = path.join(projectDir, 'chapters');
+  const chapterPath = path.join(chaptersDir, fileName);
+  const relativePath = path.relative(chaptersDir, chapterPath);
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return res.status(400).json({ error: '无效的章节文件名' });
+  }
+
+  try {
+    await fs.access(chapterPath);
+  } catch {
+    return res.status(404).json({ error: '章节不存在' });
+  }
+
+  try {
+    // 1. Preserve original content as v-original variant if not already saved
+    const originalContent = await fs.readFile(chapterPath, 'utf-8');
+    const existingVariants = await readVariants(chaptersDir, fileName);
+    if (!existingVariants.find((v) => v.id === 'v-original')) {
+      existingVariants.unshift({
+        id: 'v-original',
+        createdAt: new Date().toISOString(),
+        model: 'original',
+        userPrompt: '',
+        content: originalContent,
+      });
+      await writeVariants(chaptersDir, fileName, existingVariants);
+    }
+
+    // 2. Write new content
+    await fs.writeFile(chapterPath, content, 'utf-8');
+
+    // 3. Update title in index if provided
+    if (typeof title === 'string' && title.trim()) {
+      const indexEntries = await readChapterIndex(chaptersDir);
+      const entry = indexEntries.find((e) => e.fileName === fileName);
+      if (entry) {
+        entry.title = title.trim();
+        await writeChapterIndex(chaptersDir, indexEntries);
+      }
+    }
+
+    console.log(`[编辑正文] 已保存 项目=${projectName} 章节=${fileName}`);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message || '保存失败' });
+  }
+});
+
 // ---- DELETE /api/projects/:projectName ----
 
 app.delete('/api/projects/:projectName', async (req, res) => {

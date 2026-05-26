@@ -116,6 +116,12 @@ function App() {
   // Generation progress
   const [genProgress, setGenProgress] = useState({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
 
+  // Mobile simple edit
+  const [showMobileEdit, setShowMobileEdit] = useState(false);
+  const [mobileEditTitle, setMobileEditTitle] = useState('');
+  const [mobileEditContent, setMobileEditContent] = useState('');
+  const [mobileEditSaving, setMobileEditSaving] = useState(false);
+
   // Bottom-right notification card
   const [notification, setNotification] = useState(null);
 
@@ -1113,6 +1119,27 @@ function App() {
       setNotification({ title: '生成失败', message: err.message });
     } finally {
       setRegenerating(false);
+    }
+  };
+
+  const handleMobileSaveEdit = async () => {
+    if (!currentProject || !readingChapter || mobileEditSaving) return;
+    setMobileEditSaving(true);
+    setError('');
+    try {
+      await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/content`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: mobileEditTitle, content: mobileEditContent }),
+      });
+      setReadingChapterTitle(mobileEditTitle);
+      setReadingContent(mobileEditContent);
+      setShowMobileEdit(false);
+      setNotification({ title: '已保存', message: '章节内容已更新。' });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setMobileEditSaving(false);
     }
   };
 
@@ -2261,16 +2288,51 @@ function App() {
                     );
                   })()}
 
-                  {/* Mobile: enter editor room button */}
-                  {isMobile && (
+                  {/* Mobile: simple edit button */}
+                  {isMobile && !showMobileEdit && (
                     <div style={{ marginTop: 12 }}>
                       <button
                         className="btn"
                         style={{ width: '100%' }}
-                        onClick={() => { navigateTo('editor'); setEditorRoomTab('chat'); }}
+                        onClick={() => {
+                          setMobileEditTitle(readingChapterTitle);
+                          setMobileEditContent(readingContent);
+                          setShowMobileEdit(true);
+                        }}
                       >
-                        进入编辑室
+                        编辑本文
                       </button>
+                    </div>
+                  )}
+
+                  {/* Mobile: simple edit form */}
+                  {isMobile && showMobileEdit && (
+                    <div className="mobile-simple-edit" style={{ marginTop: 12, padding: '12px', border: '1px solid #eee', borderRadius: 8 }}>
+                      <h3 style={{ fontSize: 16, marginBottom: 12 }}>编辑本章</h3>
+                      <label>标题</label>
+                      <input
+                        type="text"
+                        value={mobileEditTitle}
+                        onChange={(e) => setMobileEditTitle(e.target.value)}
+                        placeholder="章节标题"
+                        style={{ width: '100%', marginBottom: 12 }}
+                      />
+                      <label>正文</label>
+                      <textarea
+                        value={mobileEditContent}
+                        onChange={(e) => setMobileEditContent(e.target.value)}
+                        rows={20}
+                        placeholder="章节正文..."
+                        style={{ width: '100%', marginBottom: 12 }}
+                      />
+                      <div className="form-actions">
+                        <button className="btn" onClick={handleMobileSaveEdit} disabled={mobileEditSaving}>
+                          {mobileEditSaving ? '保存中...' : '保存'}
+                        </button>
+                        <button className="btn btn-secondary" onClick={() => setShowMobileEdit(false)}>
+                          取消
+                        </button>
+                      </div>
                     </div>
                   )}
 
