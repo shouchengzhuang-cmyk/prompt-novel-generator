@@ -466,6 +466,11 @@ function App() {
     const nextNumStr = String(nextNum).padStart(3, '0');
 
     setError('');
+    // 清理重写/变体状态，避免 variantPreview 遮挡新生成内容
+    setVariantPreview(null);
+    setVariants([]);
+    setShowRewriteInput(false);
+    setRewritePrompt('');
     setLoading(true);
     generatingRef.current = true;
     setStreamingChapterNum(nextNumStr);
@@ -1043,6 +1048,7 @@ function App() {
 
     setRegenerating(true);
     setError('');
+    setVariantPreview(null);
     setReadingChapter('_streaming');
     setReadingChapterTitle('重写生成中...');
     setReadingContent('');
@@ -1111,6 +1117,14 @@ function App() {
       setRewritePrompt('');
       setGenProgress(prev => ({ ...prev, status: 'success' }));
       setNotification({ title: '候选版本写好了', message: '可以查看并决定是否采用。' });
+      // 刷新项目详情，保持章节列表与后台同步
+      try {
+        const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+        if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
+        setProjectDetails(refreshData);
+      } catch (refreshErr) {
+        console.warn('重写后刷新项目详情失败:', refreshErr);
+      }
     } catch (err) {
       setReadingChapter(origChapter);
       setReadingChapterTitle(origTitle);
