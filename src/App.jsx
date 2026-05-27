@@ -157,6 +157,8 @@ function App() {
     setMobileShelfMenu(null);
   }, []);
 
+  const handleAppBackRef = useRef(null);
+
   // Unified mobile back button: uses internal state transitions, not browser history
   // Unified back handler — used by both popstate and back button
   // Returns 'overlay' (closed a panel), 'view' (changed view), or 'none' (at root)
@@ -279,7 +281,6 @@ function App() {
   const editorChatListRef = useRef(null);
   const readingSectionRef = useRef(null);
   const readingContentRef = useRef(null);
-  const handleAppBackRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   useEffect(() => {
