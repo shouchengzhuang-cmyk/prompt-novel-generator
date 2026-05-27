@@ -82,6 +82,18 @@ function App() {
   useEffect(() => { localStorage.setItem('readingTheme', readingTheme); }, [readingTheme]);
   useEffect(() => { localStorage.setItem('readingFontSize', readingFontSize); }, [readingFontSize]);
 
+  // Project sort
+  const [projectSort, setProjectSort] = useState(() => {
+    try {
+      const saved = localStorage.getItem('xiaomoxia_project_sort');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { field: 'updatedAt', order: 'desc' };
+  });
+  useEffect(() => {
+    localStorage.setItem('xiaomoxia_project_sort', JSON.stringify(projectSort));
+  }, [projectSort]);
+
   // Sidebar layout
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
@@ -1263,6 +1275,36 @@ function App() {
     [projectDetails, readingChapter]
   );
 
+  // Sorted projects list with fallback for legacy string-format items
+  const sortedProjects = useMemo(() => {
+    const list = Array.isArray(projects) ? projects : [];
+    const { field, order } = projectSort;
+
+    // Normalize: support both string items and object items
+    const normalized = list.map((p) => {
+      if (typeof p === 'string') return { name: p, size: 0, updatedAt: 0 };
+      return {
+        name: p.name ?? '',
+        size: p.size ?? 0,
+        updatedAt: p.updatedAt ?? 0,
+      };
+    });
+
+    const sorted = [...normalized].sort((a, b) => {
+      let cmp;
+      if (field === 'name') {
+        cmp = a.name.localeCompare(b.name, 'zh-CN');
+      } else if (field === 'size') {
+        cmp = a.size - b.size;
+      } else {
+        cmp = a.updatedAt - b.updatedAt;
+      }
+      return order === 'desc' ? -cmp : cmp;
+    });
+
+    return sorted;
+  }, [projects, projectSort]);
+
   const handleGenProgressDone = useCallback(() => {
     setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
   }, []);
@@ -1438,19 +1480,38 @@ function App() {
 
               {!isProjectsCollapsed && (
                 <div className="sidebar-section-body">
+                  <div className="project-sort-controls">
+                    <select
+                      className="project-sort-field"
+                      value={projectSort.field}
+                      onChange={(e) => setProjectSort((prev) => ({ ...prev, field: e.target.value }))}
+                    >
+                      <option value="updatedAt">按修改日期</option>
+                      <option value="name">按名称</option>
+                      <option value="size">按大小</option>
+                    </select>
+                    <select
+                      className="project-sort-order"
+                      value={projectSort.order}
+                      onChange={(e) => setProjectSort((prev) => ({ ...prev, order: e.target.value }))}
+                    >
+                      <option value="desc">降序</option>
+                      <option value="asc">升序</option>
+                    </select>
+                  </div>
                   <div className="project-list project-list-scroll">
-                    {projects.length === 0 && (
+                    {sortedProjects.length === 0 && (
                       <p className="hint">暂无项目，请创建一个</p>
                     )}
-                    {projects.map((name) => (
-                      <div key={name} className="project-item-wrap">
+                    {sortedProjects.map((p) => (
+                      <div key={p.name} className="project-item-wrap">
                         <div
-                          className={'project-item' + (currentProject === name ? ' active' : '')}
-                          onClick={() => handleSelectProject(name)}
+                          className={'project-item' + (currentProject === p.name ? ' active' : '')}
+                          onClick={() => handleSelectProject(p.name)}
                         >
-                          <span className="project-name">{name}</span>
+                          <span className="project-name">{p.name}</span>
                         </div>
-                        <button className="delete-btn project-delete" onClick={(e) => handleDeleteProject(name, e)}>删除</button>
+                        <button className="delete-btn project-delete" onClick={(e) => handleDeleteProject(p.name, e)}>删除</button>
                       </div>
                     ))}
                   </div>
@@ -2468,27 +2529,46 @@ function App() {
               <>
                 <h2 className="shelf-title">我的书架</h2>
                 <p className="shelf-subtitle">选择一个故事继续写</p>
+                <div className="project-sort-controls mobile">
+                  <select
+                    className="project-sort-field"
+                    value={projectSort.field}
+                    onChange={(e) => setProjectSort((prev) => ({ ...prev, field: e.target.value }))}
+                  >
+                    <option value="updatedAt">按修改日期</option>
+                    <option value="name">按名称</option>
+                    <option value="size">按大小</option>
+                  </select>
+                  <select
+                    className="project-sort-order"
+                    value={projectSort.order}
+                    onChange={(e) => setProjectSort((prev) => ({ ...prev, order: e.target.value }))}
+                  >
+                    <option value="desc">降序</option>
+                    <option value="asc">升序</option>
+                  </select>
+                </div>
                 <div className="bookshelf-grid">
-                  {projects.length === 0 && (
+                  {sortedProjects.length === 0 && (
                     <p className="hint" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>还没有项目，创建一个吧</p>
                   )}
-                  {projects.map((name) => {
-                    const count = projectChapterCounts[name];
-                    const menuOpen = mobileShelfMenu === name;
+                  {sortedProjects.map((p) => {
+                    const count = projectChapterCounts[p.name];
+                    const menuOpen = mobileShelfMenu === p.name;
                     return (
-                    <div key={name} className="book-item" onClick={() => { setMobileShelfMenu(null); handleSelectProject(name); }}>
-                      <div className={'book-cover' + (currentProject === name ? ' current' : '')}>
-                        <span className="book-cover-char">{name.charAt(0)}</span>
+                    <div key={p.name} className="book-item" onClick={() => { setMobileShelfMenu(null); handleSelectProject(p.name); }}>
+                      <div className={'book-cover' + (currentProject === p.name ? ' current' : '')}>
+                        <span className="book-cover-char">{p.name.charAt(0)}</span>
                         <button
                           className="book-menu-btn"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setMobileShelfMenu(menuOpen ? null : name);
+                            setMobileShelfMenu(menuOpen ? null : p.name);
                           }}
                         >⋯</button>
                         {menuOpen && (
                           <div className="book-menu-dropdown" onClick={(e) => e.stopPropagation()}>
-                            <button className="book-menu-delete" onClick={() => handleShelfDeleteProject(name)}>删除</button>
+                            <button className="book-menu-delete" onClick={() => handleShelfDeleteProject(p.name)}>删除</button>
                           </div>
                         )}
                       </div>

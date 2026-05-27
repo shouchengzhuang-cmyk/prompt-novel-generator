@@ -534,16 +534,51 @@ function extractTitleFromContent(content, chapterNumber) {
   return `第${chapterNumber}章`;
 }
 
+// ---- Helper: collect project file stats ----
+
+async function collectProjectStats(projectDir) {
+  let totalSize = 0;
+  let latestMtime = 0;
+
+  const entries = await fs.readdir(projectDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(projectDir, entry.name);
+    if (entry.name.startsWith('.')) continue;
+    if (entry.isDirectory()) {
+      const sub = await collectProjectStats(fullPath);
+      totalSize += sub.totalSize;
+      if (sub.latestMtime > latestMtime) latestMtime = sub.latestMtime;
+    } else if (entry.isFile()) {
+      try {
+        const stat = await fs.stat(fullPath);
+        totalSize += stat.size;
+        if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
+      } catch { /* skip unreadable files */ }
+    }
+  }
+  return { totalSize, latestMtime };
+}
+
 // ---- GET /api/projects ----
 
 app.get('/api/projects', async (_req, res) => {
   try {
     await ensureDir(NOVELS_DIR);
     const entries = await fs.readdir(NOVELS_DIR, { withFileTypes: true });
-    const projects = entries
+    const projectNames = entries
       .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-      .map((e) => e.name)
-      .sort();
+      .map((e) => e.name);
+
+    const projects = await Promise.all(projectNames.map(async (name) => {
+      const projectDir = path.join(NOVELS_DIR, name);
+      try {
+        const stats = await collectProjectStats(projectDir);
+        return { name, size: stats.totalSize, updatedAt: stats.latestMtime };
+      } catch {
+        return { name, size: 0, updatedAt: 0 };
+      }
+    }));
+
     res.json({ projects });
   } catch (err) {
     res.status(500).json({ error: err.message });
