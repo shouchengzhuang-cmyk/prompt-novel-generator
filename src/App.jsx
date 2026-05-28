@@ -3259,14 +3259,34 @@ function App() {
 
                 <section className="mobile-home-section">
                   <h3 className="mobile-section-title">快捷入口</h3>
-                  <div className="mobile-shortcut-grid">
+
+                  {/* 写作 - 主卡 */}
+                  <button
+                    className="mobile-shortcut-card-primary"
+                    type="button"
+                    disabled={!hasHomeProjects}
+                    onClick={() => handleMobileQuickAction('writing', featuredProject.name)}
+                  >
+                    <span className="mobile-shortcut-primary-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                      </svg>
+                    </span>
+                    <span className="mobile-shortcut-primary-copy">
+                      <strong>写作</strong>
+                      <span>继续章节 · 生成下一段</span>
+                    </span>
+                    <span className="mobile-shortcut-primary-arrow">›</span>
+                  </button>
+
+                  {/* 其余四个 - 2列小卡 */}
+                  <div className="mobile-shortcut-subgrid">
                     {[
-                      ['world', '世界观', 'world'],
-                      ['character', '人物卡', 'characters'],
-                      ['write', '写作', 'writing'],
-                      ['outline', '大纲', 'outline'],
-                      ['materials', '素材库', 'materials'],
-                    ].map(([icon, label, type]) => (
+                      ['world', '世界观', '设定世界、势力、规则', 'world'],
+                      ['character', '人物卡', '角色关系与人设', 'characters'],
+                      ['outline', '大纲', '剧情摘要与章节规划', 'outline'],
+                      ['materials', '素材库', '备份、导入、资料', 'materials'],
+                    ].map(([icon, label, desc, type]) => (
                       <button
                         key={label}
                         className="mobile-shortcut-card"
@@ -3274,8 +3294,41 @@ function App() {
                         disabled={!hasHomeProjects}
                         onClick={() => handleMobileQuickAction(type, featuredProject.name)}
                       >
-                        <span className={`mobile-shortcut-icon icon-${icon}`} aria-hidden="true" />
-                        <strong>{label}</strong>
+                        <span className="mobile-shortcut-icon">
+                          {icon === 'world' && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10"/>
+                              <line x1="2" y1="12" x2="22" y2="12"/>
+                              <line x1="12" y1="2" x2="12" y2="22"/>
+                              <ellipse cx="12" cy="12" rx="4" ry="10"/>
+                            </svg>
+                          )}
+                          {icon === 'character' && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="8" r="4"/>
+                              <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8"/>
+                            </svg>
+                          )}
+                          {icon === 'outline' && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="8" y1="6" x2="21" y2="6"/>
+                              <line x1="8" y1="12" x2="21" y2="12"/>
+                              <line x1="8" y1="18" x2="21" y2="18"/>
+                              <line x1="3" y1="6" x2="3.01" y2="6"/>
+                              <line x1="3" y1="12" x2="3.01" y2="12"/>
+                              <line x1="3" y1="18" x2="3.01" y2="18"/>
+                            </svg>
+                          )}
+                          {icon === 'materials' && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                            </svg>
+                          )}
+                        </span>
+                        <span className="mobile-shortcut-card-copy">
+                          <strong>{label}</strong>
+                          <span>{desc}</span>
+                        </span>
                       </button>
                     ))}
                   </div>
