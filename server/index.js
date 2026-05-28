@@ -573,9 +573,17 @@ app.get('/api/projects', async (_req, res) => {
       const projectDir = path.join(NOVELS_DIR, name);
       try {
         const stats = await collectProjectStats(projectDir);
-        return { name, size: stats.totalSize, updatedAt: stats.latestMtime };
+        let chapterCount = 0;
+        try {
+          const chaptersDir = path.join(projectDir, 'chapters');
+          const chapterFiles = await fs.readdir(chaptersDir);
+          chapterCount = chapterFiles.filter((file) => isValidChapterFileName(file)).length;
+        } catch {
+          chapterCount = 0;
+        }
+        return { name, size: stats.totalSize, updatedAt: stats.latestMtime, chapterCount };
       } catch {
-        return { name, size: 0, updatedAt: 0 };
+        return { name, size: 0, updatedAt: 0, chapterCount: 0 };
       }
     }));
 

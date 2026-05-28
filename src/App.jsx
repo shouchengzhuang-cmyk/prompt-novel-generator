@@ -75,7 +75,13 @@ function App() {
   const [rewritePrompt, setRewritePrompt] = useState('');
 
   // Reading settings
-  const [readingTheme, setReadingTheme] = useState(() => localStorage.getItem('readingTheme') || 'default');
+  const [readingTheme, setReadingTheme] = useState(() => {
+    const saved = localStorage.getItem('readingTheme');
+    if (saved === 'default' || saved === 'dark') return 'ink';
+    if (saved === 'warm') return 'night';
+    if (saved === 'gray') return 'paper';
+    return saved || 'ink';
+  });
   const [readingFontSize, setReadingFontSize] = useState(() => localStorage.getItem('readingFontSize') || 'medium');
   const [mobileReadingSettingsOpen, setMobileReadingSettingsOpen] = useState(false);
 
@@ -99,13 +105,29 @@ function App() {
   const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
   const [isChaptersCollapsed, setIsChaptersCollapsed] = useState(false);
 
-  // Mobile view routing: 'shelf' | 'project' | 'chapter' | 'editor'
+  // Mobile view routing: 'shelf' | 'project' | 'chapter' | 'editor' | 'writing'
   const [mobileView, setMobileView] = useState('shelf');
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
   const [mobileGenerateOpen, setMobileGenerateOpen] = useState(false);
   const [mobileVariantsOpen, setMobileVariantsOpen] = useState(false);
   const [mobileShelfMenu, setMobileShelfMenu] = useState(null);
   const [mobileChapterMenu, setMobileChapterMenu] = useState(null);
+  const [mobileMaterialsOpen, setMobileMaterialsOpen] = useState(false);
+  const [showMobileSearch, setShowMobileSearch] = useState(false);
+  const [mobileSearchQuery, setMobileSearchQuery] = useState('');
+  const [mobileSearchIndex, setMobileSearchIndex] = useState([]);
+  const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
+  const [lastProjectName, setLastProjectName] = useState(() => localStorage.getItem('xiaomoxia-last-project') || '');
+  const [mobileWritingTarget, setMobileWritingTarget] = useState(null);
+  const [mobileWritingPrompt, setMobileWritingPrompt] = useState('');
+  const [mobileWritingKind, setMobileWritingKind] = useState('generate');
+  const [mobileWritingOutput, setMobileWritingOutput] = useState('');
+  const [mobileWritingError, setMobileWritingError] = useState('');
+  const [allProjectDetails, setAllProjectDetails] = useState({});
+  const mobileWorldRef = useRef(null);
+  const mobileCharactersRef = useRef(null);
+  const mobileSummaryRef = useRef(null);
+  const mobileSearchInputRef = useRef(null);
 
   // Writing preferences
   const [writingPrefs, setWritingPrefs] = useState({
@@ -142,6 +164,12 @@ function App() {
     const timer = setTimeout(() => setNotification(null), 10000);
     return () => clearTimeout(timer);
   }, [notification]);
+
+  const rememberLastProject = useCallback((projectName) => {
+    if (!projectName) return;
+    localStorage.setItem('xiaomoxia-last-project', projectName);
+    setLastProjectName(projectName);
+  }, []);
 
   // Browser title during generation / rewrite
   useEffect(() => {
@@ -195,12 +223,33 @@ function App() {
       setShowOutline(false);
       return 'overlay';
     }
+    if (showMobileSearch) {
+      setShowMobileSearch(false);
+      setMobileSearchQuery('');
+      return 'overlay';
+    }
+    if (mobileMaterialsOpen) {
+      setMobileMaterialsOpen(false);
+      return 'overlay';
+    }
     if (editingTitle) {
       setEditingTitle(false);
       return 'overlay';
     }
 
     // 2) View hierarchy: editor → chapter → project → shelf
+    if (mobileView === 'allProjects') {
+      setMobileView('shelf');
+      return 'view';
+    }
+    if (mobileView === 'outline') {
+      setMobileView('project');
+      return 'view';
+    }
+    if (mobileView === 'writing') {
+      setMobileView(readingChapter && readingChapter !== '_streaming' ? 'chapter' : 'project');
+      return 'view';
+    }
     if (mobileView === 'editor') {
       setMobileView('chapter');
       return 'view';
@@ -232,7 +281,10 @@ function App() {
       setShowOutline(false);
       setShowSettings(false);
       setEditingProjectName(null);
+      setMobileMaterialsOpen(false);
       setMobileView('shelf');
+      setMobileWritingTarget(null);
+      setMobileWritingOutput('');
       return 'view';
     }
 
@@ -364,6 +416,7 @@ function App() {
 
   // ---- Select a project ----
   const handleSelectProject = async (name) => {
+    rememberLastProject(name);
     setCurrentProject(name);
     setError('');
     setLastFilename('');
@@ -378,6 +431,10 @@ function App() {
     setShowSettings(false);
     setEditingProjectName(null);
     setShowOutline(false);
+    setMobileMaterialsOpen(false);
+    setMobileWritingTarget(null);
+    setMobileWritingOutput('');
+    setMobileWritingError('');
     setOutline([]);
     setOutlineText('');
     setOutlineError('');
@@ -397,10 +454,12 @@ function App() {
       setProjectDetails(data);
       setProjectChapterCounts(prev => ({ ...prev, [name]: data.chapters ? data.chapters.length : 0 }));
       setDisplayContent(data.recentContent || '');
+      return data;
     } catch (err) {
       setError(err.message);
       setProjectDetails(null);
       setDisplayContent('');
+      return null;
     }
   };
 
@@ -442,6 +501,7 @@ function App() {
       setNewSummary('');
       setCreateError('');
       await fetchProjects();
+      rememberLastProject(name);
       await handleSelectProject(name);
     } catch (err) {
       setCreateError(err.message);
@@ -457,6 +517,7 @@ function App() {
       setError('请先选择一个项目');
       return;
     }
+    rememberLastProject(currentProject);
     if (!userPrompt.trim()) {
       setError('请输入生成要求');
       return;
@@ -485,6 +546,8 @@ function App() {
     setShowRewriteInput(false);
     setRewritePrompt('');
     setLoading(true);
+    setMobileWritingError('');
+    setMobileWritingOutput('');
     generatingRef.current = true;
     setStreamingChapterNum(nextNumStr);
     // 立即进入临时章节状态，在阅读区显示生成进度
@@ -546,6 +609,7 @@ function App() {
         // 每轮 read() 后更新阅读区正文，让 React 在 await 间隙渲染
         if (streamedContent) {
           setReadingContent(streamedContent);
+          setMobileWritingOutput(streamedContent);
         }
       }
 
@@ -555,6 +619,7 @@ function App() {
       setReadingChapter(null);
       setReadingChapterTitle('');
       setReadingContent('');
+      setMobileWritingOutput('');
       setStreamingChapterNum('');
 
       // 回退到非流式生成
@@ -584,6 +649,7 @@ function App() {
           setNotification({ title: '生成失败', message: err.message });
         }
         setLoading(false);
+        setMobileWritingError(isNetworkOrTimeout ? '网络异常或请求超时' : err.message);
         generatingRef.current = false;
         return;
       }
@@ -596,6 +662,7 @@ function App() {
       return prev + sep + '--- ' + fileName + ' ---\n' + content;
     });
     setLastFilename(fileName);
+    setMobileWritingOutput(content || '');
     setUserPrompt('');
     setDebugPromptInfo(debugInfo || null);
     resetEditorRoom();
@@ -603,6 +670,7 @@ function App() {
     setReadingChapter(fileName);
     setReadingChapterTitle(title || '');
     setReadingContent(content);
+    rememberLastProject(currentProject);
 
     let refreshFailed = false;
     try {
@@ -625,7 +693,9 @@ function App() {
   };
 
   // ---- Read a chapter ----
-  const handleReadChapter = async (filename) => {
+  const handleReadChapter = async (filename, projectName = currentProject) => {
+    if (!projectName) return null;
+    rememberLastProject(projectName);
     setError('');
     setDebugPromptInfo(null);
     resetEditorRoom();
@@ -636,7 +706,7 @@ function App() {
     setRewritePrompt('');
     setReadingContent('');
     try {
-      const url = `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}`;
+      const url = `/api/projects/${encodeURIComponent(projectName)}/chapters/${encodeURIComponent(filename)}`;
       const data = await safeJsonFetch(url);
       console.log('章节接口返回的数据:', data);
       if (typeof data.fileName !== 'string' || typeof data.content !== 'string') {
@@ -645,6 +715,7 @@ function App() {
       setReadingChapter(data.fileName);
       setReadingChapterTitle(data.title || '');
       setReadingContent(data.content === '' ? '章节为空' : data.content);
+      setMobileWritingOutput('');
       setEditorNotes(Array.isArray(data.editorNotes) ? data.editorNotes : []);
       setEditorChats(Array.isArray(data.editorChats) ? data.editorChats : []);
       setProjectDetails((prev) => {
@@ -663,9 +734,11 @@ function App() {
         return { ...prev, chapters };
       });
       // Load variants for this chapter
-      handleLoadVariants(data.fileName);
+      handleLoadVariants(data.fileName, projectName);
+      return data;
     } catch (err) {
       setError(err.message);
+      return null;
     }
   };
 
@@ -785,16 +858,33 @@ function App() {
   };
 
   // ---- Open settings ----
-  const handleOpenSettings = () => {
-    if (!projectDetails) return;
-    setEditWorld(projectDetails.world || '');
-    setEditCharacters(projectDetails.characters || '');
-    setEditStyle(projectDetails.style || '');
-    setEditSummary(projectDetails.summary || '');
-    setEditEditorialMemory(projectDetails.editorialMemory || '');
-    setEditingProjectName(currentProject);
+  const openSettingsEditor = (details = projectDetails, projectName = currentProject, focusTarget = '') => {
+    if (!details || !projectName) return;
+    setEditWorld(details.world || '');
+    setEditCharacters(details.characters || '');
+    setEditStyle(details.style || '');
+    setEditSummary(details.summary || '');
+    setEditEditorialMemory(details.editorialMemory || '');
+    setEditingProjectName(projectName);
     setShowSettings(true);
+    setShowOutline(false);
+    setMobileMaterialsOpen(false);
     setError('');
+    if (focusTarget === 'world' || focusTarget === 'characters' || focusTarget === 'summary') {
+      requestAnimationFrame(() => {
+        const target = focusTarget === 'world'
+          ? mobileWorldRef.current
+          : focusTarget === 'characters'
+            ? mobileCharactersRef.current
+            : mobileSummaryRef.current;
+        target?.focus();
+        target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  };
+
+  const handleOpenSettings = () => {
+    openSettingsEditor(projectDetails, currentProject);
   };
 
   // ---- Save settings ----
@@ -806,6 +896,7 @@ function App() {
     }
 
     setError('');
+    rememberLastProject(currentProject);
     setSavingSettings(true);
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`, {
@@ -838,11 +929,11 @@ function App() {
   };
 
   // ---- Outline ----
-  const handleLoadOutline = async () => {
-    if (!currentProject) return;
+  const handleLoadOutline = async (projectName = currentProject) => {
+    if (!projectName) return;
     setOutlineError('');
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/outline`);
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/outline`);
       const list = Array.isArray(data.outline) ? data.outline : [];
       setOutline(list);
       setOutlineText(JSON.stringify(list, null, 2));
@@ -853,6 +944,7 @@ function App() {
 
   const handleSaveOutline = async () => {
     if (!currentProject) return;
+    rememberLastProject(currentProject);
     setOutlineError('');
     let parsed;
     try {
@@ -892,6 +984,7 @@ function App() {
   // ---- Export full text ----
   const handleExport = async () => {
     if (!currentProject) return;
+    rememberLastProject(currentProject);
     setExportStatus('exporting');
     try {
       const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/export`);
@@ -916,6 +1009,7 @@ function App() {
   // ---- Backup project ----
   const handleBackup = async () => {
     if (!currentProject) return;
+    rememberLastProject(currentProject);
     setError('');
     try {
       const response = await apiFetch(`/api/projects/${encodeURIComponent(currentProject)}/backup`);
@@ -1027,9 +1121,9 @@ function App() {
   };
 
   // ---- Variants (regenerate chapter) ----
-  const handleLoadVariants = async (filename) => {
+  const handleLoadVariants = async (filename, projectName = currentProject) => {
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}/variants`);
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/chapters/${encodeURIComponent(filename)}/variants`);
       setVariants(data.variants || []);
     } catch {
       setVariants([]);
@@ -1048,6 +1142,7 @@ function App() {
   const handleRegenerate = async () => {
     if (loading || regenerating) return;
     if (!currentProject || !readingChapter) return;
+    rememberLastProject(currentProject);
     const trimmed = rewritePrompt.trim();
     if (!trimmed) {
       setError('续写要求不能为空');
@@ -1061,6 +1156,8 @@ function App() {
 
     setRegenerating(true);
     setError('');
+    setMobileWritingError('');
+    setMobileWritingOutput('');
     setVariantPreview(null);
     setReadingChapter('_streaming');
     setReadingChapterTitle('重写生成中...');
@@ -1105,6 +1202,7 @@ function App() {
             if (event.type === 'chunk') {
               streamedContent += event.content;
               setReadingContent(streamedContent);
+              setMobileWritingOutput(streamedContent);
             } else if (event.type === 'done') {
               doneVariant = event.variant;
               doneDebugInfo = event.debugPromptInfo;
@@ -1124,6 +1222,7 @@ function App() {
       // Success: restore readingChapter, update title from variant, keep streamed content
       setReadingChapter(origChapter);
       setReadingChapterTitle(doneVariant.title || origTitle);
+      setMobileWritingOutput(doneVariant.content || streamedContent);
       setVariants((prev) => [...prev, { ...doneVariant, _debugPromptInfo: doneDebugInfo }]);
       handleLoadVariants(origChapter);
       setShowRewriteInput(false);
@@ -1142,6 +1241,7 @@ function App() {
       setReadingChapter(origChapter);
       setReadingChapterTitle(origTitle);
       setReadingContent(origContent);
+      setMobileWritingError(err.message);
       setGenProgress({ visible: true, mode: 'rewrite', status: 'error', errorMessage: err.message });
       setNotification({ title: '生成失败', message: err.message });
     } finally {
@@ -1151,6 +1251,7 @@ function App() {
 
   const handleMobileSaveEdit = async () => {
     if (!currentProject || !readingChapter || mobileEditSaving) return;
+    rememberLastProject(currentProject);
     setMobileEditSaving(true);
     setError('');
     try {
@@ -1287,6 +1388,7 @@ function App() {
         name: p.name ?? '',
         size: p.size ?? 0,
         updatedAt: p.updatedAt ?? 0,
+        chapterCount: p.chapterCount ?? 0,
       };
     });
 
@@ -1304,6 +1406,352 @@ function App() {
 
     return sorted;
   }, [projects, projectSort]);
+
+  const formatProjectUpdatedAt = (timestamp) => {
+    if (!timestamp) return '更新于 暂无记录';
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return '更新于 暂无记录';
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfTarget = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    const dayDiff = Math.round((startOfToday - startOfTarget) / 86400000);
+    const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+    if (dayDiff === 0) return `更新于 今天 ${time}`;
+    if (dayDiff === 1) return `更新于 昨天 ${time}`;
+    if (date.getFullYear() === now.getFullYear()) {
+      return `更新于 ${date.getMonth() + 1}月${date.getDate()}日 ${time}`;
+    }
+    return `更新于 ${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日`;
+  };
+
+  const getProjectChapterCount = (project) => {
+    if (!project?.name) return 0;
+    return projectChapterCounts[project.name] ?? project.chapterCount ?? 0;
+  };
+
+  const sortedProjectsByRecent = useMemo(() => {
+    const last = lastProjectName && sortedProjects.some((p) => p.name === lastProjectName) ? lastProjectName : '';
+    const list = [...sortedProjects];
+    if (!last) return list;
+    return list.sort((a, b) => {
+      if (a.name === last) return -1;
+      if (b.name === last) return 1;
+      return 0;
+    });
+  }, [sortedProjects, lastProjectName]);
+
+  const recentHomeProjects = sortedProjectsByRecent.slice(0, 3);
+  const hasHomeProjects = recentHomeProjects.length > 0;
+  const mobileCurrentProject = hasHomeProjects
+    ? (sortedProjectsByRecent.find((p) => p.name === lastProjectName) || sortedProjectsByRecent[0])
+    : null;
+  const featuredProject = mobileCurrentProject || { name: '合欢宗', updatedAt: 0, chapterCount: 18 };
+  const featuredChapterCount = hasHomeProjects ? getProjectChapterCount(featuredProject) : 18;
+  const featuredChapterLabel = featuredChapterCount > 0 ? `第 ${featuredChapterCount} 章` : '尚未开始';
+  const featuredUpdatedLabel = hasHomeProjects ? formatProjectUpdatedAt(featuredProject.updatedAt) : '更新于 今天 08:36';
+  const fallbackRecentProjects = [
+    { name: '合欢宗重制版', meta: '更新于 今天 08:36 ｜ 第 36 章' },
+    { name: '把日子写成小说', meta: '更新于 昨天 22:10 ｜ 第 12 章' },
+    { name: '测试', meta: '更新于 5月12日 14:20 ｜ 第 3 章' },
+  ];
+
+  const getLatestChapterFile = (details) => {
+    const chapters = Array.isArray(details?.chapters) ? details.chapters : [];
+    const latest = [...chapters].reverse().find((ch) => ch.fileName || ch.filename);
+    return latest ? (latest.fileName || latest.filename) : '';
+  };
+
+  const getProjectIntro = (details) => {
+    const text = details?.summary || details?.world || details?.style || details?.editorialMemory || '';
+    return text ? text.replace(/\s+/g, ' ').trim().slice(0, 48) : '暂无简介';
+  };
+
+  const formatOutlinePlan = (list) => {
+    if (!Array.isArray(list)) return [];
+    return list.map((item, index) => ({
+      number: item.number || index + 1,
+      title: item.title || item.goal || `第 ${item.number || index + 1} 章`,
+      detail: [
+        Array.isArray(item.keyEvents) ? item.keyEvents.join('、') : item.keyEvents,
+        item.characterChanges,
+        item.status,
+      ].filter(Boolean).join(' · '),
+    }));
+  };
+
+  const ensureProjectDetailsCached = async (projectName) => {
+    if (!projectName) return null;
+    if (currentProject === projectName && projectDetails) return projectDetails;
+    if (allProjectDetails[projectName]) return allProjectDetails[projectName];
+    try {
+      const details = await safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}`);
+      if (details.chapters) details.chapters = normalizeChapters(details.chapters);
+      setAllProjectDetails((prev) => ({ ...prev, [projectName]: details }));
+      return details;
+    } catch {
+      return null;
+    }
+  };
+
+  const ensureMobileProjectLoaded = async (projectName) => {
+    if (!projectName) return null;
+    if (currentProject === projectName && projectDetails) return projectDetails;
+    return await handleSelectProject(projectName);
+  };
+
+  const handleHomeProjectOpen = async (projectName) => {
+    if (!hasHomeProjects || !projectName) return;
+    setMobileShelfMenu(null);
+    await handleSelectProject(projectName);
+  };
+
+  const handleHomeOutlineOpen = async (projectName) => {
+    await handleMobileQuickAction('outline', projectName);
+  };
+
+  const handleOpenMobileOutline = async (projectName = featuredProject?.name) => {
+    if (!hasHomeProjects || !projectName) return;
+    const details = await ensureMobileProjectLoaded(projectName);
+    if (!details) return;
+    await handleLoadOutline(projectName);
+    setShowSettings(false);
+    setShowOutline(false);
+    setMobileMaterialsOpen(false);
+    rememberLastProject(projectName);
+    navigateTo('outline');
+  };
+
+  const handleOpenAllProjects = async () => {
+    const entries = await Promise.all(sortedProjects.map(async (project) => {
+      const details = await ensureProjectDetailsCached(project.name);
+      return [project.name, details];
+    }));
+    setAllProjectDetails((prev) => {
+      const next = { ...prev };
+      entries.forEach(([name, details]) => {
+        if (name && details) next[name] = details;
+      });
+      return next;
+    });
+    navigateTo('allProjects');
+  };
+
+  const handleMobileQuickAction = async (type, projectName = featuredProject?.name) => {
+    if (!hasHomeProjects || !projectName) return;
+    setMobileShelfMenu(null);
+    const details = await ensureMobileProjectLoaded(projectName);
+    if (!details) return;
+
+    if (type === 'world') {
+      openSettingsEditor(details, projectName, 'world');
+      navigateTo('project');
+      return;
+    }
+
+    if (type === 'characters') {
+      openSettingsEditor(details, projectName, 'characters');
+      navigateTo('project');
+      return;
+    }
+
+    if (type === 'outline') {
+      await handleOpenMobileOutline(projectName);
+      return;
+    }
+
+    if (type === 'materials') {
+      setShowSettings(false);
+      setShowOutline(false);
+      setMobileMaterialsOpen(true);
+      navigateTo('project');
+      return;
+    }
+
+    if (type === 'writing' || type === 'continue') {
+      await handleOpenMobileWriting(projectName, { kind: 'generate', details });
+    }
+  };
+
+  const handleOpenMobileWriting = async (projectName = featuredProject?.name, options = {}) => {
+    if (!hasHomeProjects || !projectName) return;
+    const details = options.details || await ensureMobileProjectLoaded(projectName);
+    if (!details) return;
+    rememberLastProject(projectName);
+    setShowSettings(false);
+    setShowOutline(false);
+    setMobileMaterialsOpen(false);
+    setMobileGenerateOpen(false);
+    setMobileVariantsOpen(false);
+    setShowRewriteInput(false);
+    setMobileWritingError('');
+    setMobileWritingOutput('');
+
+    const chapters = Array.isArray(details.chapters) ? details.chapters : [];
+    const latestFile = options.fileName || getLatestChapterFile(details);
+    const latestChapter = chapters.find((ch) => (ch.fileName || ch.filename) === latestFile);
+    const nextNumber = latestFile
+      ? String(parseInt(latestFile, 10) + 1).padStart(3, '0')
+      : '001';
+    const kind = options.kind || 'generate';
+    setMobileWritingKind(kind);
+    setMobileWritingTarget({
+      projectName,
+      fileName: latestFile,
+      chapterTitle: latestChapter?.title || latestFile || '',
+      nextLabel: kind === 'rewrite' ? '重写当前章节' : `生成第 ${nextNumber} 章`,
+    });
+
+    if (kind === 'rewrite') {
+      if (latestFile && readingChapter !== latestFile) {
+        await handleReadChapter(latestFile, projectName);
+      }
+      const saved = latestChapter?.userPrompt || '保留主线，重写这一章';
+      setRewritePrompt(saved);
+      setMobileWritingPrompt(saved);
+    } else {
+      const initialPrompt = options.prompt || userPrompt || '继续写';
+      setUserPrompt(initialPrompt);
+      setMobileWritingPrompt(initialPrompt);
+    }
+
+    navigateTo('writing');
+  };
+
+  const handleMobileWritingPromptChange = (value) => {
+    setMobileWritingPrompt(value);
+    if (mobileWritingKind === 'rewrite') {
+      setRewritePrompt(value);
+    } else {
+      setUserPrompt(value);
+    }
+  };
+
+  const handleMobileWritingGenerate = async () => {
+    setMobileWritingError('');
+    if (mobileWritingKind === 'rewrite') {
+      if (!readingChapter || readingChapter === '_streaming') {
+        setMobileWritingError('请先选择要重写的章节');
+        return;
+      }
+      setRewritePrompt(mobileWritingPrompt);
+      await handleRegenerate();
+      return;
+    }
+    setUserPrompt(mobileWritingPrompt);
+    await handleGenerate();
+  };
+
+  const buildMobileSearchIndex = async () => {
+    const index = [];
+    const list = sortedProjectsByRecent.length ? sortedProjectsByRecent : sortedProjects;
+    for (const project of list) {
+      if (!project.name) continue;
+      try {
+        const details = currentProject === project.name && projectDetails
+          ? projectDetails
+          : await safeJsonFetch(`/api/projects/${encodeURIComponent(project.name)}`);
+        const chapters = normalizeChapters(details.chapters || []);
+        index.push({
+          type: 'project',
+          projectName: project.name,
+          title: project.name,
+          subtitle: `${getProjectChapterCount(project)} 章 · ${formatProjectUpdatedAt(project.updatedAt)}`,
+          text: project.name,
+        });
+        chapters.forEach((chapter) => {
+          const fileName = chapter.fileName || chapter.filename;
+          index.push({
+            type: 'chapter',
+            projectName: project.name,
+            fileName,
+            title: chapter.title || fileName || '未命名章节',
+            subtitle: `${project.name} · ${fileName || ''}`,
+            text: `${project.name} ${chapter.title || ''} ${fileName || ''} ${chapter.userPrompt || ''}`,
+          });
+        });
+        [
+          ['world', '世界观设定', details.world],
+          ['characters', '人物设定', details.characters],
+          ['style', '写作规则', details.style],
+          ['summary', '剧情摘要', details.summary],
+          ['editorialMemory', '编辑记忆', details.editorialMemory],
+        ].forEach(([field, label, value]) => {
+          if (!value) return;
+          index.push({
+            type: 'setting',
+            field,
+            projectName: project.name,
+            title: label,
+            subtitle: project.name,
+            text: `${project.name} ${label} ${value}`,
+            snippet: String(value).slice(0, 80),
+          });
+        });
+      } catch {
+        index.push({
+          type: 'project',
+          projectName: project.name,
+          title: project.name,
+          subtitle: '项目详情暂时不可用',
+          text: project.name,
+        });
+      }
+    }
+    return index;
+  };
+
+  const openMobileSearch = async () => {
+    setShowMobileSearch(true);
+    setMobileSearchQuery('');
+    requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
+    if (mobileSearchLoading) return;
+    setMobileSearchLoading(true);
+    try {
+      const index = await buildMobileSearchIndex();
+      setMobileSearchIndex(index);
+    } finally {
+      setMobileSearchLoading(false);
+      requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
+    }
+  };
+
+  const closeMobileSearch = () => {
+    setShowMobileSearch(false);
+    setMobileSearchQuery('');
+  };
+
+  const mobileSearchResults = useMemo(() => {
+    const q = mobileSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+    return mobileSearchIndex
+      .filter((item) => item.text.toLowerCase().includes(q))
+      .slice(0, 30);
+  }, [mobileSearchIndex, mobileSearchQuery]);
+
+  const handleMobileSearchResultClick = async (result) => {
+    if (!result?.projectName) return;
+    closeMobileSearch();
+    const details = await ensureMobileProjectLoaded(result.projectName);
+    if (!details) return;
+    if (result.type === 'chapter' && result.fileName) {
+      await handleReadChapter(result.fileName, result.projectName);
+      navigateTo('chapter');
+      return;
+    }
+    if (result.type === 'setting') {
+      const focusTarget = result.field === 'characters'
+        ? 'characters'
+        : result.field === 'summary'
+          ? 'summary'
+          : 'world';
+      openSettingsEditor(details, result.projectName, focusTarget);
+      navigateTo('project');
+      return;
+    }
+    navigateTo('project');
+  };
 
   const handleGenProgressDone = useCallback(() => {
     setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
@@ -1443,8 +1891,58 @@ function App() {
   };
 
   return (
-    <div className={`app${isMobile && mobileView === 'chapter' && readingTheme === 'dark' ? ' mobile-chapter-dark' : ''}`}>
+    <div className={`app${isMobile ? ' mobile-dark-app' : ''}${isMobile && mobileView === 'chapter' ? ' mobile-chapter-dark' : ''} mobile-reading-${readingTheme}`}>
       <h1>小墨匣</h1>
+      {isMobile && showMobileSearch && (
+        <div className="mobile-search-overlay">
+          <div className="mobile-search-panel">
+            <div className="mobile-search-bar">
+              <input
+                ref={mobileSearchInputRef}
+                value={mobileSearchQuery}
+                onChange={(e) => setMobileSearchQuery(e.target.value)}
+                placeholder="搜索项目、章节、设定..."
+              />
+              <button type="button" onClick={closeMobileSearch}>取消</button>
+            </div>
+            <div className="mobile-search-body">
+              {mobileSearchLoading ? (
+                <div className="mobile-search-empty">正在整理搜索索引...</div>
+              ) : !mobileSearchQuery.trim() ? (
+                <div className="mobile-search-empty">输入关键词，搜索项目名、章节标题和项目设定。</div>
+              ) : mobileSearchResults.length === 0 ? (
+                <div className="mobile-search-empty">没有找到匹配内容</div>
+              ) : (
+                <div className="mobile-search-results">
+                  {['project', 'chapter', 'setting'].map((type) => {
+                    const group = mobileSearchResults.filter((item) => item.type === type);
+                    if (group.length === 0) return null;
+                    const label = type === 'project' ? '项目' : type === 'chapter' ? '章节' : '设定';
+                    return (
+                      <section className="mobile-search-group" key={type}>
+                        <h3>{label}</h3>
+                        {group.map((item, index) => (
+                          <button
+                            key={`${item.type}-${item.projectName}-${item.fileName || item.field || index}`}
+                            className="mobile-search-result"
+                            type="button"
+                            onClick={() => handleMobileSearchResultClick(item)}
+                          >
+                            <span>{label}</span>
+                            <strong>{item.title}</strong>
+                            <em>{item.subtitle}</em>
+                            {item.snippet && <small>{item.snippet}</small>}
+                          </button>
+                        ))}
+                      </section>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
         {/* ===== Left Panel: Projects (desktop only) ===== */}
         {!isMobile && (isSidebarCollapsed ? (
@@ -1588,8 +2086,197 @@ function App() {
           </aside>
         ))}
 
+        {isMobile && mobileView === 'writing' && (
+          <div className="panel panel-main mobile-writing-view">
+            <button className="mobile-back-btn" onClick={onBackClick}>
+              ← 返回
+            </button>
+            <header className="mobile-writing-header">
+              <span>{currentProject || mobileWritingTarget?.projectName || '当前项目'}</span>
+              <h2>{mobileWritingTarget?.nextLabel || '继续写作'}</h2>
+              <p>
+                {mobileWritingKind === 'rewrite'
+                  ? `基于 ${mobileWritingTarget?.chapterTitle || mobileWritingTarget?.fileName || '当前章节'} 生成候选版本`
+                  : mobileWritingTarget?.chapterTitle
+                    ? `承接 ${mobileWritingTarget.chapterTitle}`
+                    : '为这个项目生成下一章'}
+              </p>
+            </header>
+
+            <section className="mobile-writing-card">
+              <label>续写要求</label>
+              <textarea
+                className="prompt-input mobile-writing-prompt"
+                value={mobileWritingPrompt}
+                onChange={(e) => handleMobileWritingPromptChange(e.target.value)}
+                placeholder="写下这次想推进的剧情、氛围或人物动作……"
+                rows={6}
+              />
+
+              <div className="mobile-writing-modes">
+                {[
+                  { value: 'deepseek-v4-flash', title: '快速模式', sub: '适合日常续写' },
+                  { value: 'deepseek-v4-pro', title: '深度模式', sub: '适合复杂伏笔' },
+                ].map((item) => (
+                  <button
+                    key={item.value}
+                    className={model === item.value ? 'active' : ''}
+                    type="button"
+                    onClick={() => setModel(item.value)}
+                  >
+                    <strong>{item.title}</strong>
+                    <span>{item.sub}</span>
+                  </button>
+                ))}
+              </div>
+
+              <WritingControlPanel prefs={writingPrefs} onChange={setWritingPrefs} />
+
+              <button
+                className="btn mobile-writing-generate"
+                onClick={handleMobileWritingGenerate}
+                disabled={loading || regenerating || !mobileWritingPrompt.trim()}
+              >
+                {loading || regenerating ? '生成中...' : mobileWritingKind === 'rewrite' ? '生成候选版本' : '开始生成'}
+              </button>
+              {(mobileWritingError || error) && (
+                <div className="error">{mobileWritingError || error}</div>
+              )}
+            </section>
+
+            <section className="mobile-writing-output">
+              <div className="mobile-writing-output-head">
+                <h3>流式输出</h3>
+                <span>{loading || regenerating ? '正在生成' : mobileWritingOutput || readingContent ? '已生成' : '等待开始'}</span>
+              </div>
+              <div className="mobile-writing-output-body">
+                {mobileWritingOutput || (readingChapter === '_streaming' ? readingContent : '') || '生成内容会实时出现在这里。'}
+              </div>
+              <div className="mobile-writing-actions">
+                <button
+                  className="btn"
+                  disabled={!readingChapter || readingChapter === '_streaming'}
+                  onClick={() => navigateTo('chapter')}
+                >
+                  返回阅读页
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  disabled={loading || regenerating}
+                  onClick={() => {
+                    setMobileWritingOutput('');
+                    handleMobileWritingPromptChange('继续写');
+                  }}
+                >
+                  继续追加
+                </button>
+                <button className="btn btn-secondary" onClick={onBackClick}>
+                  取消
+                </button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {isMobile && mobileView === 'outline' && currentProject && (
+          <div className="panel panel-main mobile-outline-view">
+            <button className="mobile-back-btn" onClick={onBackClick}>
+              ← 返回
+            </button>
+            <header className="mobile-outline-header">
+              <span>{currentProject}</span>
+              <h2>大纲</h2>
+            </header>
+            {(() => {
+              const sections = [
+                ['剧情摘要', projectDetails?.summary],
+                ['编辑记忆', projectDetails?.editorialMemory],
+                ['世界观', projectDetails?.world],
+                ['写作规则', projectDetails?.style],
+              ].filter(([, value]) => value && String(value).trim());
+              const plan = formatOutlinePlan(outline);
+              return (
+                <>
+                  {sections.length === 0 && plan.length === 0 ? (
+                    <div className="mobile-outline-empty">还没有剧情摘要，去编辑设定里补一点。</div>
+                  ) : (
+                    <div className="mobile-outline-sections">
+                      {sections.map(([title, value]) => (
+                        <section className="mobile-outline-card" key={title}>
+                          <h3>{title}</h3>
+                          <p>{value}</p>
+                        </section>
+                      ))}
+                      {plan.length > 0 && (
+                        <section className="mobile-outline-card">
+                          <h3>章节规划</h3>
+                          <div className="mobile-outline-plan">
+                            {plan.map((item) => (
+                              <div className="mobile-outline-plan-item" key={item.number}>
+                                <span>{item.number}</span>
+                                <div>
+                                  <strong>{item.title}</strong>
+                                  {item.detail && <p>{item.detail}</p>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  )}
+                  <div className="mobile-outline-actions">
+                    <button className="btn" onClick={() => { openSettingsEditor(projectDetails, currentProject, 'summary'); navigateTo('project'); }}>
+                      编辑剧情摘要
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => { setShowOutline(true); navigateTo('project'); }}>
+                      编辑章节规划
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {isMobile && mobileView === 'allProjects' && (
+          <div className="panel panel-main mobile-all-projects-view">
+            <button className="mobile-back-btn" onClick={onBackClick}>
+              ← 返回
+            </button>
+            <header className="mobile-outline-header">
+              <span>小墨匣</span>
+              <h2>全部项目</h2>
+            </header>
+            {sortedProjects.length === 0 ? (
+              <div className="mobile-outline-empty">还没有项目，先创建一个故事吧。</div>
+            ) : (
+              <div className="mobile-all-projects-list">
+                {[...sortedProjects].sort((a, b) => b.updatedAt - a.updatedAt).map((project) => {
+                  const details = allProjectDetails[project.name];
+                  return (
+                    <button
+                      className="mobile-all-project-card"
+                      key={project.name}
+                      type="button"
+                      onClick={() => handleHomeProjectOpen(project.name)}
+                    >
+                      <span className="mobile-project-initial">{project.name.charAt(0)}</span>
+                      <div>
+                        <strong>{project.name}</strong>
+                        <em>{formatProjectUpdatedAt(project.updatedAt)} · 第 {getProjectChapterCount(project)} 章</em>
+                        <p>{getProjectIntro(details)}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ===== Main Panel (desktop always, mobile hidden on shelf/project) ===== */}
-        {!(isMobile && (mobileView === 'shelf' || mobileView === 'project')) && (
+        {!(isMobile && (mobileView === 'shelf' || mobileView === 'project' || mobileView === 'writing' || mobileView === 'outline' || mobileView === 'allProjects')) && (
         <div className="panel panel-main">
           {/* Mobile: editor view — standalone */}
           {isMobile && mobileView === 'editor' && readingChapter ? (
@@ -1823,6 +2510,7 @@ function App() {
                   <label>世界观设定</label>
                   <textarea
                     className="settings-input"
+                    ref={mobileWorldRef}
                     value={editWorld}
                     onChange={(e) => setEditWorld(e.target.value)}
                     rows={3}
@@ -1831,6 +2519,7 @@ function App() {
                   <label>人物设定</label>
                   <textarea
                     className="settings-input"
+                    ref={mobileCharactersRef}
                     value={editCharacters}
                     onChange={(e) => setEditCharacters(e.target.value)}
                     rows={3}
@@ -1847,6 +2536,7 @@ function App() {
                   <label>剧情摘要</label>
                   <textarea
                     className="settings-input"
+                    ref={mobileSummaryRef}
                     value={editSummary}
                     onChange={(e) => setEditSummary(e.target.value)}
                     rows={5}
@@ -1926,8 +2616,8 @@ function App() {
                 </div>
               )}
 
-              {/* Mobile: generate settings toggle */}
-              {isMobile && (
+              {/* Desktop: generate settings */}
+              {false && isMobile && (
                 <button
                   className="mobile-section-toggle"
                   onClick={() => setMobileGenerateOpen(!mobileGenerateOpen)}
@@ -1935,7 +2625,7 @@ function App() {
                   续写设置 {mobileGenerateOpen ? '▲' : '▼'}
                 </button>
               )}
-              {!(isMobile && !mobileGenerateOpen) && (
+              {!isMobile && (
               <div className="generate-panel-area">
               <label>续写要求</label>
               <textarea
@@ -2107,10 +2797,9 @@ function App() {
                             <span className="reading-settings-label">背景</span>
                             <div className="reading-settings-chips">
                               {[
-                                { v: 'default', t: '白' },
-                                { v: 'warm', t: '米黄' },
-                                { v: 'gray', t: '浅灰' },
-                                { v: 'dark', t: '夜间' },
+                                { v: 'ink', t: '深墨' },
+                                { v: 'night', t: '暖夜' },
+                                { v: 'paper', t: '纸张' },
                               ].map(({ v, t }) => (
                                 <button
                                   key={v}
@@ -2155,9 +2844,12 @@ function App() {
 
                   {/* Mobile: rewrite button after content */}
                   {readingChapter !== '_streaming' && isMobile && (
-                    <div style={{ marginTop: 16 }}>
-                      <button className="btn" style={{ width: '100%' }} onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
-                        {showRewriteInput ? '取消重写' : '重写本章'}
+                    <div className="mobile-reading-writing-actions" style={{ marginTop: 16 }}>
+                      <button className="btn" style={{ width: '100%' }} onClick={() => handleOpenMobileWriting(currentProject, { kind: 'generate', fileName: readingChapter })}>
+                        生成下一段
+                      </button>
+                      <button className="btn" style={{ width: '100%' }} onClick={() => handleOpenMobileWriting(currentProject, { kind: 'rewrite', fileName: readingChapter })}>
+                        重写本章
                       </button>
                     </div>
                   )}
@@ -2527,60 +3219,127 @@ function App() {
               </div>
             ) : (
               <>
-                <h2 className="shelf-title">我的书架</h2>
-                <p className="shelf-subtitle">选择一个故事继续写</p>
-                <div className="project-sort-controls mobile">
-                  <select
-                    className="project-sort-field"
-                    value={projectSort.field}
-                    onChange={(e) => setProjectSort((prev) => ({ ...prev, field: e.target.value }))}
-                  >
-                    <option value="updatedAt">按修改日期</option>
-                    <option value="name">按名称</option>
-                    <option value="size">按大小</option>
-                  </select>
-                  <select
-                    className="project-sort-order"
-                    value={projectSort.order}
-                    onChange={(e) => setProjectSort((prev) => ({ ...prev, order: e.target.value }))}
-                  >
-                    <option value="desc">降序</option>
-                    <option value="asc">升序</option>
-                  </select>
-                </div>
-                <div className="bookshelf-grid">
-                  {sortedProjects.length === 0 && (
-                    <p className="hint" style={{ gridColumn: '1 / -1', textAlign: 'center' }}>还没有项目，创建一个吧</p>
-                  )}
-                  {sortedProjects.map((p) => {
-                    const count = projectChapterCounts[p.name];
-                    const menuOpen = mobileShelfMenu === p.name;
+                <header className="mobile-home-header">
+                  <div>
+                    <h2 className="shelf-title">小墨匣</h2>
+                    <p className="shelf-subtitle">把灵感写成长篇</p>
+                  </div>
+                  <div className="mobile-home-actions" aria-label="首页操作">
+                    <button className="mobile-icon-btn" type="button" aria-label="搜索项目" onClick={openMobileSearch}>⌕</button>
+                    <button
+                      className="mobile-icon-btn mobile-icon-btn-primary"
+                      type="button"
+                      aria-label="新增项目"
+                      onClick={() => { setShowCreateForm(true); setCreateError(''); }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </header>
+
+                <section className="mobile-current-card" aria-label="当前项目">
+                  <div className="mobile-current-card-glow" />
+                  <div className="mobile-current-card-content">
+                    <span className="mobile-card-kicker"><i />当前项目</span>
+                    <h3>{featuredProject.name}</h3>
+                    <p>{featuredChapterLabel}</p>
+                    <p className="mobile-current-updated">{featuredUpdatedLabel}</p>
+                    <div className="mobile-current-actions">
+                      <button
+                        className="mobile-primary-action"
+                        type="button"
+                        disabled={!hasHomeProjects}
+                        onClick={() => handleMobileQuickAction('continue', featuredProject.name)}
+                      >
+                        <span>✎</span>继续写作
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="mobile-home-section">
+                  <h3 className="mobile-section-title">快捷入口</h3>
+                  <div className="mobile-shortcut-grid">
+                    {[
+                      ['world', '世界观', 'world'],
+                      ['character', '人物卡', 'characters'],
+                      ['write', '写作', 'writing'],
+                      ['outline', '大纲', 'outline'],
+                      ['materials', '素材库', 'materials'],
+                    ].map(([icon, label, type]) => (
+                      <button
+                        key={label}
+                        className="mobile-shortcut-card"
+                        type="button"
+                        disabled={!hasHomeProjects}
+                        onClick={() => handleMobileQuickAction(type, featuredProject.name)}
+                      >
+                        <span className={`mobile-shortcut-icon icon-${icon}`} aria-hidden="true" />
+                        <strong>{label}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="mobile-home-section">
+                  <div className="mobile-section-heading">
+                    <h3 className="mobile-section-title">最近项目</h3>
+                    <button className="mobile-all-projects-btn" type="button" onClick={handleOpenAllProjects}>全部项目 ›</button>
+                  </div>
+                  <div className="mobile-recent-list">
+                    {hasHomeProjects ? recentHomeProjects.map((p, index) => {
+                    const count = getProjectChapterCount(p);
                     return (
-                    <div key={p.name} className="book-item" onClick={() => { setMobileShelfMenu(null); handleSelectProject(p.name); }}>
-                      <div className={'book-cover' + (currentProject === p.name ? ' current' : '')}>
-                        <span className="book-cover-char">{p.name.charAt(0)}</span>
-                        <button
-                          className="book-menu-btn"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMobileShelfMenu(menuOpen ? null : p.name);
-                          }}
-                        >⋯</button>
-                        {menuOpen && (
-                          <div className="book-menu-dropdown" onClick={(e) => e.stopPropagation()}>
-                            <button className="book-menu-delete" onClick={() => handleShelfDeleteProject(p.name)}>删除</button>
-                          </div>
-                        )}
+                    <div key={p.name} className="mobile-recent-item" onClick={() => handleHomeProjectOpen(p.name)}>
+                      <div className={`mobile-recent-thumb tone-${(index % 3) + 1}`}>
+                        <span>{p.name.charAt(0)}</span>
                       </div>
-                      <div className="book-title">{name}</div>
-                      <div className="book-meta">{count != null ? `${count} 章` : ''}</div>
+                      <div className="mobile-recent-copy">
+                        <strong>{p.name}</strong>
+                        <span>{formatProjectUpdatedAt(p.updatedAt)} ｜ 第 {count || 0} 章</span>
+                      </div>
+                      <span className="mobile-recent-arrow">›</span>
                     </div>
                     );
-                  })}
-                </div>
-                <button className="btn-create-project" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>
-                  + 创建新项目
-                </button>
+                  }) : fallbackRecentProjects.map((p, index) => (
+                    <div key={p.name} className="mobile-recent-item mobile-recent-item-fallback">
+                      <div className={`mobile-recent-thumb tone-${(index % 3) + 1}`}><span>{p.name.charAt(0)}</span></div>
+                      <div className="mobile-recent-copy">
+                        <strong>{p.name}</strong>
+                        <span>{p.meta}</span>
+                      </div>
+                      <span className="mobile-recent-arrow">›</span>
+                    </div>
+                  ))}
+                  </div>
+                </section>
+
+                <section className="mobile-inspiration-card">
+                  <div className="mobile-inspiration-icon">✺</div>
+                  <div>
+                    <h3>今日灵感</h3>
+                    <p>先写最想写的那一幕，故事就会自己长出来。</p>
+                  </div>
+                </section>
+
+                <nav className="mobile-bottom-nav" aria-label="底部导航">
+                  {[
+                    ['▣', '项目', mobileView === 'shelf'],
+                    ['✎', '写作', mobileView === 'writing', 'writing'],
+                    ['▤', '素材', false, 'materials'],
+                    ['●', '我的', false],
+                  ].map(([icon, label, active, type]) => (
+                    <button
+                      key={label}
+                      className={active ? 'active' : ''}
+                      type="button"
+                      onClick={() => type && handleMobileQuickAction(type, featuredProject.name)}
+                    >
+                      <span>{icon}</span>
+                      <strong>{label}</strong>
+                    </button>
+                  ))}
+                </nav>
               </>
             )}
           </div>
@@ -2602,18 +3361,35 @@ function App() {
               <button className="btn btn-secondary" onClick={handleRefresh}>刷新</button>
             </div>
 
+            {mobileMaterialsOpen && (
+              <div className="mobile-materials-panel">
+                <div>
+                  <h3>素材与备份</h3>
+                  <p>当前版本先接入可用的导出、备份和刷新能力，便于整理项目资料。</p>
+                </div>
+                <div className="mobile-materials-actions">
+                  <button className="btn" onClick={handleBackup}>导出备份</button>
+                  <button className="btn btn-secondary" onClick={handleExport} disabled={exportStatus === 'exporting'}>
+                    {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={handleRefresh}>刷新项目</button>
+                  <button className="btn btn-secondary" onClick={() => setMobileMaterialsOpen(false)}>关闭</button>
+                </div>
+              </div>
+            )}
+
             {/* Settings Editor — mobile project view */}
             {showSettings && (
               <div className="settings-panel">
                 <h3>项目设定</h3>
                 <label>世界观设定</label>
-                <textarea className="settings-input" value={editWorld} onChange={(e) => setEditWorld(e.target.value)} rows={3} placeholder="世界观设定..." />
+                <textarea className="settings-input" ref={mobileWorldRef} value={editWorld} onChange={(e) => setEditWorld(e.target.value)} rows={3} placeholder="世界观设定..." />
                 <label>人物设定</label>
-                <textarea className="settings-input" value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} rows={3} placeholder="人物设定..." />
+                <textarea className="settings-input" ref={mobileCharactersRef} value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} rows={3} placeholder="人物设定..." />
                 <label>写作规则</label>
                 <textarea className="settings-input" value={editStyle} onChange={(e) => setEditStyle(e.target.value)} rows={5} placeholder="写作规则、文风要求..." />
                 <label>剧情摘要</label>
-                <textarea className="settings-input" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} rows={5} placeholder="剧情摘要..." />
+                <textarea className="settings-input" ref={mobileSummaryRef} value={editSummary} onChange={(e) => setEditSummary(e.target.value)} rows={5} placeholder="剧情摘要..." />
                 <label>项目编辑记忆</label>
                 <div className="settings-hint">记录跨章节人物关系、伏笔、长期写作风险和编辑判断。不同于剧情摘要：摘要记录剧情事实，这里记录编辑分析。</div>
                 <textarea className="settings-input" value={editEditorialMemory} onChange={(e) => setEditEditorialMemory(e.target.value)} rows={6} placeholder="项目编辑记忆..." />
@@ -2652,6 +3428,15 @@ function App() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {!showSettings && !showOutline && !mobileMaterialsOpen && (
+              <button
+                className="btn mobile-project-write-btn"
+                onClick={() => handleOpenMobileWriting(currentProject, { kind: 'generate' })}
+              >
+                继续写作
+              </button>
             )}
 
             {!showSettings && (projectDetails?.chapters && projectDetails.chapters.length > 0 ? (
