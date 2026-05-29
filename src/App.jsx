@@ -1571,9 +1571,37 @@ function App() {
     return await handleSelectProject(projectName);
   };
 
+  // Resolve a usable project name from best available source
+  const resolveProjectName = (preferredName) => {
+    if (preferredName && sortedProjectsByRecent.some((p) => p.name === preferredName)) return preferredName;
+    if (currentProject && sortedProjectsByRecent.some((p) => p.name === currentProject)) return currentProject;
+    if (sortedProjectsByRecent.length > 0) return sortedProjectsByRecent[0].name;
+    if (projects.length > 0) return (typeof projects[0] === 'string' ? projects[0] : projects[0].name);
+    return null;
+  };
+
+  // Ensure a project is loaded (currentProject + projectDetails) before proceeding.
+  // Returns true if ready, false if no project available.
+  const ensureMobileProjectReady = async (preferredName) => {
+    const name = resolveProjectName(preferredName);
+    if (!name) {
+      setNotification({ title: '暂无项目', message: '请先创建或选择一个项目' });
+      return false;
+    }
+    if (currentProject === name && projectDetails) return true;
+    setNotification({ title: '正在打开', message: `加载项目 ${name}…` });
+    const details = await handleSelectProject(name);
+    if (!details) {
+      setNotification({ title: '打开失败', message: '项目加载失败，请重试' });
+      return false;
+    }
+    return true;
+  };
+
   const handleHomeProjectOpen = async (projectName) => {
-    if (!hasHomeProjects || !projectName) return;
+    if (!projectName) return;
     setMobileShelfMenu(null);
+    setNotification({ title: '正在打开', message: `加载项目 ${projectName}…` });
     await handleSelectProject(projectName);
   };
 
@@ -1581,19 +1609,28 @@ function App() {
     await handleMobileQuickAction('outline', projectName);
   };
 
-  const handleOpenMobileOutline = async (projectName = featuredProject?.name) => {
-    if (!hasHomeProjects || !projectName) return;
-    const details = await ensureMobileProjectLoaded(projectName);
-    if (!details) return;
-    await handleLoadOutline(projectName);
+  const handleOpenMobileOutline = async (projectName) => {
+    const name = resolveProjectName(projectName);
+    if (!name) {
+      setNotification({ title: '暂无项目', message: '请先创建或选择一个项目' });
+      return;
+    }
+    const ready = await ensureMobileProjectReady(name);
+    if (!ready) return;
+    await handleLoadOutline(name);
     setShowSettings(false);
     setShowOutline(false);
     setMobileMaterialsOpen(false);
-    rememberLastProject(projectName);
+    rememberLastProject(name);
     navigateTo('outline');
   };
 
   const handleOpenAllProjects = async () => {
+    if (sortedProjects.length === 0) {
+      setNotification({ title: '暂无项目', message: '还没有项目，先创建一个吧' });
+      return;
+    }
+    setNotification({ title: '加载中', message: '正在加载所有项目…' });
     const entries = await Promise.all(sortedProjects.map(async (project) => {
       const details = await ensureProjectDetailsCached(project.name);
       return [project.name, details];
@@ -1608,47 +1645,57 @@ function App() {
     navigateTo('allProjects');
   };
 
-  const handleMobileQuickAction = async (type, projectName = featuredProject?.name) => {
-    if (!hasHomeProjects || !projectName) return;
-    setMobileShelfMenu(null);
-    const details = await ensureMobileProjectLoaded(projectName);
-    if (!details) return;
+  const handleMobileQuickAction = async (type, projectName) => {
+    const name = resolveProjectName(projectName);
+    if (!name) {
+      setNotification({ title: '暂无项目', message: '请先创建或选择一个项目' });
+      return;
+    }
+
+    if (type === 'materials') {
+      setNotification({ title: '功能开发中', message: '当前版本暂未接入素材库。' });
+      return;
+    }
+
+    const ready = await ensureMobileProjectReady(name);
+    if (!ready) return;
+
+    const details = projectDetails;
 
     if (type === 'world') {
-      openSettingsEditor(details, projectName, 'world');
+      openSettingsEditor(details, name, 'world');
       navigateTo('project');
       return;
     }
 
     if (type === 'characters') {
-      openSettingsEditor(details, projectName, 'characters');
+      openSettingsEditor(details, name, 'characters');
       navigateTo('project');
       return;
     }
 
     if (type === 'outline') {
-      await handleOpenMobileOutline(projectName);
-      return;
-    }
-
-    if (type === 'materials') {
-      setShowSettings(false);
-      setShowOutline(false);
-      setMobileMaterialsOpen(true);
-      navigateTo('project');
+      await handleOpenMobileOutline(name);
       return;
     }
 
     if (type === 'writing' || type === 'continue') {
-      await handleOpenMobileWriting(projectName, { kind: 'generate', details });
+      await handleOpenMobileWriting(name, { kind: 'generate' });
     }
   };
 
-  const handleOpenMobileWriting = async (projectName = featuredProject?.name, options = {}) => {
-    if (!hasHomeProjects || !projectName) return;
-    const details = options.details || await ensureMobileProjectLoaded(projectName);
-    if (!details) return;
-    rememberLastProject(projectName);
+  const handleOpenMobileWriting = async (projectName, options = {}) => {
+    const name = resolveProjectName(projectName);
+    if (!name) {
+      setNotification({ title: '暂无项目', message: '请先创建或选择一个项目' });
+      return;
+    }
+    const details = options.details || await ensureMobileProjectLoaded(name);
+    if (!details) {
+      setNotification({ title: '加载失败', message: '无法加载项目数据，请重试' });
+      return;
+    }
+    rememberLastProject(name);
     setShowSettings(false);
     setShowOutline(false);
     setMobileMaterialsOpen(false);
@@ -1667,7 +1714,7 @@ function App() {
     const kind = options.kind || 'generate';
     setMobileWritingKind(kind);
     setMobileWritingTarget({
-      projectName,
+      projectName: name,
       fileName: latestFile,
       chapterTitle: latestChapter?.title || latestFile || '',
       nextLabel: kind === 'rewrite' ? '重写当前章节' : `生成第 ${nextNumber} 章`,
@@ -1675,7 +1722,7 @@ function App() {
 
     if (kind === 'rewrite') {
       if (latestFile && readingChapter !== latestFile) {
-        await handleReadChapter(latestFile, projectName);
+        await handleReadChapter(latestFile, name);
       }
       const saved = latestChapter?.userPrompt || '保留主线，重写这一章';
       setRewritePrompt(saved);
