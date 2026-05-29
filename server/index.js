@@ -13,6 +13,20 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json({ limit: '1mb' }));
 
+// ---- Session ----
+
+const session = require('express-session');
+app.use(session({
+  secret: process.env.SESSION_SECRET || process.env.XIAOMOXIA_PIN || 'xiaomoxia-default-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+  },
+}));
+
 const NOVELS_DIR = process.env.NOVELS_DIR
   ? path.resolve(process.env.NOVELS_DIR)
   : path.resolve(__dirname, '..', 'novels');
@@ -558,6 +572,43 @@ async function collectProjectStats(projectDir) {
   }
   return { totalSize, latestMtime };
 }
+
+// ---- Auth ----
+
+app.post('/api/auth/login', (req, res) => {
+  const { pin } = req.body;
+  const validPin = process.env.XIAOMOXIA_PIN;
+
+  if (!validPin) {
+    return res.status(500).json({ error: 'PIN 未配置' });
+  }
+
+  if (pin !== validPin) {
+    return res.status(401).json({ error: '密码错误' });
+  }
+
+  req.session.authenticated = true;
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  res.json({ authenticated: !!req.session?.authenticated });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  req.session.destroy((err) => {
+    if (err) return res.status(500).json({ error: '退出失败' });
+    res.clearCookie('connect.sid');
+    res.json({ ok: true });
+  });
+});
+
+// Protect all /api/ routes except /api/auth/
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next();
+  if (req.session?.authenticated) return next();
+  res.status(401).json({ error: '未登录' });
+});
 
 // ---- GET /api/projects ----
 

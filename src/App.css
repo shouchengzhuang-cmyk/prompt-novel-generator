@@ -4584,3 +4584,129 @@ label {
     margin-bottom: 12px;
   }
 }
+
+/* ---- Auth Page ---- */
+
+.auth-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  background: #061512;
+}
+
+.auth-loading-text {
+  color: #d4af37;
+  font-size: 28px;
+  letter-spacing: 6px;
+}
+
+.auth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  background: #061512;
+  padding: 20px;
+}
+
+.auth-box {
+  width: 100%;
+  max-width: 320px;
+  text-align: center;
+}
+
+.auth-title {
+  font-size: 34px;
+  color: #d4af37;
+  margin-bottom: 10px;
+  letter-spacing: 8px;
+  font-weight: 400;
+}
+
+.auth-subtitle {
+  color: #7a8a85;
+  font-size: 14px;
+  margin-bottom: 36px;
+}
+
+.auth-pin-input {
+  width: 180px;
+  height: 60px;
+  font-size: 30px;
+  letter-spacing: 18px;
+  text-align: center;
+  background: #0d2b24;
+  border: 1px solid #1a4a3a;
+  border-radius: 10px;
+  color: #e0e0e0;
+  outline: none;
+  caret-color: #d4af37;
+  padding: 0 12px 0 22px;
+}
+
+.auth-pin-input:focus {
+  border-color: #d4af37;
+}
+
+.auth-pin-input::placeholder {
+  font-size: 14px;
+  letter-spacing: 4px;
+  color: #3a5a4e;
+}
+
+.auth-error {
+  color: #e74c3c;
+  font-size: 13px;
+  margin-top: 14px;
+}
+
+.auth-btn {
+  display: block;
+  width: 180px;
+  margin: 28px auto 0;
+  padding: 13px 0;
+  background: #d4af37;
+  color: #061512;
+  border: none;
+  border-radius: 10px;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  font-family: inherit;
+}
+
+.auth-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.auth-btn:not(:disabled):active {
+  opacity: 0.8;
+}
+
+.logout-link {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: #7a8a85;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  transition: color 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.logout-link:hover,
+.logout-link:active {
+  color: #e74c3c;
+}
+
+.app h1 {
+  position: relative;
+}

@@ -159,6 +159,18 @@ function App() {
   // Bottom-right notification card
   const [notification, setNotification] = useState(null);
 
+  // Auth
+  const [authenticated, setAuthenticated] = useState(null); // null=checking, true/false=done
+  const [loginPin, setLoginPin] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  useEffect(() => {
+    safeJsonFetch('/api/auth/me')
+      .then((data) => setAuthenticated(data.authenticated))
+      .catch(() => setAuthenticated(false));
+  }, []);
+
   useEffect(() => {
     if (!notification) return;
     const timer = setTimeout(() => setNotification(null), 10000);
@@ -169,6 +181,33 @@ function App() {
     if (!projectName) return;
     localStorage.setItem('xiaomoxia-last-project', projectName);
     setLastProjectName(projectName);
+  }, []);
+
+  // Auth handlers
+  const handleLogin = useCallback(async () => {
+    if (loginPin.length !== 4) return;
+    setLoginLoading(true);
+    setLoginError('');
+    try {
+      await safeJsonFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pin: loginPin }),
+      });
+      setAuthenticated(true);
+    } catch (err) {
+      setLoginError(err.message || '密码错误');
+    } finally {
+      setLoginLoading(false);
+    }
+  }, [loginPin]);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await safeJsonFetch('/api/auth/logout', { method: 'POST' });
+    } catch { /* ignore */ }
+    setAuthenticated(false);
+    setLoginPin('');
   }, []);
 
   // Browser title during generation / rewrite
@@ -1890,9 +1929,58 @@ function App() {
     }
   };
 
+  if (authenticated === null) {
+    return (
+      <div className="auth-loading">
+        <div className="auth-loading-text">小墨匣</div>
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return (
+      <div className="auth-page">
+        <div className="auth-box">
+          <h1 className="auth-title">小墨匣</h1>
+          <p className="auth-subtitle">请输入访问密码</p>
+          <input
+            className="auth-pin-input"
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
+            value={loginPin}
+            onChange={(e) => {
+              setLoginPin(e.target.value.replace(/\D/g, '').slice(0, 4));
+              setLoginError('');
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && loginPin.length === 4 && !loginLoading) {
+                handleLogin();
+              }
+            }}
+            autoFocus
+            disabled={loginLoading}
+            placeholder="····"
+          />
+          {loginError && <p className="auth-error">{loginError}</p>}
+          <button
+            className="auth-btn"
+            onClick={handleLogin}
+            disabled={loginPin.length !== 4 || loginLoading}
+          >
+            {loginLoading ? '验证中...' : '进入'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`app${isMobile ? ' mobile-dark-app' : ''}${isMobile && mobileView === 'chapter' ? ' mobile-chapter-dark' : ''} mobile-reading-${readingTheme}`}>
-      <h1>小墨匣</h1>
+      <h1>小墨匣
+        <span className="logout-link" onClick={handleLogout}>退出</span>
+      </h1>
       {isMobile && showMobileSearch && (
         <div className="mobile-search-overlay">
           <div className="mobile-search-panel">
