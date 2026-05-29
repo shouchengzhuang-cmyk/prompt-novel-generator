@@ -532,6 +532,24 @@ function App() {
     }
   };
 
+  // Desktop: auto-select most recent project when projects load and none is selected
+  const autoSelectRef = useRef(false);
+  useEffect(() => {
+    if (isMobile) return;
+    if (autoSelectRef.current) return;
+    if (projects.length > 0 && currentProject) {
+      autoSelectRef.current = true;
+      return;
+    }
+    if (projects.length > 0 && !currentProject) {
+      autoSelectRef.current = true;
+      const sorted = [...projects].sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      const name = lastProjectName && sorted.some((p) => p.name === lastProjectName) ? lastProjectName : sorted[0].name;
+      handleSelectProject(name);
+      setNotification({ title: '已打开', message: `自动选中项目 ${name}` });
+    }
+  }, [projects, currentProject, isMobile, lastProjectName]);
+
   const ILLEGAL_CHARS = /[/\\:*?"<>|]/;
 
   // ---- Create a project ----
@@ -3973,11 +3991,12 @@ function App() {
                     <p className="shelf-subtitle">把灵感写成长篇</p>
                   </div>
                   <div className="mobile-home-actions" aria-label="首页操作">
-                    <button className="mobile-icon-btn" type="button" aria-label="搜索项目" onClick={openMobileSearch}>⌕</button>
+                    <button className="mobile-icon-btn" type="button" aria-label="搜索项目" data-action="search" onClick={openMobileSearch}>⌕</button>
                     <button
                       className="mobile-icon-btn mobile-icon-btn-primary"
                       type="button"
                       aria-label="新增项目"
+                      data-action="create-project"
                       onClick={() => { setShowCreateForm(true); setCreateError(''); }}
                     >
                       +
@@ -3996,7 +4015,8 @@ function App() {
                       <button
                         className="mobile-primary-action"
                         type="button"
-                        disabled={!hasHomeProjects}
+                        data-action="continue-writing"
+                        aria-label="继续写作"
                         onClick={() => handleMobileQuickAction('continue', featuredProject.name)}
                       >
                         <span>✎</span>继续写作
@@ -4012,7 +4032,8 @@ function App() {
                   <button
                     className="mobile-shortcut-card-primary"
                     type="button"
-                    disabled={!hasHomeProjects}
+                    data-action="writing"
+                    aria-label="打开写作"
                     onClick={() => handleMobileQuickAction('writing', featuredProject.name)}
                   >
                     <span className="mobile-shortcut-primary-icon">
@@ -4039,7 +4060,8 @@ function App() {
                         key={label}
                         className="mobile-shortcut-card"
                         type="button"
-                        disabled={!hasHomeProjects}
+                        data-action={type}
+                        aria-label={label}
                         onClick={() => handleMobileQuickAction(type, featuredProject.name)}
                       >
                         <span className="mobile-shortcut-icon">
@@ -4085,22 +4107,22 @@ function App() {
                 <section className="mobile-home-section">
                   <div className="mobile-section-heading">
                     <h3 className="mobile-section-title">最近项目</h3>
-                    <button className="mobile-all-projects-btn" type="button" onClick={handleOpenAllProjects}>全部项目 ›</button>
+                    <button className="mobile-all-projects-btn" type="button" data-action="all-projects" onClick={handleOpenAllProjects}>全部项目 ›</button>
                   </div>
                   <div className="mobile-recent-list">
                     {hasHomeProjects ? recentHomeProjects.map((p, index) => {
                     const count = getProjectChapterCount(p);
                     return (
-                    <div key={p.name} className="mobile-recent-item" onClick={() => handleHomeProjectOpen(p.name)}>
-                      <div className={`mobile-recent-thumb tone-${(index % 3) + 1}`}>
+                    <button key={p.name} className="mobile-recent-item" type="button" data-action="open-project" aria-label={p.name} onClick={() => handleHomeProjectOpen(p.name)}>
+                      <span className={`mobile-recent-thumb tone-${(index % 3) + 1}`}>
                         <span>{p.name.charAt(0)}</span>
-                      </div>
-                      <div className="mobile-recent-copy">
+                      </span>
+                      <span className="mobile-recent-copy">
                         <strong>{p.name}</strong>
                         <span>{formatProjectUpdatedAt(p.updatedAt)} ｜ 第 {count || 0} 章</span>
-                      </div>
+                      </span>
                       <span className="mobile-recent-arrow">›</span>
-                    </div>
+                    </button>
                     );
                   }) : fallbackRecentProjects.map((p, index) => (
                     <div key={p.name} className="mobile-recent-item mobile-recent-item-fallback">
@@ -4125,16 +4147,21 @@ function App() {
 
                 <nav className="mobile-bottom-nav" aria-label="底部导航">
                   {[
-                    ['▣', '项目', mobileView === 'shelf'],
-                    ['✎', '写作', mobileView === 'writing', 'writing'],
-                    ['▤', '素材', false, 'materials'],
-                    ['●', '我的', false],
-                  ].map(([icon, label, active, type]) => (
+                    ['▣', '项目', 'shelf', null],
+                    ['✎', '写作', null, 'writing'],
+                    ['▤', '素材', null, 'materials'],
+                    ['●', '我的', null, null],
+                  ].map(([icon, label, view, type]) => (
                     <button
                       key={label}
-                      className={active ? 'active' : ''}
+                      className={view === 'shelf' ? 'active' : ''}
                       type="button"
-                      onClick={() => type && handleMobileQuickAction(type, featuredProject.name)}
+                      data-action={type || 'tab-' + label}
+                      aria-label={label}
+                      onClick={() => {
+                        if (view) { navigateTo(view); return; }
+                        if (type) handleMobileQuickAction(type, featuredProject.name);
+                      }}
                     >
                       <span>{icon}</span>
                       <strong>{label}</strong>

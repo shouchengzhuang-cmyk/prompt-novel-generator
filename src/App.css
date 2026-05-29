@@ -5674,3 +5674,77 @@ label {
 .app h1 {
   position: relative;
 }
+
+/* ---- Mobile shelf: button reset ---- */
+
+.mobile-shelf-view button,
+.mobile-shelf-view .mobile-recent-item {
+  appearance: none;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  background: none;
+}
+
+.mobile-shelf-view button:focus-visible {
+  outline: 2px solid #d4af37;
+  outline-offset: 2px;
+}
+
+/* Restore visual backgrounds for specific buttons */
+.mobile-shelf-view .mobile-icon-btn,
+.mobile-shelf-view .mobile-icon-btn-primary,
+.mobile-shelf-view .mobile-primary-action,
+.mobile-shelf-view .mobile-shortcut-card-primary,
+.mobile-shelf-view .mobile-shortcut-card,
+.mobile-shelf-view .mobile-all-projects-btn,
+.mobile-shelf-view .mobile-bottom-nav button {
+  background: none;
+}
+
+/* Preserve existing visual styles inside the shelf */
+.mobile-shelf-view .mobile-current-actions button,
+.mobile-shelf-view .mobile-shortcut-card-primary,
+.mobile-shelf-view .mobile-shortcut-card {
+  background: inherit;
+}
+
+/* Ensure SVGs and pseudo-elements don't block clicks */
+.mobile-shelf-view button svg,
+.mobile-shelf-view button span {
+  pointer-events: none;
+}
+
+.mobile-shelf-view .mobile-current-card-glow {
+  pointer-events: none;
+}
+
+/* Recent items converted from div to button need full-width block */
+.mobile-shelf-view .mobile-recent-item {
+  width: 100%;
+  display: grid !important;
+  grid-template-columns: 52px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px 10px 12px;
+  min-height: 68px;
+  position: relative;
+  background: none;
+  border-radius: 0;
+}
+
+.mobile-shelf-view .mobile-recent-item + .mobile-recent-item {
+  border-top: 1px solid rgba(231, 255, 250, 0.06);
+}
+
+.mobile-shelf-view .mobile-recent-item:hover,
+.mobile-shelf-view .mobile-recent-item:active,
+.mobile-shelf-view .mobile-shortcut-card:active,
+.mobile-shelf-view .mobile-shortcut-card-primary:active,
+.mobile-shelf-view .mobile-primary-action:active {
+  opacity: 0.8;
+}
