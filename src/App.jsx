@@ -159,6 +159,13 @@ function App() {
   // Bottom-right notification card
   const [notification, setNotification] = useState(null);
 
+  // Desktop workbench state
+  const [desktopView, setDesktopView] = useState('workbench');
+  const [desktopChapterQuery, setDesktopChapterQuery] = useState('');
+  const [desktopAiMode, setDesktopAiMode] = useState('continue');
+  const [desktopEditorContent, setDesktopEditorContent] = useState('');
+  const [desktopSavingContent, setDesktopSavingContent] = useState(false);
+
   // Auth
   const [authenticated, setAuthenticated] = useState(null); // null=checking, true/false=done
   const [loginPin, setLoginPin] = useState('');
@@ -176,6 +183,10 @@ function App() {
     const timer = setTimeout(() => setNotification(null), 10000);
     return () => clearTimeout(timer);
   }, [notification]);
+
+  useEffect(() => {
+    setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
+  }, [readingContent, variantPreview]);
 
   const rememberLastProject = useCallback((projectName) => {
     if (!projectName) return;
@@ -542,6 +553,7 @@ function App() {
       await fetchProjects();
       rememberLastProject(name);
       await handleSelectProject(name);
+      setDesktopView('workbench');
     } catch (err) {
       setCreateError(err.message);
     } finally {
@@ -1930,10 +1942,125 @@ function App() {
   };
 
   const notifyDevFeature = useCallback((name = '该功能') => {
-    setNotification({ title: '功能开发中', message: `${name}正在打磨中，当前版本先保留入口。` });
+    setNotification({ title: '功能开发中', message: `功能开发中：当前版本暂未接入此功能。${name ? `（${name}）` : ''}` });
   }, []);
 
+  const handleDesktopNav = async (label) => {
+    if (label === '工作台' || label === '章节') {
+      setDesktopView('workbench');
+      setShowSettings(false);
+      setShowOutline(false);
+      return;
+    }
+    if (label === '项目库') {
+      setDesktopView('projects');
+      setShowSettings(false);
+      setShowOutline(false);
+      return;
+    }
+    if (label === '世界观' || label === '人物' || label === '设置') {
+      if (!currentProject) {
+        setNotification({ title: '请先选择项目', message: '需要打开一个项目后才能编辑设定。' });
+        return;
+      }
+      setDesktopView(label === '世界观' ? 'world' : label === '人物' ? 'characters' : 'settings');
+      openSettingsEditor(projectDetails, currentProject, label === '世界观' ? 'world' : label === '人物' ? 'characters' : '');
+      setShowOutline(false);
+      return;
+    }
+    if (label === '大纲') {
+      if (!currentProject) {
+        setNotification({ title: '请先选择项目', message: '需要打开一个项目后才能编辑大纲。' });
+        return;
+      }
+      setDesktopView('outline');
+      setShowSettings(false);
+      setShowOutline(true);
+      await handleLoadOutline();
+      return;
+    }
+    notifyDevFeature(label);
+  };
+
+  const handleDesktopSaveContent = async () => {
+    if (!currentProject || !readingChapter || readingChapter === '_streaming') {
+      setNotification({ title: '无法保存', message: '请先打开一个可编辑章节。' });
+      return;
+    }
+    setDesktopSavingContent(true);
+    setError('');
+    try {
+      await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/content`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: readingChapterTitle, content: desktopEditorContent }),
+      });
+      setReadingContent(desktopEditorContent);
+      setNotification({ title: '已保存', message: '当前章节正文已保存。' });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDesktopSavingContent(false);
+    }
+  };
+
+  const ensureDesktopSelectionForRewrite = (modeLabel) => {
+    const editor = readingContentRef.current;
+    const textareaSelection = editor && typeof editor.selectionStart === 'number'
+      ? desktopEditorContent.slice(editor.selectionStart, editor.selectionEnd).trim()
+      : '';
+    const selected = textareaSelection || (typeof window !== 'undefined' ? String(window.getSelection?.() || '').trim() : '');
+    if (!selected && ['rewrite', 'polish', 'expand'].includes(desktopAiMode)) {
+      setNotification({ title: `请先选中文本`, message: `请先选中要${modeLabel}的段落。当前后端只支持整章候选生成，局部处理会作为后续能力接入。` });
+      return false;
+    }
+    return true;
+  };
+
+  const prepareDesktopMode = (mode) => {
+    setDesktopAiMode(mode);
+    if (mode === 'continue') {
+      setShowRewriteInput(false);
+      return;
+    }
+    if (!readingChapter || readingChapter === '_streaming') {
+      setNotification({ title: '请先打开章节', message: '改写、润色和扩写需要先选择一个已有章节。' });
+      return;
+    }
+    handleLoadRewritePrompt();
+    const prompts = {
+      rewrite: '改写选中段落，保持剧情事实不变，优化动作与情绪递进。',
+      polish: '润色选中段落，保留原剧情，提升语言质感和节奏。',
+      expand: '扩写选中段落，增加细节、动作和心理描写。',
+    };
+    setRewritePrompt((prev) => prev || prompts[mode] || '继续写');
+  };
+
+  const handleDesktopGenerateByMode = async () => {
+    if (desktopAiMode === 'continue') {
+      await handleGenerate();
+      return;
+    }
+    const label = desktopAiMode === 'polish' ? '润色' : desktopAiMode === 'expand' ? '扩写' : '改写';
+    if (!ensureDesktopSelectionForRewrite(label)) return;
+    await handleRegenerate();
+  };
+
+  const handleDesktopApplyVariant = async (variantId = variantPreview?.id) => {
+    if (!variantId) {
+      setNotification({ title: '请先生成候选', message: '请先生成并选择一个候选版本。' });
+      return;
+    }
+    await handleApplyVariant(variantId);
+  };
+
   const desktopChapters = normalizeChapters(projectDetails?.chapters || []);
+  const filteredDesktopChapters = desktopChapterQuery.trim()
+    ? desktopChapters.filter((ch) => {
+      const q = desktopChapterQuery.trim().toLowerCase();
+      return `${ch.title || ''} ${ch.fileName || ch.filename || ''} ${ch.summary || ''} ${ch.userPrompt || ''}`.toLowerCase().includes(q);
+    })
+    : desktopChapters;
   const desktopCurrentChapter = desktopChapters.find((ch) => (ch.fileName || ch.filename) === readingChapter);
   const desktopChapterIndex = desktopChapters.findIndex((ch) => (ch.fileName || ch.filename) === readingChapter);
   const desktopChapterNumber = desktopChapterIndex >= 0 ? desktopChapterIndex + 1 : desktopChapters.length || 1;
@@ -2033,12 +2160,27 @@ function App() {
                 ['◇', '草稿箱'],
                 ['✦', '提示词实验室'],
                 ['⚙', '设置'],
-              ].map(([icon, label, active]) => (
-                <button key={label} className={active ? 'active' : ''} type="button" onClick={active ? undefined : () => notifyDevFeature(label)}>
+              ].map(([icon, label]) => {
+                const navActive =
+                  (label === '工作台' && desktopView === 'workbench') ||
+                  (label === '项目库' && desktopView === 'projects') ||
+                  (label === '世界观' && desktopView === 'world') ||
+                  (label === '人物' && desktopView === 'characters') ||
+                  (label === '章节' && desktopView === 'workbench') ||
+                  (label === '大纲' && desktopView === 'outline') ||
+                  (label === '设置' && desktopView === 'settings');
+                return (
+                <button
+                  key={label}
+                  className={navActive ? 'active' : ''}
+                  type="button"
+                  onClick={() => handleDesktopNav(label)}
+                >
                   <span>{icon}</span>
                   {label}
                 </button>
-              ))}
+                );
+              })}
               <div className="desktop-sync-card">
                 <span>存储与同步</span>
                 <strong>68%</strong>
@@ -2077,14 +2219,21 @@ function App() {
                 <div className="desktop-card-head">
                   <h2>章节列表</h2>
                   <div>
-                    <button type="button" onClick={handleGenerate} disabled={!currentProject || loading || regenerating}>＋</button>
-                    <button type="button" onClick={() => notifyDevFeature('章节搜索')}>⌕</button>
+                    <button type="button" onClick={() => notifyDevFeature('新建空章节：当前后端还没有创建空章节接口')} disabled={!currentProject}>＋</button>
                   </div>
                 </div>
+                <div className="desktop-chapter-search">
+                  <input
+                    value={desktopChapterQuery}
+                    onChange={(e) => setDesktopChapterQuery(e.target.value)}
+                    placeholder="搜索章节标题 / 摘要"
+                  />
+                </div>
                 <div className="desktop-chapter-list">
-                  {desktopChapters.length > 0 ? desktopChapters.map((ch, index) => {
+                  {filteredDesktopChapters.length > 0 ? filteredDesktopChapters.map((ch, index) => {
                     const cf = ch.fileName || ch.filename;
                     const isActive = cf && readingChapter === cf;
+                    const chapterNo = desktopChapters.findIndex((item) => (item.fileName || item.filename) === cf) + 1 || index + 1;
                     return (
                       <button
                         key={cf || `chapter-${index}`}
@@ -2093,13 +2242,13 @@ function App() {
                         disabled={!cf}
                         onClick={() => cf && handleReadChapter(cf)}
                       >
-                        <strong>第{index + 1}章　{ch.title || cf?.replace(/\.txt$/, '') || '未命名章节'}</strong>
+                        <strong>第{chapterNo}章　{ch.title || cf?.replace(/\.txt$/, '') || '未命名章节'}</strong>
                         <span>{ch.date || ch.createdAt ? formatProjectUpdatedAt(ch.date || ch.createdAt) : '未记录'} · {(Number(ch.wordCount) || Number(ch.words) || 0).toLocaleString()} 字</span>
                         {ch.staleAfterRewrite && <em>待检查</em>}
                       </button>
                     );
                   }) : (
-                    <p className="desktop-empty">暂无章节，先在右侧控制台生成第一章。</p>
+                    <p className="desktop-empty">{desktopChapterQuery.trim() ? '没有匹配章节。' : '暂无章节，先在右侧控制台生成第一章。'}</p>
                   )}
                 </div>
               </section>
@@ -2107,7 +2256,7 @@ function App() {
               <section className="desktop-card desktop-recent-card">
                 <div className="desktop-card-head">
                   <h2>最近项目</h2>
-                  <button type="button" onClick={() => notifyDevFeature('项目库')}>查看全部</button>
+                  <button type="button" onClick={() => setDesktopView('projects')}>查看全部</button>
                 </div>
                 {desktopRecentProjects.map((project, index) => (
                   <button className="desktop-recent-project" key={project.name} type="button" onClick={() => handleSelectProject(project.name)}>
@@ -2142,6 +2291,36 @@ function App() {
                     <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); }}>取消</button>
                   </div>
                 </section>
+              ) : desktopView === 'projects' ? (
+                <section className="desktop-card desktop-project-library">
+                  <div className="desktop-editor-head">
+                    <div>
+                      <h2>项目库</h2>
+                      <div className="desktop-tabs">
+                        <button className="active" type="button">全部项目</button>
+                      </div>
+                    </div>
+                    <button className="btn" type="button" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>新建项目</button>
+                  </div>
+                  <div className="desktop-library-list">
+                    {sortedProjects.length > 0 ? sortedProjects.map((project) => (
+                      <button
+                        key={project.name}
+                        type="button"
+                        className={currentProject === project.name ? 'active' : ''}
+                        onClick={() => {
+                          handleSelectProject(project.name);
+                          setDesktopView('workbench');
+                        }}
+                      >
+                        <strong>{project.name}</strong>
+                        <span>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章</span>
+                      </button>
+                    )) : (
+                      <p className="desktop-empty">暂无项目，请先创建一个小说项目。</p>
+                    )}
+                  </div>
+                </section>
               ) : currentProject ? (
                 <section className="desktop-card desktop-editor-shell">
                   <div className="desktop-editor-head">
@@ -2156,7 +2335,13 @@ function App() {
                             key={tab}
                             className={tab === '写作' ? 'active' : ''}
                             type="button"
-                            onClick={tab === '设定' ? handleOpenSettings : tab === '写作' ? undefined : () => notifyDevFeature(tab)}
+                            onClick={
+                              tab === '设定'
+                                ? () => { setDesktopView('settings'); handleOpenSettings(); }
+                                : tab === '写作'
+                                  ? () => setDesktopView('workbench')
+                                  : () => notifyDevFeature(tab)
+                            }
                           >
                             {tab}
                           </button>
@@ -2238,9 +2423,15 @@ function App() {
                     <em>{desktopChapterWords.toLocaleString()} 字</em>
                   </div>
 
-                  <div className="desktop-manuscript" ref={readingContentRef} onScroll={handleReadingContentScroll}>
-                    {variantPreview ? variantPreview.content : readingContent || '从左侧选择章节，或在右侧写下本轮要求后生成正文。'}
-                  </div>
+                  <textarea
+                    className="desktop-manuscript"
+                    ref={readingContentRef}
+                    value={desktopEditorContent}
+                    onChange={(e) => setDesktopEditorContent(e.target.value)}
+                    onScroll={handleReadingContentScroll}
+                    readOnly={!!variantPreview || !readingChapter || readingChapter === '_streaming'}
+                    placeholder="从左侧选择章节，或在右侧写下本轮要求后生成正文。"
+                  />
 
                   {debugPromptInfo && !debugPromptInfo.usedFallback && (
                     <div className="debug-prompt-info">本次使用模板：{debugPromptInfo.templateTitle || '未知'}</div>
@@ -2256,13 +2447,15 @@ function App() {
                   )}
 
                   <div className="desktop-editor-actions">
-                    <button className="btn" onClick={handleGenerate} disabled={loading || regenerating}>{loading ? '生成中...' : '继续生成'}</button>
-                    <button className="btn btn-secondary" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }} disabled={!readingChapter || readingChapter === '_streaming'}>
+                    <button className="btn" onClick={() => { setDesktopAiMode('continue'); handleGenerate(); }} disabled={loading || regenerating}>{loading ? '生成中...' : '继续生成'}</button>
+                    <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('rewrite'); ensureDesktopSelectionForRewrite('改写'); }} disabled={!readingChapter || readingChapter === '_streaming'}>
                       {showRewriteInput ? '取消改写' : '改写选中段落'}
                     </button>
-                    <button className="btn btn-secondary" onClick={() => { if (!showRewriteInput) handleLoadRewritePrompt(); setRewritePrompt((prev) => prev || '润色本章语言，保持原剧情不变。'); }}>润色</button>
-                    <button className="btn btn-secondary" onClick={() => { if (!showRewriteInput) handleLoadRewritePrompt(); setRewritePrompt((prev) => prev || '扩写当前场景，增加细节、动作和心理描写。'); }}>扩写</button>
-                    <button className="btn btn-secondary" onClick={handleCopyChapter} disabled={!readingChapter || readingChapter === '_streaming'}>保存草稿</button>
+                    <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('polish'); ensureDesktopSelectionForRewrite('润色'); }}>润色</button>
+                    <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('expand'); ensureDesktopSelectionForRewrite('扩写'); }}>扩写</button>
+                    <button className="btn btn-secondary" onClick={handleDesktopSaveContent} disabled={!readingChapter || readingChapter === '_streaming' || desktopSavingContent || !!variantPreview}>
+                      {desktopSavingContent ? '保存中...' : '保存草稿'}
+                    </button>
                   </div>
 
                   {showRewriteInput && (
@@ -2301,8 +2494,20 @@ function App() {
                 </div>
                 <label>创作模式</label>
                 <div className="desktop-mode-grid">
-                  {['续写', '改写', '润色', '扩写'].map((mode) => (
-                    <button key={mode} className={mode === (showRewriteInput ? '改写' : '续写') ? 'active' : ''} type="button" onClick={() => mode === '续写' ? setShowRewriteInput(false) : handleLoadRewritePrompt()}>{mode}</button>
+                  {[
+                    ['continue', '续写'],
+                    ['rewrite', '改写'],
+                    ['polish', '润色'],
+                    ['expand', '扩写'],
+                  ].map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      className={desktopAiMode === mode ? 'active' : ''}
+                      type="button"
+                      onClick={() => prepareDesktopMode(mode)}
+                    >
+                      {label}
+                    </button>
                   ))}
                 </div>
                 <label>写作参数</label>
@@ -2337,10 +2542,12 @@ function App() {
                   <button type="button" onClick={handleOpenSettings}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
                   <button type="button" onClick={handleOpenSettings}>关系：编辑记忆</button>
                 </div>
-                <button className="desktop-generate-btn" type="button" onClick={showRewriteInput ? handleRegenerate : handleGenerate} disabled={loading || regenerating || !currentProject}>
+                <button className="desktop-generate-btn" type="button" onClick={handleDesktopGenerateByMode} disabled={loading || regenerating || !currentProject}>
                   {loading || regenerating ? '生成中...' : '生成候选'}
                 </button>
-                <button className="desktop-apply-btn" type="button" disabled={!variantPreview} onClick={() => variantPreview && handleApplyVariant(variantPreview.id)}>应用到正文</button>
+                <button className="desktop-apply-btn" type="button" disabled={!variantPreview || applyingVariant} onClick={() => handleDesktopApplyVariant()}>
+                  {applyingVariant ? '应用中...' : '应用到正文'}
+                </button>
               </section>
 
               <section className="desktop-card desktop-candidates">
@@ -2354,8 +2561,8 @@ function App() {
                       <strong>候选 {index + 1}{index === 0 ? '（推荐）' : ''}</strong>
                       <p>{(v.content || '').slice(0, 76)}{(v.content || '').length > 76 ? '...' : ''}</p>
                       <div>
-                        <button type="button" onClick={() => handlePreviewVariant(v)}>采用</button>
-                        <button type="button" onClick={() => handlePreviewVariant(v)}>对比</button>
+                        <button type="button" onClick={() => handleDesktopApplyVariant(v.id)} disabled={applyingVariant}>采用</button>
+                        <button type="button" onClick={() => { handlePreviewVariant(v); notifyDevFeature('对比模式'); }}>对比</button>
                         <button type="button" onClick={handleRegenerate} disabled={regenerating || loading}>再来一版</button>
                       </div>
                     </article>
