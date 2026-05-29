@@ -10,7 +10,17 @@ const { buildPrompt } = require('./services/promptBuilder');
 
 const app = express();
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
-app.use(cors({ origin: CORS_ORIGIN }));
+
+// Trust proxy for correct IP and protocol behind Nginx/reverse proxy
+app.set('trust proxy', 1);
+
+if (CORS_ORIGIN === '*') {
+  // Reflect the request origin so credentialed requests work
+  app.use(cors({ origin: true, credentials: true }));
+} else {
+  app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+}
+
 app.use(express.json({ limit: '1mb' }));
 
 // ---- Session ----

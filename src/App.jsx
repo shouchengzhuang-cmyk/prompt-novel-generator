@@ -4,7 +4,7 @@ import VaultPanel from './components/VaultPanel';
 import PromptPreviewPanel from './components/PromptPreviewPanel';
 import WritingControlPanel from './components/WritingControlPanel';
 import GenerationProgress from './components/GenerationProgress';
-import { apiFetch, safeJsonFetch } from './api';
+import { apiFetch, safeJsonFetch, setOnAuthExpired } from './api';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -176,6 +176,14 @@ function App() {
     safeJsonFetch('/api/auth/me')
       .then((data) => setAuthenticated(data.authenticated))
       .catch(() => setAuthenticated(false));
+
+    // Register global 401 handler — when API calls detect auth expiry,
+    // reset to login page
+    setOnAuthExpired(() => {
+      setAuthenticated(false);
+      setLoginPin('');
+      setLoginError('登录已过期，请重新输入 PIN');
+    });
   }, []);
 
   useEffect(() => {
@@ -442,14 +450,25 @@ function App() {
     try {
       const data = await safeJsonFetch('/api/projects');
       setProjects(data.projects || []);
-    } catch {
-      setError('获取项目列表失败');
+      setError(''); // clear any previous error on success
+    } catch (err) {
+      // 401 is handled globally by api.js (clears auth state)
+      // Only show local error for non-auth failures
+      if (!err.message.includes('登录已过期')) {
+        const msg = '获取项目列表失败，请检查网络连接';
+        setError(msg);
+        setNotification({ title: '加载失败', message: msg });
+      }
     }
   };
 
   useEffect(() => {
-    fetchProjects();
-  }, []);
+    if (authenticated === true) {
+      fetchProjects();
+    } else {
+      setProjects([]);
+    }
+  }, [authenticated]);
 
   const resetEditorRoom = () => {
     setEditorRoomTab('notes');
