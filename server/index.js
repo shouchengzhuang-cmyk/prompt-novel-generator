@@ -575,15 +575,24 @@ async function collectProjectStats(projectDir) {
 
 // ---- Auth ----
 
+const AUTH_PIN = process.env.XIAOMOXIA_PIN
+  || (process.env.NODE_ENV !== 'production' ? '0000' : null);
+
+if (!AUTH_PIN) {
+  console.error('❌ 未配置 XIAOMOXIA_PIN，请在 server/.env 中设置');
+} else if (!process.env.XIAOMOXIA_PIN) {
+  console.warn('⚠️  未设置 XIAOMOXIA_PIN，开发环境使用默认 PIN: 0000');
+  console.warn('   生产环境请务必在 server/.env 中配置 XIAOMOXIA_PIN');
+}
+
 app.post('/api/auth/login', (req, res) => {
   const { pin } = req.body;
-  const validPin = process.env.XIAOMOXIA_PIN;
 
-  if (!validPin) {
+  if (!AUTH_PIN) {
     return res.status(500).json({ error: 'PIN 未配置' });
   }
 
-  if (pin !== validPin) {
+  if (pin !== AUTH_PIN) {
     return res.status(401).json({ error: '密码错误' });
   }
 
