@@ -163,6 +163,7 @@ function App() {
   const [desktopView, setDesktopView] = useState('workbench');
   const [desktopChapterQuery, setDesktopChapterQuery] = useState('');
   const [desktopAiMode, setDesktopAiMode] = useState('continue');
+  const [desktopWritingMode, setDesktopWritingMode] = useState('writing');
   const [desktopEditorContent, setDesktopEditorContent] = useState('');
   const [desktopSavingContent, setDesktopSavingContent] = useState(false);
 
@@ -806,6 +807,13 @@ function App() {
       setMobileWritingOutput('');
       setEditorNotes(Array.isArray(data.editorNotes) ? data.editorNotes : []);
       setEditorChats(Array.isArray(data.editorChats) ? data.editorChats : []);
+      // Desktop: immediately switch to workbench/writing view
+      if (!isMobile) {
+        setDesktopView('workbench');
+        setDesktopWritingMode('writing');
+        setShowSettings(false);
+        setShowOutline(false);
+      }
       setProjectDetails((prev) => {
         if (!prev?.chapters) return prev;
         const chapters = prev.chapters.map((ch) =>
@@ -2417,15 +2425,23 @@ function App() {
                         {['总览', '写作', '设定', '版本记录'].map((tab) => (
                           <button
                             key={tab}
-                            className={tab === '写作' ? 'active' : ''}
-                            type="button"
-                            onClick={
-                              tab === '设定'
-                                ? () => { setDesktopView('settings'); handleOpenSettings(); }
-                                : tab === '写作'
-                                  ? () => setDesktopView('workbench')
-                                  : () => notifyDevFeature(tab)
+                            className={
+                              (tab === '写作' && desktopWritingMode === 'writing') ||
+                              (tab === '设定' && desktopWritingMode === 'settings')
+                                ? 'active'
+                                : ''
                             }
+                            type="button"
+                            onClick={() => {
+                              if (tab === '写作') {
+                                setDesktopWritingMode('writing');
+                              } else if (tab === '设定') {
+                                setDesktopWritingMode('settings');
+                                handleOpenSettings();
+                              } else {
+                                notifyDevFeature(tab);
+                              }
+                            }}
                           >
                             {tab}
                           </button>
@@ -2446,40 +2462,25 @@ function App() {
                     </div>
                   )}
 
-                  {(showSettings || showOutline) && (
+                  {desktopWritingMode === 'settings' ? (
                     <div className="desktop-inline-panels">
-                      {showSettings && (
-                        <section className="settings-panel">
-                          <h3>项目设定</h3>
-                          <label>世界观设定</label>
-                          <textarea className="settings-input" value={editWorld} onChange={(e) => setEditWorld(e.target.value)} rows={3} />
-                          <label>人物设定</label>
-                          <textarea className="settings-input" value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} rows={3} />
-                          <label>写作规则</label>
-                          <textarea className="settings-input" value={editStyle} onChange={(e) => setEditStyle(e.target.value)} rows={4} />
-                          <label>剧情摘要</label>
-                          <textarea className="settings-input" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} rows={4} />
-                          <div className="form-actions">
-                            <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
-                            <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>关闭</button>
-                          </div>
-                        </section>
-                      )}
-                      {showOutline && (
-                        <section className="settings-panel">
-                          <h3>章节规划</h3>
-                          <textarea className="settings-input" value={outlineText} onChange={(e) => { setOutlineText(e.target.value); setOutlineError(''); }} rows={10} />
-                          {outlineError && <div className={outlineError === '已保存' ? '' : 'error'}>{outlineError}</div>}
-                          <div className="form-actions">
-                            <button className="btn" onClick={handleSaveOutline} disabled={outlineSaving}>{outlineSaving ? '保存中...' : '保存规划'}</button>
-                            <button className="btn btn-secondary" onClick={() => { setShowOutline(false); setOutlineError(''); }}>关闭</button>
-                          </div>
-                        </section>
-                      )}
+                      <section className="settings-panel">
+                        <h3>项目设定</h3>
+                        <label>世界观设定</label>
+                        <textarea className="settings-input" value={editWorld} onChange={(e) => setEditWorld(e.target.value)} rows={3} />
+                        <label>人物设定</label>
+                        <textarea className="settings-input" value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} rows={3} />
+                        <label>写作规则</label>
+                        <textarea className="settings-input" value={editStyle} onChange={(e) => setEditStyle(e.target.value)} rows={4} />
+                        <label>剧情摘要</label>
+                        <textarea className="settings-input" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} rows={4} />
+                        <div className="form-actions">
+                          <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
+                        </div>
+                      </section>
                     </div>
-                  )}
-
-                  <div className="desktop-writing-brief">
+                  ) : (
+                    <><div className="desktop-writing-brief">
                     <section>
                       <h3>小节目标</h3>
                       <p>{outline[desktopChapterNumber - 1]?.goal || '推进本章核心冲突，保持人物动机清晰。'}</p>
@@ -2549,17 +2550,20 @@ function App() {
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating || loading}>{regenerating ? '生成中...' : '生成候选版本'}</button>
                     </div>
                   )}
+                    </>  )}
 
                   <GenerationProgress visible={genProgress.visible} mode={genProgress.mode} status={genProgress.status} errorMessage={genProgress.errorMessage} onComplete={handleGenProgressDone} />
                   {error && <div className="error">{error}</div>}
 
-                  <footer className="desktop-editor-status">
-                    <span>自动保存已开启</span>
-                    <span>第 {desktopChapterNumber} 章 · {desktopChapterWords.toLocaleString()} 字</span>
-                    <span>目标 4,000 字</span>
-                    <div><i style={{ width: `${desktopProgressPercent}%` }}></i></div>
-                    <strong>{desktopProgressPercent}%</strong>
-                  </footer>
+                  {desktopWritingMode === 'writing' && (
+                    <footer className="desktop-editor-status">
+                      <span>自动保存已开启</span>
+                      <span>第 {desktopChapterNumber} 章 · {desktopChapterWords.toLocaleString()} 字</span>
+                      <span>目标 4,000 字</span>
+                      <div><i style={{ width: `${desktopProgressPercent}%` }}></i></div>
+                      <strong>{desktopProgressPercent}%</strong>
+                    </footer>
+                  )}
                 </section>
               ) : (
                 <section className="desktop-card desktop-empty-main">
@@ -2594,6 +2598,22 @@ function App() {
                     </button>
                   ))}
                 </div>
+                <label>当前模型</label>
+                <div className="desktop-model-grid">
+                  {[
+                    { value: 'deepseek-v4-flash', title: '快速模式', sub: '适合日常续写' },
+                    { value: 'deepseek-v4-pro', title: '深度模式', sub: '适合复杂伏笔' },
+                  ].map((item) => (
+                    <button
+                      key={item.value}
+                      className={model === item.value ? 'active' : ''}
+                      type="button"
+                      onClick={() => { setModel(item.value); setNotification({ title: '已切换', message: `模型已切换为${item.title}` }); }}
+                    >
+                      {item.title}<br /><small>{item.sub}</small>
+                    </button>
+                  ))}
+                </div>
                 <label>写作参数</label>
                 <div className="desktop-param-list">
                   <select value={writingPrefs.style} onChange={(e) => setWritingPrefs({ ...writingPrefs, style: e.target.value })}>
@@ -2622,9 +2642,9 @@ function App() {
                 <textarea className="prompt-input" value={showRewriteInput ? rewritePrompt : userPrompt} onChange={(e) => showRewriteInput ? setRewritePrompt(e.target.value) : setUserPrompt(e.target.value)} placeholder="保持克制暧昧的气氛，推进人物试探，不要过快摊牌。" rows={5} />
                 <label>关联设定</label>
                 <div className="desktop-linked-settings">
-                  <button type="button" onClick={handleOpenSettings}>世界观：{projectDetails?.world ? '已挂载' : '待补充'}</button>
-                  <button type="button" onClick={handleOpenSettings}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
-                  <button type="button" onClick={handleOpenSettings}>关系：编辑记忆</button>
+                  <button type="button" onClick={() => { setDesktopWritingMode('settings'); handleOpenSettings(); }}>世界观：{projectDetails?.world ? '已挂载' : '待补充'}</button>
+                  <button type="button" onClick={() => { setDesktopWritingMode('settings'); handleOpenSettings(); }}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
+                  <button type="button" onClick={() => { setDesktopWritingMode('settings'); handleOpenSettings(); }}>关系：编辑记忆</button>
                 </div>
                 <button className="desktop-generate-btn" type="button" onClick={handleDesktopGenerateByMode} disabled={loading || regenerating || !currentProject}>
                   {loading || regenerating ? '生成中...' : '生成候选'}
