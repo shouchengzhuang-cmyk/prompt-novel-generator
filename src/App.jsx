@@ -5,6 +5,10 @@ import PromptPreviewPanel from './components/PromptPreviewPanel';
 import WritingControlPanel from './components/WritingControlPanel';
 import GenerationProgress from './components/GenerationProgress';
 import { apiFetch, safeJsonFetch, setOnAuthExpired } from './api';
+import HomePage from './pages/HomePage';
+import ProjectWorkspacePage from './pages/ProjectWorkspacePage';
+import ProjectList from './components/project/ProjectList';
+import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -163,7 +167,6 @@ function App() {
   const [desktopView, setDesktopView] = useState('workbench');
   const [desktopChapterQuery, setDesktopChapterQuery] = useState('');
   const [desktopAiMode, setDesktopAiMode] = useState('continue');
-  const [desktopWritingMode, setDesktopWritingMode] = useState('writing');
   const [desktopEditorContent, setDesktopEditorContent] = useState('');
   const [desktopSavingContent, setDesktopSavingContent] = useState(false);
 
@@ -197,13 +200,15 @@ function App() {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
   }, [readingContent, variantPreview]);
 
+  /** 记住最近打开的项目（存 localStorage） */
   const rememberLastProject = useCallback((projectName) => {
     if (!projectName) return;
     localStorage.setItem('xiaomoxia-last-project', projectName);
     setLastProjectName(projectName);
   }, []);
 
-  // Auth handlers
+  // ========== 认证处理 ==========
+  /** 登录：验证 4 位 PIN 码 */
   const handleLogin = useCallback(async () => {
     if (loginPin.length !== 4) return;
     setLoginLoading(true);
@@ -246,7 +251,8 @@ function App() {
     return () => mq.removeEventListener('change', handler);
   }, []);
 
-  // ---- Mobile history navigation ----
+  // ---- 移动端视图导航 ----
+  /** 切换移动端视图（shelf / project / chapter / writing / outline 等） */
   const navigateTo = useCallback((view) => {
     window.history.pushState({ mobileView: view }, '', '');
     setMobileView(view);
@@ -446,10 +452,11 @@ function App() {
     }
   };
 
-  // ---- Fetch project list ----
+  // ========== 项目列表 ==========
+  /** 获取项目列表（登录后自动调用） */
   const fetchProjects = async () => {
     try {
-      const data = await safeJsonFetch('/api/projects');
+      const data = await ProjectsApi.fetchProjects();
       setProjects(data.projects || []);
       setError(''); // clear any previous error on success
     } catch (err) {
@@ -484,7 +491,8 @@ function App() {
     editorNoteReqId.current++;
   };
 
-  // ---- Select a project ----
+  // ---- 进入项目（加载详情和章节列表） ----
+  /** 选中并加载一个项目，请求后端获取章节列表和最近内容 */
   const handleSelectProject = async (name) => {
     rememberLastProject(name);
     setCurrentProject(name);
@@ -518,7 +526,7 @@ function App() {
     setEditSummary('');
     setEditEditorialMemory('');
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`);
+      const data = await ProjectsApi.fetchProjectDetails(name);
       // Normalize: ensure chapters have fileName regardless of backend field name
       if (data.chapters) data.chapters = normalizeChapters(data.chapters);
       setProjectDetails(data);
@@ -553,7 +561,8 @@ function App() {
 
   const ILLEGAL_CHARS = /[/\\:*?"<>|]/;
 
-  // ---- Create a project ----
+  // ---- 新建项目 ----
+  /** 创建新项目：校验项目名（禁止特殊字符），POST 到后端，成功后自动选中 */
   const handleCreateProject = async () => {
     const name = newProjectName.trim();
 
@@ -569,16 +578,12 @@ function App() {
     setCreateError('');
     setCreating(true);
     try {
-      await safeJsonFetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectName: name,
-          world: newWorld,
-          characters: newCharacters,
-          style: newStyle,
-          summary: newSummary,
-        }),
+      await ProjectsApi.createProject({
+        projectName: name,
+        world: newWorld,
+        characters: newCharacters,
+        style: newStyle,
+        summary: newSummary,
       });
 
       setShowCreateForm(false);
@@ -599,7 +604,12 @@ function App() {
     }
   };
 
-  // ---- Generate ----
+  // ---- 生成下一章（流式 + 非流式回退） ----
+  /**
+   * 生成下一章。优先使用流式接口（/api/generate-stream），
+   * 实时在阅读区显示生成内容；如果流式失败则回退到普通 POST /api/generate。
+   * 生成前会检查最后一章是否 staleAfterRewrite。
+   */
   const handleGenerate = async () => {
     if (loading || regenerating || generatingRef.current) return;
     if (!currentProject) {
@@ -714,15 +724,10 @@ function App() {
       // 回退到非流式生成
       setGenProgress({ visible: true, mode: 'generate', status: 'running', errorMessage: '' });
       try {
-        const data = await safeJsonFetch('/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectName: currentProject,
-            userPrompt: enhancedPrompt,
-            model,
-          }),
-          timeout: 180000,
+        const data = await ProjectsApi.generateChapter({
+          projectName: currentProject,
+          userPrompt: enhancedPrompt,
+          model,
         });
         fileName = data.fileName || data.filename;
         content = data.content;
@@ -763,7 +768,7 @@ function App() {
 
     let refreshFailed = false;
     try {
-      const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+      const refreshData = await ProjectsApi.fetchProjectDetails(currentProject);
       if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
       setProjectDetails(refreshData);
     } catch (refreshErr) {
@@ -781,7 +786,8 @@ function App() {
     generatingRef.current = false;
   };
 
-  // ---- Read a chapter ----
+  // ---- 阅读章节 ----
+  /** 读取指定章节内容，同时加载该章节的候选版本和编辑室数据 */
   const handleReadChapter = async (filename, projectName = currentProject) => {
     if (!projectName) return null;
     rememberLastProject(projectName);
@@ -795,8 +801,7 @@ function App() {
     setRewritePrompt('');
     setReadingContent('');
     try {
-      const url = `/api/projects/${encodeURIComponent(projectName)}/chapters/${encodeURIComponent(filename)}`;
-      const data = await safeJsonFetch(url);
+      const data = await ProjectsApi.getChapterContent(projectName, filename);
       console.log('章节接口返回的数据:', data);
       if (typeof data.fileName !== 'string' || typeof data.content !== 'string') {
         throw new Error('章节读取失败：后端未返回有效数据');
@@ -807,13 +812,6 @@ function App() {
       setMobileWritingOutput('');
       setEditorNotes(Array.isArray(data.editorNotes) ? data.editorNotes : []);
       setEditorChats(Array.isArray(data.editorChats) ? data.editorChats : []);
-      // Desktop: immediately switch to workbench/writing view
-      if (!isMobile) {
-        setDesktopView('workbench');
-        setDesktopWritingMode('writing');
-        setShowSettings(false);
-        setShowOutline(false);
-      }
       setProjectDetails((prev) => {
         if (!prev?.chapters) return prev;
         const chapters = prev.chapters.map((ch) =>
@@ -838,7 +836,8 @@ function App() {
     }
   };
 
-  // ---- Delete a chapter ----
+  // ---- 删除章节 ----
+  /** 删除指定章节，删除后自动刷新项目详情，如果正在阅读被删章节则关闭阅读 */
   const handleDeleteChapter = async (filename, e) => {
     e.stopPropagation();
     const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === filename);
@@ -846,11 +845,9 @@ function App() {
     if (!confirm(`确定删除章节【${label}】吗？此操作不可恢复。`)) return;
     setError('');
     try {
-      await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(filename)}`, {
-        method: 'DELETE',
-      });
+      await ProjectsApi.deleteChapter(currentProject, filename);
       // Refresh chapter list
-      const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+      const refreshData = await ProjectsApi.fetchProjectDetails(currentProject);
       if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
       setProjectDetails(refreshData);
       setDisplayContent(refreshData.recentContent || '');
@@ -872,15 +869,14 @@ function App() {
     }
   };
 
-  // ---- Delete a project ----
+  // ---- 删除项目（含确认弹窗） ----
+  /** 删除整个项目和所有章节，不可恢复。如果删除的是当前项目，清空所有相关状态 */
   const handleDeleteProject = async (name, e) => {
     e.stopPropagation();
     if (!confirm(`确定删除项目【${name}】吗？这会删除该项目的所有章节和设定，且不可恢复。`)) return false;
     setError('');
     try {
-      await safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`, {
-        method: 'DELETE',
-      });
+      await ProjectsApi.deleteProject(name);
       // If deleting the current project, clear all state
       if (currentProject === name) {
         setCurrentProject(null);
@@ -931,7 +927,8 @@ function App() {
     await handleDeleteChapter(filename, { stopPropagation() {} });
   };
 
-  // ---- Copy full text ----
+  // ---- 复制全文 ----
+  /** 将全部生成内容（displayContent）复制到剪贴板 */
   const handleCopyFull = async () => {
     try {
       await navigator.clipboard.writeText(displayContent);
@@ -953,7 +950,8 @@ function App() {
     }
   };
 
-  // ---- Open settings ----
+  // ---- 编辑项目设定（世界观/人物/风格/摘要/编辑记忆） ----
+  /** 打开项目设定编辑器，支持自动聚焦到指定字段（world/characters/summary） */
   const openSettingsEditor = (details = projectDetails, projectName = currentProject, focusTarget = '') => {
     if (!details || !projectName) return;
     setEditWorld(details.world || '');
@@ -983,7 +981,8 @@ function App() {
     openSettingsEditor(projectDetails, currentProject);
   };
 
-  // ---- Save settings ----
+  // ---- 保存项目设定 ----
+  /** 将世界观/人物/风格/摘要/编辑记忆保存到后端 */
   const handleSaveSettings = async () => {
     if (editingProjectName !== currentProject) {
       setError('当前项目已切换，请重新打开编辑设定后再保存。');
@@ -995,16 +994,12 @@ function App() {
     rememberLastProject(currentProject);
     setSavingSettings(true);
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          world: editWorld,
-          characters: editCharacters,
-          style: editStyle,
-          summary: editSummary,
-          editorialMemory: editEditorialMemory,
-        }),
+      const data = await ProjectsApi.updateProjectSettings(currentProject, {
+        world: editWorld,
+        characters: editCharacters,
+        style: editStyle,
+        summary: editSummary,
+        editorialMemory: editEditorialMemory,
       });
       // Sync projectDetails
       setProjectDetails((prev) => prev ? {
@@ -1024,7 +1019,8 @@ function App() {
     }
   };
 
-  // ---- Outline ----
+  // ---- 大纲（章节规划） ----
+  /** 加载项目大纲（JSON 格式的章节规划） */
   const handleLoadOutline = async (projectName = currentProject) => {
     if (!projectName) return;
     setOutlineError('');
@@ -1068,7 +1064,8 @@ function App() {
     }
   };
 
-  // ---- Refresh ----
+  // ---- 刷新项目列表和当前项目 ----
+  /** 手动刷新项目列表和当前选中的项目详情 */
   const handleRefresh = async () => {
     setError('');
     await fetchProjects();
@@ -1327,7 +1324,7 @@ function App() {
       setNotification({ title: '候选版本写好了', message: '可以查看并决定是否采用。' });
       // 刷新项目详情，保持章节列表与后台同步
       try {
-        const refreshData = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}`);
+        const refreshData = await ProjectsApi.fetchProjectDetails(currentProject);
         if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
         setProjectDetails(refreshData);
       } catch (refreshErr) {
@@ -1582,7 +1579,7 @@ function App() {
     if (currentProject === projectName && projectDetails) return projectDetails;
     if (allProjectDetails[projectName]) return allProjectDetails[projectName];
     try {
-      const details = await safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}`);
+      const details = await ProjectsApi.fetchProjectDetails(projectName);
       if (details.chapters) details.chapters = normalizeChapters(details.chapters);
       setAllProjectDetails((prev) => ({ ...prev, [projectName]: details }));
       return details;
@@ -1794,7 +1791,7 @@ function App() {
       try {
         const details = currentProject === project.name && projectDetails
           ? projectDetails
-          : await safeJsonFetch(`/api/projects/${encodeURIComponent(project.name)}`);
+          : await ProjectsApi.fetchProjectDetails(project.name);
         const chapters = normalizeChapters(details.chapters || []);
         index.push({
           type: 'project',
@@ -2219,465 +2216,132 @@ function App() {
       <h1>小墨匣
         <span className="logout-link" onClick={handleLogout}>退出</span>
       </h1>
+      {/* Desktop workbench */}
       {!isMobile && (
-        <div className="desktop-workbench">
-          <header className="desktop-topbar">
-            <div className="desktop-brand">
-              <span className="desktop-logo" aria-hidden="true"></span>
-              <span>小墨匣</span>
-            </div>
-            <div className="desktop-search">
-              <span>⌕</span>
-              <input placeholder="搜索项目 / 章节 / 角色 / 世界观" readOnly onFocus={() => notifyDevFeature('全局搜索')} />
-              <kbd>⌘ K</kbd>
-            </div>
-            <div className="desktop-top-actions">
-              <button className="desktop-action primary" type="button" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>＋ 新建项目</button>
-              <button className="desktop-action" type="button" onClick={() => notifyDevFeature('导入')}>⇩ 导入</button>
-              <button className="desktop-action" type="button" onClick={() => notifyDevFeature('同步')}>⟳ 同步</button>
-              <button className="desktop-icon-action" type="button" aria-label="通知" onClick={() => notifyDevFeature('通知中心')}>♢<em>3</em></button>
-              <button className="desktop-avatar" type="button" onClick={handleLogout} title="退出登录">墨</button>
-            </div>
-          </header>
-
-          <div className="desktop-layout">
-            <nav className="desktop-mainnav" aria-label="主导航">
-              {[
-                ['⌂', '工作台', true],
-                ['▣', '项目库'],
-                ['◎', '世界观'],
-                ['♙', '人物'],
-                ['☷', '章节'],
-                ['☰', '大纲'],
-                ['◇', '草稿箱'],
-                ['✦', '提示词实验室'],
-                ['⚙', '设置'],
-              ].map(([icon, label]) => {
-                const navActive =
-                  (label === '工作台' && desktopView === 'workbench') ||
-                  (label === '项目库' && desktopView === 'projects') ||
-                  (label === '世界观' && desktopView === 'world') ||
-                  (label === '人物' && desktopView === 'characters') ||
-                  (label === '章节' && desktopView === 'workbench') ||
-                  (label === '大纲' && desktopView === 'outline') ||
-                  (label === '设置' && desktopView === 'settings');
-                return (
-                <button
-                  key={label}
-                  className={navActive ? 'active' : ''}
-                  type="button"
-                  onClick={() => handleDesktopNav(label)}
-                >
-                  <span>{icon}</span>
-                  {label}
-                </button>
-                );
-              })}
-              <div className="desktop-sync-card">
-                <span>存储与同步</span>
-                <strong>68%</strong>
-                <small>68.2 GB / 100 GB</small>
-              </div>
-            </nav>
-
-            <aside className="desktop-project-rail">
-              <section className="desktop-card desktop-current-project">
-                <div className="desktop-card-head">
-                  <h2>当前项目</h2>
-                  <button type="button" onClick={handleOpenSettings}>⚙</button>
-                </div>
-                {currentProject ? (
-                  <>
-                    <div className="desktop-project-cover">
-                      <span>{currentProject.slice(0, 1)}</span>
-                      <div>
-                        <h3>{currentProject}</h3>
-                        <em>长篇玄幻</em>
-                        <p>{getProjectIntro(projectDetails).slice(0, 46) || '在这里沉淀世界观、人物与章节主线。'}</p>
-                      </div>
-                    </div>
-                    <div className="desktop-project-stats">
-                      <span>总字数<strong>{desktopTotalWords.toLocaleString()} 字</strong></span>
-                      <span>章节数<strong>{desktopChapters.length} 章</strong></span>
-                      <span>最近编辑<strong>{formatProjectUpdatedAt(sortedProjects.find((p) => p.name === currentProject)?.updatedAt)}</strong></span>
-                    </div>
-                  </>
-                ) : (
-                  <p className="desktop-empty">请选择或创建一个小说项目。</p>
-                )}
-              </section>
-
-              <section className="desktop-card desktop-chapter-card">
-                <div className="desktop-card-head">
-                  <h2>章节列表</h2>
-                  <div>
-                    <button type="button" onClick={() => notifyDevFeature('新建空章节：当前后端还没有创建空章节接口')} disabled={!currentProject}>＋</button>
-                  </div>
-                </div>
-                <div className="desktop-chapter-search">
-                  <input
-                    value={desktopChapterQuery}
-                    onChange={(e) => setDesktopChapterQuery(e.target.value)}
-                    placeholder="搜索章节标题 / 摘要"
-                  />
-                </div>
-                <div className="desktop-chapter-list">
-                  {filteredDesktopChapters.length > 0 ? filteredDesktopChapters.map((ch, index) => {
-                    const cf = ch.fileName || ch.filename;
-                    const isActive = cf && readingChapter === cf;
-                    const chapterNo = desktopChapters.findIndex((item) => (item.fileName || item.filename) === cf) + 1 || index + 1;
-                    return (
-                      <button
-                        key={cf || `chapter-${index}`}
-                        className={isActive ? 'active' : ''}
-                        type="button"
-                        disabled={!cf}
-                        onClick={() => cf && handleReadChapter(cf)}
-                      >
-                        <strong>第{chapterNo}章　{ch.title || cf?.replace(/\.txt$/, '') || '未命名章节'}</strong>
-                        <span>{ch.date || ch.createdAt ? formatProjectUpdatedAt(ch.date || ch.createdAt) : '未记录'} · {(Number(ch.wordCount) || Number(ch.words) || 0).toLocaleString()} 字</span>
-                        {ch.staleAfterRewrite && <em>待检查</em>}
-                      </button>
-                    );
-                  }) : (
-                    <p className="desktop-empty">{desktopChapterQuery.trim() ? '没有匹配章节。' : '暂无章节，先在右侧控制台生成第一章。'}</p>
-                  )}
-                </div>
-              </section>
-
-              <section className="desktop-card desktop-recent-card">
-                <div className="desktop-card-head">
-                  <h2>最近项目</h2>
-                  <button type="button" onClick={() => setDesktopView('projects')}>查看全部</button>
-                </div>
-                {desktopRecentProjects.map((project, index) => (
-                  <button className="desktop-recent-project" key={project.name} type="button" onClick={() => handleSelectProject(project.name)}>
-                    <span>{project.name.slice(0, 1)}</span>
-                    <div>
-                      <strong>{project.name}</strong>
-                      <small>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章</small>
-                    </div>
-                    <em>{index === 0 ? desktopTotalWords.toLocaleString() : ''}</em>
-                  </button>
-                ))}
-              </section>
-            </aside>
-
-            <main className="desktop-writing-main">
-              {showCreateForm ? (
-                <section className="desktop-card desktop-create-panel">
-                  <h2>创建新项目</h2>
-                  <label>项目名</label>
-                  <input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="输入项目名称" />
-                  <label>世界观设定</label>
-                  <textarea value={newWorld} onChange={(e) => setNewWorld(e.target.value)} placeholder="描述世界观设定..." rows={4} />
-                  <label>人物设定</label>
-                  <textarea value={newCharacters} onChange={(e) => setNewCharacters(e.target.value)} placeholder="描述主要人物..." rows={4} />
-                  <label>写作规则 / 风格要求</label>
-                  <textarea value={newStyle} onChange={(e) => setNewStyle(e.target.value)} placeholder="文风要求、篇幅要求、写作规则…" rows={5} />
-                  <label>剧情摘要（可选）</label>
-                  <textarea value={newSummary} onChange={(e) => setNewSummary(e.target.value)} placeholder="剧情摘要…" rows={3} />
-                  {createError && <div className="error">{createError}</div>}
-                  <div className="desktop-editor-actions">
-                    <button className="btn" disabled={creating} onClick={handleCreateProject}>{creating ? '创建中...' : '创建项目'}</button>
-                    <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); }}>取消</button>
-                  </div>
-                </section>
-              ) : desktopView === 'projects' ? (
-                <section className="desktop-card desktop-project-library">
-                  <div className="desktop-editor-head">
-                    <div>
-                      <h2>项目库</h2>
-                      <div className="desktop-tabs">
-                        <button className="active" type="button">全部项目</button>
-                      </div>
-                    </div>
-                    <button className="btn" type="button" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>新建项目</button>
-                  </div>
-                  <div className="desktop-library-list">
-                    {sortedProjects.length > 0 ? sortedProjects.map((project) => (
-                      <button
-                        key={project.name}
-                        type="button"
-                        className={currentProject === project.name ? 'active' : ''}
-                        onClick={() => {
-                          handleSelectProject(project.name);
-                          setDesktopView('workbench');
-                        }}
-                      >
-                        <strong>{project.name}</strong>
-                        <span>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章</span>
-                      </button>
-                    )) : (
-                      <p className="desktop-empty">暂无项目，请先创建一个小说项目。</p>
-                    )}
-                  </div>
-                </section>
-              ) : currentProject ? (
-                <section className="desktop-card desktop-editor-shell">
-                  <div className="desktop-editor-head">
-                    <div>
-                      <h2>
-                        {readingChapterTitle || desktopCurrentChapter?.title || `第${desktopChapterNumber}章`}
-                        {readingChapter !== '_streaming' && readingChapter && <button type="button" onClick={handleStartEditTitle}>✎</button>}
-                      </h2>
-                      <div className="desktop-tabs">
-                        {['总览', '写作', '设定', '版本记录'].map((tab) => (
-                          <button
-                            key={tab}
-                            className={
-                              (tab === '写作' && desktopWritingMode === 'writing') ||
-                              (tab === '设定' && desktopWritingMode === 'settings')
-                                ? 'active'
-                                : ''
-                            }
-                            type="button"
-                            onClick={() => {
-                              if (tab === '写作') {
-                                setDesktopWritingMode('writing');
-                              } else if (tab === '设定') {
-                                setDesktopWritingMode('settings');
-                                handleOpenSettings();
-                              } else {
-                                notifyDevFeature(tab);
-                              }
-                            }}
-                          >
-                            {tab}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="desktop-save-state">
-                      <strong>本章字数 {desktopChapterWords.toLocaleString()}</strong>
-                      <span>{desktopLastSaved} · {new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  </div>
-
-                  {editingTitle && (
-                    <div className="desktop-title-edit">
-                      <input value={editTitleValue} onChange={(e) => setEditTitleValue(e.target.value)} autoFocus />
-                      <button className="btn" onClick={handleSaveTitle}>保存</button>
-                      <button className="btn btn-secondary" onClick={handleCancelEditTitle}>取消</button>
-                    </div>
-                  )}
-
-                  {desktopWritingMode === 'settings' ? (
-                    <div className="desktop-inline-panels">
-                      <section className="settings-panel">
-                        <h3>项目设定</h3>
-                        <label>世界观设定</label>
-                        <textarea className="settings-input" value={editWorld} onChange={(e) => setEditWorld(e.target.value)} rows={3} />
-                        <label>人物设定</label>
-                        <textarea className="settings-input" value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} rows={3} />
-                        <label>写作规则</label>
-                        <textarea className="settings-input" value={editStyle} onChange={(e) => setEditStyle(e.target.value)} rows={4} />
-                        <label>剧情摘要</label>
-                        <textarea className="settings-input" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} rows={4} />
-                        <div className="form-actions">
-                          <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
-                        </div>
-                      </section>
-                    </div>
-                  ) : (
-                    <><div className="desktop-writing-brief">
-                    <section>
-                      <h3>小节目标</h3>
-                      <p>{outline[desktopChapterNumber - 1]?.goal || '推进本章核心冲突，保持人物动机清晰。'}</p>
-                    </section>
-                    <section>
-                      <h3>本章摘要</h3>
-                      <p>{desktopCurrentChapter?.summary || projectDetails?.summary?.slice(0, 72) || '等待生成或补充本章摘要。'}</p>
-                    </section>
-                    <section>
-                      <h3>场景标签</h3>
-                      <div className="desktop-tags">
-                        <span>宗门秘辛</span>
-                        <span>试探</span>
-                        <span>关系推进</span>
-                        <button type="button" onClick={() => notifyDevFeature('场景标签管理')}>＋</button>
-                      </div>
-                    </section>
-                  </div>
-
-                  <div className="desktop-editor-toolbar">
-                    <span>正文</span>
-                    {['↶', '↷', 'B', 'I', 'U', '☷', '🔗'].map((item) => (
-                      <button key={item} type="button" disabled title="编辑器工具开发中">{item}</button>
-                    ))}
-                    <em>{desktopChapterWords.toLocaleString()} 字</em>
-                  </div>
-
-                  <textarea
-                    className="desktop-manuscript"
-                    ref={readingContentRef}
-                    value={desktopEditorContent}
-                    onChange={(e) => setDesktopEditorContent(e.target.value)}
-                    onScroll={handleReadingContentScroll}
-                    readOnly={!!variantPreview || !readingChapter || readingChapter === '_streaming'}
-                    placeholder="从左侧选择章节，或在右侧写下本轮要求后生成正文。"
-                  />
-
-                  {debugPromptInfo && !debugPromptInfo.usedFallback && (
-                    <div className="debug-prompt-info">本次使用模板：{debugPromptInfo.templateTitle || '未知'}</div>
-                  )}
-                  {readingChapterRecord?.staleAfterRewrite && !variantPreview && (
-                    <div className="stale-chapter-notice">
-                      <div><strong>这章生成于前文重写之前，可能与当前剧情不连续。</strong></div>
-                      <div className="stale-chapter-actions">
-                        <button className="btn btn-secondary" onClick={handleConfirmKeepChapter}>确认保留</button>
-                        <button className="btn" onClick={() => { if (!showRewriteInput) handleLoadRewritePrompt(); }}>重写本章</button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="desktop-editor-actions">
-                    <button className="btn" onClick={() => { setDesktopAiMode('continue'); handleGenerate(); }} disabled={loading || regenerating}>{loading ? '生成中...' : '继续生成'}</button>
-                    <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('rewrite'); ensureDesktopSelectionForRewrite('改写'); }} disabled={!readingChapter || readingChapter === '_streaming'}>
-                      {showRewriteInput ? '取消改写' : '改写选中段落'}
-                    </button>
-                    <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('polish'); ensureDesktopSelectionForRewrite('润色'); }}>润色</button>
-                    <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('expand'); ensureDesktopSelectionForRewrite('扩写'); }}>扩写</button>
-                    <button className="btn btn-secondary" onClick={handleDesktopSaveContent} disabled={!readingChapter || readingChapter === '_streaming' || desktopSavingContent || !!variantPreview}>
-                      {desktopSavingContent ? '保存中...' : '保存草稿'}
-                    </button>
-                  </div>
-
-                  {showRewriteInput && (
-                    <div className="rewrite-input-area desktop-rewrite-area">
-                      <h3>本次改写要求</h3>
-                      <textarea className="prompt-input" value={rewritePrompt} onChange={(e) => setRewritePrompt(e.target.value)} placeholder="这次想怎么改写？" rows={4} />
-                      <button className="btn" onClick={handleRegenerate} disabled={regenerating || loading}>{regenerating ? '生成中...' : '生成候选版本'}</button>
-                    </div>
-                  )}
-                    </>  )}
-
-                  <GenerationProgress visible={genProgress.visible} mode={genProgress.mode} status={genProgress.status} errorMessage={genProgress.errorMessage} onComplete={handleGenProgressDone} />
-                  {error && <div className="error">{error}</div>}
-
-                  {desktopWritingMode === 'writing' && (
-                    <footer className="desktop-editor-status">
-                      <span>自动保存已开启</span>
-                      <span>第 {desktopChapterNumber} 章 · {desktopChapterWords.toLocaleString()} 字</span>
-                      <span>目标 4,000 字</span>
-                      <div><i style={{ width: `${desktopProgressPercent}%` }}></i></div>
-                      <strong>{desktopProgressPercent}%</strong>
-                    </footer>
-                  )}
-                </section>
-              ) : (
-                <section className="desktop-card desktop-empty-main">
-                  <h2>选择一个项目开始写作</h2>
-                  <p>小墨匣会把小说项目、章节、人物与世界观设定放在同一个写作工作台里。</p>
-                  <button className="btn" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>新建项目</button>
-                </section>
-              )}
-            </main>
-
-            <aside className="desktop-ai-panel">
-              <section className="desktop-card desktop-ai-card">
-                <div className="desktop-card-head">
-                  <h2>AI 写作控制台</h2>
-                  <button type="button" onClick={() => notifyDevFeature('收起 AI 控制台')}>收起</button>
-                </div>
-                <label>创作模式</label>
-                <div className="desktop-mode-grid">
-                  {[
-                    ['continue', '续写'],
-                    ['rewrite', '改写'],
-                    ['polish', '润色'],
-                    ['expand', '扩写'],
-                  ].map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      className={desktopAiMode === mode ? 'active' : ''}
-                      type="button"
-                      onClick={() => prepareDesktopMode(mode)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <label>当前模型</label>
-                <div className="desktop-model-grid">
-                  {[
-                    { value: 'deepseek-v4-flash', title: '快速模式', sub: '适合日常续写' },
-                    { value: 'deepseek-v4-pro', title: '深度模式', sub: '适合复杂伏笔' },
-                  ].map((item) => (
-                    <button
-                      key={item.value}
-                      className={model === item.value ? 'active' : ''}
-                      type="button"
-                      onClick={() => { setModel(item.value); setNotification({ title: '已切换', message: `模型已切换为${item.title}` }); }}
-                    >
-                      {item.title}<br /><small>{item.sub}</small>
-                    </button>
-                  ))}
-                </div>
-                <label>写作参数</label>
-                <div className="desktop-param-list">
-                  <select value={writingPrefs.style} onChange={(e) => setWritingPrefs({ ...writingPrefs, style: e.target.value })}>
-                    <option value="">文风：默认</option>
-                    <option value="玄幻 · 古典">玄幻 · 古典</option>
-                    <option value="冷静克制">冷静克制</option>
-                    <option value="轻小说">轻小说</option>
-                  </select>
-                  <select value={writingPrefs.characterConsistency} onChange={(e) => setWritingPrefs({ ...writingPrefs, characterConsistency: e.target.value })}>
-                    <option value="strict">视角：人物一致</option>
-                    <option value="natural">视角：自然推进</option>
-                  </select>
-                  <select value={writingPrefs.paragraph} onChange={(e) => setWritingPrefs({ ...writingPrefs, paragraph: e.target.value })}>
-                    <option value="short">篇幅：短段</option>
-                    <option value="normal">篇幅：中等</option>
-                    <option value="long">篇幅：长段</option>
-                  </select>
-                  <select value={writingPrefs.pace} onChange={(e) => setWritingPrefs({ ...writingPrefs, pace: e.target.value })}>
-                    <option value="slow">节奏：慢热</option>
-                    <option value="normal">节奏：正常</option>
-                    <option value="fast">节奏：快一点</option>
-                  </select>
-                  <div className="desktop-range-row"><span>温度</span><input type="range" min="0" max="1" step="0.1" defaultValue="0.7" disabled title="高级参数开发中" /><strong>0.7</strong></div>
-                </div>
-                <label>本轮要求</label>
-                <textarea className="prompt-input" value={showRewriteInput ? rewritePrompt : userPrompt} onChange={(e) => showRewriteInput ? setRewritePrompt(e.target.value) : setUserPrompt(e.target.value)} placeholder="保持克制暧昧的气氛，推进人物试探，不要过快摊牌。" rows={5} />
-                <label>关联设定</label>
-                <div className="desktop-linked-settings">
-                  <button type="button" onClick={() => { setDesktopWritingMode('settings'); handleOpenSettings(); }}>世界观：{projectDetails?.world ? '已挂载' : '待补充'}</button>
-                  <button type="button" onClick={() => { setDesktopWritingMode('settings'); handleOpenSettings(); }}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
-                  <button type="button" onClick={() => { setDesktopWritingMode('settings'); handleOpenSettings(); }}>关系：编辑记忆</button>
-                </div>
-                <button className="desktop-generate-btn" type="button" onClick={handleDesktopGenerateByMode} disabled={loading || regenerating || !currentProject}>
-                  {loading || regenerating ? '生成中...' : '生成候选'}
-                </button>
-                <button className="desktop-apply-btn" type="button" disabled={!variantPreview || applyingVariant} onClick={() => handleDesktopApplyVariant()}>
-                  {applyingVariant ? '应用中...' : '应用到正文'}
-                </button>
-              </section>
-
-              <section className="desktop-card desktop-candidates">
-                <div className="desktop-card-head">
-                  <h2>候选续写（{variants.length}）</h2>
-                  <button type="button" onClick={() => notifyDevFeature('对比模式')}>对比模式</button>
-                </div>
-                <div className="desktop-candidate-list">
-                  {variants.length > 0 ? variants.slice(0, 6).map((v, index) => (
-                    <article className={variantPreview?.id === v.id ? 'active' : ''} key={v.id}>
-                      <strong>候选 {index + 1}{index === 0 ? '（推荐）' : ''}</strong>
-                      <p>{(v.content || '').slice(0, 76)}{(v.content || '').length > 76 ? '...' : ''}</p>
-                      <div>
-                        <button type="button" onClick={() => handleDesktopApplyVariant(v.id)} disabled={applyingVariant}>采用</button>
-                        <button type="button" onClick={() => { handlePreviewVariant(v); notifyDevFeature('对比模式'); }}>对比</button>
-                        <button type="button" onClick={handleRegenerate} disabled={regenerating || loading}>再来一版</button>
-                      </div>
-                    </article>
-                  )) : (
-                    <p className="desktop-empty">生成后会在这里展示候选版本。</p>
-                  )}
-                </div>
-              </section>
-            </aside>
-          </div>
-        </div>
+        <ProjectWorkspacePage
+          desktopView={desktopView}
+          showCreateForm={showCreateForm}
+          currentProject={currentProject}
+          projectDetails={projectDetails}
+          readingChapter={readingChapter}
+          readingChapterTitle={readingChapterTitle}
+          readingContent={readingContent}
+          showRewriteInput={showRewriteInput}
+          rewritePrompt={rewritePrompt}
+          variants={variants}
+          variantPreview={variantPreview}
+          editingTitle={editingTitle}
+          editTitleValue={editTitleValue}
+          exportStatus={exportStatus}
+          error={error}
+          loading={loading}
+          regenerating={regenerating}
+          model={model}
+          writingPrefs={writingPrefs}
+          userPrompt={userPrompt}
+          editWorld={editWorld}
+          editCharacters={editCharacters}
+          editStyle={editStyle}
+          editSummary={editSummary}
+          editEditorialMemory={editEditorialMemory}
+          editingProjectName={editingProjectName}
+          showSettings={showSettings}
+          showOutline={showOutline}
+          outlineSaving={outlineSaving}
+          outlineError={outlineError}
+          desktopAiMode={desktopAiMode}
+          desktopWritingMode={desktopWritingMode}
+          desktopEditorContent={desktopEditorContent}
+          desktopSavingContent={desktopSavingContent}
+          desktopChapterQuery={desktopChapterQuery}
+          debugPromptInfo={debugPromptInfo}
+          genProgress={genProgress}
+          copied={copied}
+          savingSettings={savingSettings}
+          applyingVariant={applyingVariant}
+          readingContentRef={readingContentRef}
+          readingSectionRef={readingSectionRef}
+          creating={creating}
+          newProjectName={newProjectName}
+          newWorld={newWorld}
+          newCharacters={newCharacters}
+          newStyle={newStyle}
+          newSummary={newSummary}
+          createError={createError}
+          desktopChapters={desktopChapters}
+          filteredDesktopChapters={filteredDesktopChapters}
+          desktopCurrentChapter={desktopCurrentChapter}
+          desktopChapterNumber={desktopChapterNumber}
+          desktopChapterWords={desktopChapterWords}
+          desktopTotalWords={desktopTotalWords}
+          desktopRecentProjects={desktopRecentProjects}
+          desktopProgressPercent={desktopProgressPercent}
+          desktopLastSaved={desktopLastSaved}
+          sortedProjects={sortedProjects}
+          enhancedPrompt={enhancedPrompt}
+          enhancedRewritePrompt={enhancedRewritePrompt}
+          outline={outline}
+          readingChapterRecord={readingChapterRecord}
+          onDesktopNav={handleDesktopNav}
+          onSelectProject={handleSelectProject}
+          onReadChapter={handleReadChapter}
+          onGenerate={handleGenerate}
+          onRegenerate={handleRegenerate}
+          onDesktopSaveContent={handleDesktopSaveContent}
+          onDesktopGenerateByMode={handleDesktopGenerateByMode}
+          onPrepareDesktopMode={prepareDesktopMode}
+          onEnsureDesktopSelectionForRewrite={ensureDesktopSelectionForRewrite}
+          onOpenSettings={handleOpenSettings}
+          onSaveSettings={handleSaveSettings}
+          onLoadRewritePrompt={handleLoadRewritePrompt}
+          onStartEditTitle={handleStartEditTitle}
+          onSaveTitle={handleSaveTitle}
+          onCancelEditTitle={handleCancelEditTitle}
+          onExport={handleExport}
+          onBackup={handleBackup}
+          onRebuildIndex={handleRebuildIndex}
+          onConfirmKeepChapter={handleConfirmKeepChapter}
+          onPreviewVariant={handlePreviewVariant}
+          onDesktopApplyVariant={handleDesktopApplyVariant}
+          onApplyVariant={handleApplyVariant}
+          onGenProgressDone={handleGenProgressDone}
+          onCopyChapter={handleCopyChapter}
+          onCopyFull={handleCopyFull}
+          onNotifyDevFeature={notifyDevFeature}
+          onSetRewritePrompt={setRewritePrompt}
+          onSetShowRewriteInput={setShowRewriteInput}
+          onSetDesktopWritingMode={setDesktopWritingMode}
+          onSetShowCreateForm={setShowCreateForm}
+          onSetCreateError={setCreateError}
+          onSetDesktopView={setDesktopView}
+          onCreateProject={handleCreateProject}
+          onLoadOutline={handleLoadOutline}
+          onSaveOutline={handleSaveOutline}
+          onSetEditWorld={setEditWorld}
+          onSetEditCharacters={setEditCharacters}
+          onSetEditStyle={setEditStyle}
+          onSetEditSummary={setEditSummary}
+          onSetEditEditorialMemory={setEditEditorialMemory}
+          onSetShowOutline={setShowOutline}
+          onSetShowSettings={setShowSettings}
+          onSetModel={setModel}
+          onSetWritingPrefs={setWritingPrefs}
+          onSetUserPrompt={setUserPrompt}
+          onSetDesktopAiMode={setDesktopAiMode}
+          onSetDesktopEditorContent={setDesktopEditorContent}
+          onSetDesktopChapterQuery={setDesktopChapterQuery}
+          onSetEditTitleValue={setEditTitleValue}
+          onSetNewProjectName={setNewProjectName}
+          onSetNewWorld={setNewWorld}
+          onSetNewCharacters={setNewCharacters}
+          onSetNewStyle={setNewStyle}
+          onSetNewSummary={setNewSummary}
+          onHandleLogout={handleLogout}
+          onHandleSelectProject={handleSelectProject}
+          onHandleGenerate={handleGenerate}
+          formatProjectUpdatedAt={formatProjectUpdatedAt}
+          getProjectChapterCount={getProjectChapterCount}
+        />
       )}
       {isMobile && showMobileSearch && (
         <div className="mobile-search-overlay">
@@ -2751,61 +2415,18 @@ function App() {
             </button>
             )}
 
-            <section className="sidebar-section">
-              <div className="sidebar-section-header">
-                <h2>项目</h2>
-                <div className="sidebar-section-actions">
-                  {!isProjectsCollapsed && <button className="btn" onClick={handleRefresh}>刷新</button>}
-                  <button className="btn btn-secondary" onClick={() => setIsProjectsCollapsed((prev) => !prev)}>
-                    {isProjectsCollapsed ? '展开' : '收起'}
-                  </button>
-                </div>
-              </div>
-
-              {!isProjectsCollapsed && (
-                <div className="sidebar-section-body">
-                  <div className="project-sort-controls">
-                    <select
-                      className="project-sort-field"
-                      value={projectSort.field}
-                      onChange={(e) => setProjectSort((prev) => ({ ...prev, field: e.target.value }))}
-                    >
-                      <option value="updatedAt">按修改日期</option>
-                      <option value="name">按名称</option>
-                      <option value="size">按大小</option>
-                    </select>
-                    <select
-                      className="project-sort-order"
-                      value={projectSort.order}
-                      onChange={(e) => setProjectSort((prev) => ({ ...prev, order: e.target.value }))}
-                    >
-                      <option value="desc">降序</option>
-                      <option value="asc">升序</option>
-                    </select>
-                  </div>
-                  <div className="project-list project-list-scroll">
-                    {sortedProjects.length === 0 && (
-                      <p className="hint">暂无项目，请创建一个</p>
-                    )}
-                    {sortedProjects.map((p) => (
-                      <div key={p.name} className="project-item-wrap">
-                        <div
-                          className={'project-item' + (currentProject === p.name ? ' active' : '')}
-                          onClick={() => handleSelectProject(p.name)}
-                        >
-                          <span className="project-name">{p.name}</span>
-                        </div>
-                        <button className="delete-btn project-delete" onClick={(e) => handleDeleteProject(p.name, e)}>删除</button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button className="btn btn-secondary" onClick={() => { setShowCreateForm(true); setCreateError(''); }}>
-                    + 创建项目
-                  </button>
-                </div>
-              )}
-            </section>
+            <ProjectList
+              projects={sortedProjects}
+              currentProject={currentProject}
+              projectSort={projectSort}
+              isCollapsed={isProjectsCollapsed}
+              onSortChange={setProjectSort}
+              onSelect={handleSelectProject}
+              onDelete={handleDeleteProject}
+              onCreate={() => { setShowCreateForm(true); setCreateError(''); }}
+              onRefresh={handleRefresh}
+              onToggle={() => setIsProjectsCollapsed((prev) => !prev)}
+            />
 
             {projectDetails && (
               <section className="sidebar-section chapters-list">
@@ -3983,214 +3604,37 @@ function App() {
 
         {/* ===== Mobile: Shelf View ===== */}
         {isMobile && mobileView === 'shelf' && (
-          <div className="panel mobile-shelf-view">
-            {showCreateForm ? (
-              <div className="create-panel">
-                <h2>创建新项目</h2>
-                <label>项目名</label>
-                <input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="输入项目名称" />
-                <label>世界观设定</label>
-                <textarea value={newWorld} onChange={(e) => setNewWorld(e.target.value)} placeholder="描述世界观设定..." rows={4} />
-                <label>人物设定</label>
-                <textarea value={newCharacters} onChange={(e) => setNewCharacters(e.target.value)} placeholder="描述主要人物..." rows={4} />
-                <label>写作规则 / 风格要求</label>
-                <textarea value={newStyle} onChange={(e) => setNewStyle(e.target.value)} placeholder="文风要求、篇幅要求、写作规则…" rows={4} />
-                <label>剧情摘要（可选）</label>
-                <textarea value={newSummary} onChange={(e) => setNewSummary(e.target.value)} placeholder="剧情摘要…" rows={3} />
-                {createError && <div className="error">{createError}</div>}
-                <div className="form-actions">
-                  <button className="btn" disabled={creating} onClick={handleCreateProject}>{creating ? '创建中...' : '创建'}</button>
-                  <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); setNewProjectName(''); setNewWorld(''); setNewCharacters(''); setNewStyle(''); setNewSummary(''); }}>取消</button>
-                </div>
-              </div>
-            ) : (
-              <>
-                <header className="mobile-home-header">
-                  <div>
-                    <h2 className="shelf-title">小墨匣</h2>
-                    <p className="shelf-subtitle">把灵感写成长篇</p>
-                  </div>
-                  <div className="mobile-home-actions" aria-label="首页操作">
-                    <button className="mobile-icon-btn" type="button" aria-label="搜索项目" data-action="search" onClick={openMobileSearch}>⌕</button>
-                    <button
-                      className="mobile-icon-btn mobile-icon-btn-primary"
-                      type="button"
-                      aria-label="新增项目"
-                      data-action="create-project"
-                      onClick={() => { setShowCreateForm(true); setCreateError(''); }}
-                    >
-                      +
-                    </button>
-                  </div>
-                </header>
-
-                <section className="mobile-current-card" aria-label="当前项目">
-                  <div className="mobile-current-card-glow" />
-                  <div className="mobile-current-card-content">
-                    <span className="mobile-card-kicker"><i />当前项目</span>
-                    <h3>{featuredProject.name}</h3>
-                    <p>{featuredChapterLabel}</p>
-                    <p className="mobile-current-updated">{featuredUpdatedLabel}</p>
-                    <div className="mobile-current-actions">
-                      <button
-                        className="mobile-primary-action"
-                        type="button"
-                        data-action="continue-writing"
-                        aria-label="继续写作"
-                        onClick={() => handleMobileQuickAction('continue', featuredProject.name)}
-                      >
-                        <span>✎</span>继续写作
-                      </button>
-                    </div>
-                  </div>
-                </section>
-
-                <section className="mobile-home-section">
-                  <h3 className="mobile-section-title">快捷入口</h3>
-
-                  {/* 写作 - 主卡 */}
-                  <button
-                    className="mobile-shortcut-card-primary"
-                    type="button"
-                    data-action="writing"
-                    aria-label="打开写作"
-                    onClick={() => handleMobileQuickAction('writing', featuredProject.name)}
-                  >
-                    <span className="mobile-shortcut-primary-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
-                      </svg>
-                    </span>
-                    <span className="mobile-shortcut-primary-copy">
-                      <strong>写作</strong>
-                      <span>继续章节 · 生成下一段</span>
-                    </span>
-                    <span className="mobile-shortcut-primary-arrow">›</span>
-                  </button>
-
-                  {/* 其余四个 - 2列小卡 */}
-                  <div className="mobile-shortcut-subgrid">
-                    {[
-                      ['world', '世界观', '设定世界、势力、规则', 'world'],
-                      ['character', '人物卡', '角色关系与人设', 'characters'],
-                      ['outline', '大纲', '剧情摘要与章节规划', 'outline'],
-                      ['materials', '素材库', '备份、导入、资料', 'materials'],
-                    ].map(([icon, label, desc, type]) => (
-                      <button
-                        key={label}
-                        className="mobile-shortcut-card"
-                        type="button"
-                        data-action={type}
-                        aria-label={label}
-                        onClick={() => handleMobileQuickAction(type, featuredProject.name)}
-                      >
-                        <span className="mobile-shortcut-icon">
-                          {icon === 'world' && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="12" r="10"/>
-                              <line x1="2" y1="12" x2="22" y2="12"/>
-                              <line x1="12" y1="2" x2="12" y2="22"/>
-                              <ellipse cx="12" cy="12" rx="4" ry="10"/>
-                            </svg>
-                          )}
-                          {icon === 'character' && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="8" r="4"/>
-                              <path d="M4 22c0-4.418 3.582-8 8-8s8 3.582 8 8"/>
-                            </svg>
-                          )}
-                          {icon === 'outline' && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="8" y1="6" x2="21" y2="6"/>
-                              <line x1="8" y1="12" x2="21" y2="12"/>
-                              <line x1="8" y1="18" x2="21" y2="18"/>
-                              <line x1="3" y1="6" x2="3.01" y2="6"/>
-                              <line x1="3" y1="12" x2="3.01" y2="12"/>
-                              <line x1="3" y1="18" x2="3.01" y2="18"/>
-                            </svg>
-                          )}
-                          {icon === 'materials' && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                            </svg>
-                          )}
-                        </span>
-                        <span className="mobile-shortcut-card-copy">
-                          <strong>{label}</strong>
-                          <span>{desc}</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="mobile-home-section">
-                  <div className="mobile-section-heading">
-                    <h3 className="mobile-section-title">最近项目</h3>
-                    <button className="mobile-all-projects-btn" type="button" data-action="all-projects" onClick={handleOpenAllProjects}>全部项目 ›</button>
-                  </div>
-                  <div className="mobile-recent-list">
-                    {hasHomeProjects ? recentHomeProjects.map((p, index) => {
-                    const count = getProjectChapterCount(p);
-                    return (
-                    <button key={p.name} className="mobile-recent-item" type="button" data-action="open-project" aria-label={p.name} onClick={() => handleHomeProjectOpen(p.name)}>
-                      <span className={`mobile-recent-thumb tone-${(index % 3) + 1}`}>
-                        <span>{p.name.charAt(0)}</span>
-                      </span>
-                      <span className="mobile-recent-copy">
-                        <strong>{p.name}</strong>
-                        <span>{formatProjectUpdatedAt(p.updatedAt)} ｜ 第 {count || 0} 章</span>
-                      </span>
-                      <span className="mobile-recent-arrow">›</span>
-                    </button>
-                    );
-                  }) : fallbackRecentProjects.map((p, index) => (
-                    <div key={p.name} className="mobile-recent-item mobile-recent-item-fallback">
-                      <div className={`mobile-recent-thumb tone-${(index % 3) + 1}`}><span>{p.name.charAt(0)}</span></div>
-                      <div className="mobile-recent-copy">
-                        <strong>{p.name}</strong>
-                        <span>{p.meta}</span>
-                      </div>
-                      <span className="mobile-recent-arrow">›</span>
-                    </div>
-                  ))}
-                  </div>
-                </section>
-
-                <section className="mobile-inspiration-card">
-                  <div className="mobile-inspiration-icon">✺</div>
-                  <div>
-                    <h3>今日灵感</h3>
-                    <p>先写最想写的那一幕，故事就会自己长出来。</p>
-                  </div>
-                </section>
-
-                <nav className="mobile-bottom-nav" aria-label="底部导航">
-                  {[
-                    ['▣', '项目', 'shelf', null],
-                    ['✎', '写作', null, 'writing'],
-                    ['▤', '素材', null, 'materials'],
-                    ['●', '我的', null, null],
-                  ].map(([icon, label, view, type]) => (
-                    <button
-                      key={label}
-                      className={view === 'shelf' ? 'active' : ''}
-                      type="button"
-                      data-action={type || 'tab-' + label}
-                      aria-label={label}
-                      onClick={() => {
-                        if (view) { navigateTo(view); return; }
-                        if (type) handleMobileQuickAction(type, featuredProject.name);
-                      }}
-                    >
-                      <span>{icon}</span>
-                      <strong>{label}</strong>
-                    </button>
-                  ))}
-                </nav>
-              </>
-            )}
-          </div>
+          <HomePage
+            showCreateForm={showCreateForm}
+            creating={creating}
+            newProjectName={newProjectName}
+            newWorld={newWorld}
+            newCharacters={newCharacters}
+            newStyle={newStyle}
+            newSummary={newSummary}
+            createError={createError}
+            featuredProject={featuredProject}
+            featuredChapterLabel={featuredChapterLabel}
+            featuredUpdatedLabel={featuredUpdatedLabel}
+            recentHomeProjects={recentHomeProjects}
+            hasHomeProjects={hasHomeProjects}
+            fallbackRecentProjects={fallbackRecentProjects}
+            onNavigate={navigateTo}
+            onHomeProjectOpen={handleHomeProjectOpen}
+            onOpenAllProjects={handleOpenAllProjects}
+            onMobileQuickAction={handleMobileQuickAction}
+            onOpenMobileSearch={openMobileSearch}
+            onCreateProject={handleCreateProject}
+            onCancelCreate={() => { setShowCreateForm(false); setCreateError(''); setNewProjectName(''); setNewWorld(''); setNewCharacters(''); setNewStyle(''); setNewSummary(''); }}
+            onOpenCreate={() => { setShowCreateForm(true); setCreateError(''); }}
+            onNewProjectNameChange={setNewProjectName}
+            onNewWorldChange={setNewWorld}
+            onNewCharactersChange={setNewCharacters}
+            onNewStyleChange={setNewStyle}
+            onNewSummaryChange={setNewSummary}
+            formatProjectUpdatedAt={formatProjectUpdatedAt}
+            getProjectChapterCount={getProjectChapterCount}
+          />
         )}
 
         {/* ===== Mobile: Project View (chapter list) ===== */}
