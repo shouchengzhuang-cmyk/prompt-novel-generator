@@ -134,7 +134,8 @@ export default function MobileReaderEditorPage(props) {
     handlePreviewVariant,
     handleApplyVariant,
     applyingVariant,
-    resetEditorRoom
+    resetEditorRoom,
+    onReadChapter
   } = props;
 
   return (
@@ -938,7 +939,7 @@ export default function MobileReaderEditorPage(props) {
                   return (
                     <div className="chapter-bottom-nav">
                       {/* 上一章：读取上一章正文并关闭移动端生成/候选浮层，会改变当前阅读章节。 */}
-                      <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
+                      <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { onReadChapter?.(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                         上一章
                       </button>
                       {/* 返回目录：移动端走应用内返回；桌面端只滚动到页面顶部，不保存内容。 */}
@@ -946,7 +947,7 @@ export default function MobileReaderEditorPage(props) {
                         {isMobile ? '目录' : '回目录'}
                       </button>
                       {/* 下一章：读取下一章正文并关闭移动端生成/候选浮层，会改变当前阅读章节。 */}
-                      <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
+                      <button className="btn" disabled={!next} onClick={() => { if (nextFn) { onReadChapter?.(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                         下一章
                       </button>
                     </div>

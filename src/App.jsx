@@ -2301,8 +2301,12 @@ function App() {
           </div>
           <div className="auth-visual-copy">
             <p className="auth-kicker">WRITE IN THE QUIET DARK</p>
-            <h2>落笔生花，书写江湖</h2>
-            <p>以墨为舟，穿过灵感、草稿与记忆的深夜书库。</p>
+            <h2>
+              墨色藏灯，照夜成章
+              <br />
+              匣中收梦，落笔生花
+            </h2>
+            <p>以墨为舟，收万象于匣中。</p>
           </div>
         </section>
 
@@ -2682,6 +2686,7 @@ function App() {
           isMobile={isMobile}
           mobileView={mobileView}
           readingChapter={readingChapter}
+          onReadChapter={handleReadChapter}
           onBackClick={onBackClick}
           readingChapterTitle={readingChapterTitle}
           editorRoomTab={editorRoomTab}
