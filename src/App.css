@@ -5839,7 +5839,7 @@ label {
   position: absolute;
   left: clamp(32px, 7vw, 96px);
   bottom: clamp(42px, 9vh, 110px);
-  width: min(440px, 70%);
+  width: min(760px, calc(100% - clamp(64px, 14vw, 192px)));
   color: rgba(248, 250, 252, 0.9);
 }
 
@@ -5853,10 +5853,13 @@ label {
 
 .auth-visual-copy h2 {
   margin: 0 0 14px;
-  font-size: clamp(30px, 4vw, 58px);
-  line-height: 1.08;
+  font-size: clamp(32px, 3.4vw, 52px);
+  line-height: 1.18;
   letter-spacing: 0.04em;
   font-weight: 750;
+  white-space: pre-line;
+  word-break: keep-all;
+  overflow-wrap: normal;
   text-shadow: 0 0 34px rgba(124, 92, 255, 0.48);
 }
 
@@ -5970,9 +5973,9 @@ label {
   width: 100%;
   height: 68px;
   padding: 0 18px;
-  border: 1px solid rgba(124, 92, 255, 0.68);
+  border: 1px solid rgba(139, 92, 246, 0.45);
   border-radius: 14px;
-  background: rgba(8, 12, 28, 0.72);
+  background: rgba(8, 12, 28, 0.82);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.03),
     0 0 30px rgba(124, 92, 255, 0.14);
@@ -6004,28 +6007,48 @@ label {
 
 .auth-input-icon {
   color: rgba(203, 213, 225, 0.62);
+  background: transparent;
 }
 
 .auth-pin-input {
+  appearance: none;
+  -webkit-appearance: none;
   width: 100%;
   height: 100%;
   border: 0;
-  background: transparent;
-  color: var(--text-main);
+  border-radius: 10px;
+  background: rgba(8, 12, 28, 0.82);
+  color: #f8fafc;
   font-size: 24px;
   letter-spacing: 0.42em;
   outline: none;
   caret-color: #a78bfa;
   font-family: inherit;
   line-height: 1;
+  box-shadow: none;
+}
+
+.auth-pin-input[type="password"],
+.auth-pin-input[type="text"] {
+  background: rgba(8, 12, 28, 0.82);
+  color: #f8fafc;
 }
 
 .auth-pin-input:focus {
   outline: none;
+  background: rgba(8, 12, 28, 0.88);
 }
 
 .auth-pin-input::placeholder {
   color: rgba(148, 163, 184, 0.58);
+}
+
+.auth-pin-input:-webkit-autofill,
+.auth-pin-input:-webkit-autofill:hover,
+.auth-pin-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #f8fafc;
+  transition: background-color 9999s ease-in-out 0s;
+  box-shadow: 0 0 0px 1000px rgba(8, 12, 28, 0.95) inset;
 }
 
 .auth-eye-btn {
@@ -6036,7 +6059,7 @@ label {
   height: 34px;
   border: 0;
   border-radius: 9px;
-  background: transparent;
+  background: rgba(8, 12, 28, 0.42);
   color: rgba(203, 213, 225, 0.72);
   cursor: pointer;
   transition: color 0.18s, background 0.18s;
