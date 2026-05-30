@@ -680,6 +680,8 @@ function App() {
       let buffer = '';
       let streamedContent = '';
 
+      console.log('[生成] 请求 URL: /api/generate-stream');
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -712,10 +714,29 @@ function App() {
         // 每轮 read() 后更新阅读区正文，让 React 在 await 间隙渲染
         if (streamedContent) {
           setReadingContent(streamedContent);
-          setMobileWritingOutput(streamedContent);
+          console.log('[生成] done 事件:', fileName ? `fileName=${fileName}` : '(未收到)');
         }
       }
 
+      // 流式完成但未收到 done 事件 → 后端可能已保存章节，尝试刷新项目定位
+      if (!fileName && streamedContent.trim()) {
+        console.log('[生成] 流式未收到 done 事件，streamedContent 长度=' + streamedContent.length + '，尝试刷新查找新章节');
+        try {
+          const refreshData = await ProjectsApi.fetchProjectDetails(currentProject);
+          if (refreshData.chapters) {
+            const chs = normalizeChapters(refreshData.chapters);
+            const last = chs[chs.length - 1];
+            if (last) {
+              fileName = last.fileName || last.filename;
+              content = streamedContent;
+              title = last.title || '';
+              console.log('[生成] 刷新后找到新章节:', fileName);
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('[生成] 刷新查找新章节失败:', fetchErr);
+        }
+      }
       if (!fileName) throw new Error('流式生成未完成');
     } catch (streamErr) {
       console.warn('流式生成失败，回退到普通生成:', streamErr);
@@ -739,17 +760,38 @@ function App() {
         debugInfo = data.debugPromptInfo || null;
       } catch (err) {
         const isNetworkOrTimeout = err.name === 'AbortError' || err instanceof TypeError;
-        if (isNetworkOrTimeout) {
-          setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: '网络异常或请求超时' });
-          setNotification({ title: '网络异常', message: '请求超时或网络中断，章节可能已保存。请刷新页面确认，不要重复点击生成。' });
-        } else {
-          setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
-          setNotification({ title: '生成失败', message: err.message });
+        // 流式已产生内容但回退 API 也失败 → 后端可能已保存，尝试刷新恢复
+        if (!isNetworkOrTimeout && streamedContent.trim()) {
+          console.log('[生成] 回退 API 也失败:', err.message, '，尝试刷新项目确认');
+          try {
+            const rescueData = await ProjectsApi.fetchProjectDetails(currentProject);
+            if (rescueData.chapters) {
+              const chs = normalizeChapters(rescueData.chapters);
+              const last = chs[chs.length - 1];
+              if (last) {
+                fileName = last.fileName || last.filename;
+                content = streamedContent;
+                title = last.title || '';
+                console.log('[生成] 通过恢复找到新章节:', fileName);
+              }
+            }
+          } catch (rescueErr) {
+            console.warn('[生成] 恢复尝试也失败:', rescueErr);
+          }
         }
-        setLoading(false);
-        setMobileWritingError(isNetworkOrTimeout ? '网络异常或请求超时' : err.message);
-        generatingRef.current = false;
-        return;
+        if (!fileName) {
+          if (isNetworkOrTimeout) {
+            setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: '网络异常或请求超时' });
+            setNotification({ title: '网络异常', message: '请求超时或网络中断，章节可能已保存。请刷新页面确认，不要重复点击生成。' });
+          } else {
+            setGenProgress({ visible: true, mode: 'generate', status: 'error', errorMessage: err.message });
+            setNotification({ title: '生成失败', message: err.message });
+          }
+          setLoading(false);
+          setMobileWritingError(isNetworkOrTimeout ? '网络异常或请求超时' : err.message);
+          generatingRef.current = false;
+          return;
+        }
       }
     }
 
@@ -1371,6 +1413,22 @@ function App() {
         }
       }
 
+      console.log('[重写] done 事件:', doneVariant ? `variantId=${doneVariant.id}` : '(未收到)');
+
+      // 流式完成但未收到 done 事件 → 后端可能已保存变体，尝试加载变体列表
+      if (!doneVariant && streamedContent.trim()) {
+        console.log('[重写] 流式未收到 done 事件，尝试加载变体列表');
+        try {
+          const vData = await safeJsonFetch(
+            `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(origChapter)}/variants`
+          );
+          const v = vData.variants || [];
+          if (v.length > 0) {
+            doneVariant = v[v.length - 1];
+            console.log('[重写] 通过加载变体找到最新变体:', doneVariant.id);
+          }
+        } catch { /* ignore */ }
+      }
       if (!doneVariant) {
         throw new Error('重写未完成');
       }
