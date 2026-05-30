@@ -23,6 +23,7 @@ export default function WritingControlPanel({ prefs, onChange }) {
 
   return (
     <div className="writing-controls">
+      {/* 写作偏好折叠开关：只切换本地面板展开状态，不保存项目设定也不请求后端。 */}
       <button
         className="writing-controls-header"
         type="button"

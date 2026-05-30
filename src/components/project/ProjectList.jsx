@@ -17,7 +17,9 @@ export default function ProjectList({
       <div className="sidebar-section-header">
         <h2>项目</h2>
         <div className="sidebar-section-actions">
+          {/* 刷新项目列表：调用父级刷新流程重新请求后端项目数据，不修改当前项目内容。 */}
           {!isCollapsed && <button className="btn" onClick={onRefresh}>刷新</button>}
+          {/* 折叠项目区：只切换侧栏展示状态，不请求后端也不保存内容。 */}
           <button className="btn btn-secondary" onClick={onToggle}>
             {isCollapsed ? '展开' : '收起'}
           </button>
@@ -60,6 +62,7 @@ export default function ProjectList({
             ))}
           </div>
 
+          {/* 新建项目入口：只打开创建表单并交给父级清理错误状态，不立即调用后端。 */}
           <button className="btn btn-secondary" onClick={onCreate}>
             + 创建项目
           </button>

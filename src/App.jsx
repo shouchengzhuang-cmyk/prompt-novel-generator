@@ -2199,6 +2199,7 @@ function App() {
             placeholder="····"
           />
           {loginError && <p className="auth-error">{loginError}</p>}
+          {/* 进入：调用认证登录接口校验 PIN，成功后切换到已登录状态。 */}
           <button
             className="auth-btn"
             onClick={handleLogin}
@@ -2214,9 +2215,10 @@ function App() {
   return (
     <div className={`app${isMobile ? ' mobile-dark-app' : ''}${isMobile && mobileView === 'chapter' ? ' mobile-chapter-dark' : ''} mobile-reading-${readingTheme}`}>
       <h1>小墨匣
+        {/* 退出：调用认证退出接口并清理本地登录状态，随后回到登录页。 */}
         <span className="logout-link" onClick={handleLogout}>退出</span>
       </h1>
-      {/* Desktop workbench */}
+      {/* 新桌面工作台：桌面端会先渲染 ProjectWorkspacePage，后续旧 app-shell 仍需单独确认是否重复显示。 */}
       {!isMobile && (
         <ProjectWorkspacePage
           desktopView={desktopView}
@@ -2354,6 +2356,7 @@ function App() {
                 onChange={(e) => setMobileSearchQuery(e.target.value)}
                 placeholder="搜索项目、章节、设定..."
               />
+              {/* 取消搜索：只关闭移动端搜索浮层并清理搜索关键词，不保存任何内容。 */}
               <button type="button" onClick={closeMobileSearch}>取消</button>
             </div>
             <div className="mobile-search-body">
@@ -2373,6 +2376,7 @@ function App() {
                       <section className="mobile-search-group" key={type}>
                         <h3>{label}</h3>
                         {group.map((item, index) => (
+                          /* 搜索结果：根据结果类型加载项目/章节或定位设定，会改变当前移动端视图。 */
                           <button
                             key={`${item.type}-${item.projectName}-${item.fileName || item.field || index}`}
                             className="mobile-search-result"
@@ -2394,9 +2398,12 @@ function App() {
           </div>
         </div>
       )}
+      {isMobile && (
       <div className={`container app-shell${isSidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+        {/* 旧 app-shell：现在只在移动端渲染，避免桌面端与 ProjectWorkspacePage 重复。 */}
         {/* ===== Left Panel: Projects (desktop only) ===== */}
         {!isMobile && (isSidebarCollapsed ? (
+          /* 展开旧侧栏：只切换旧桌面侧栏折叠状态，不请求后端。 */
           <button
             className="sidebar-collapsed-toggle"
             onClick={() => setIsSidebarCollapsed(false)}
@@ -2407,6 +2414,7 @@ function App() {
         ) : (
           <aside className="panel panel-left sidebar">
             {!isMobile && (
+            /* 收起旧侧栏：只切换旧桌面侧栏折叠状态，不保存内容。 */
             <button
               className="sidebar-collapsed-toggle sidebar-collapse-button"
               onClick={() => setIsSidebarCollapsed(true)}
@@ -2436,13 +2444,16 @@ function App() {
                   <div className="sidebar-section-actions">
                     {!isChaptersCollapsed && (
                       <>
+                        {/* 导出全文：调用后端导出接口生成当前项目全文，不修改项目内容。 */}
                         <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
                           {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
                         </button>
                         <details className="project-tools">
                           <summary className="project-tools-summary">项目工具</summary>
                           <div className="project-tools-body">
+                            {/* 重建索引：调用后端重建当前项目章节索引，可能更新章节元数据。 */}
                             <button className="btn" onClick={handleRebuildIndex}>重建索引</button>
+                            {/* 导出项目备份：调用后端备份接口下载当前项目数据，不修改服务器内容。 */}
                             <button className="btn btn-secondary" onClick={handleBackup}>
                               导出项目备份
                             </button>
@@ -2450,6 +2461,7 @@ function App() {
                         </details>
                       </>
                     )}
+                    {/* 折叠章节区：只切换旧侧栏章节列表显示状态，不请求后端。 */}
                     <button className="btn btn-secondary" onClick={() => setIsChaptersCollapsed((prev) => !prev)}>
                       {isChaptersCollapsed ? '展开' : '收起'}
                     </button>
@@ -2479,6 +2491,7 @@ function App() {
                                 {ch.staleAfterRewrite && <span className="chapter-stale-badge">待检查</span>}
                               </span>
                             </div>
+                            {/* 删除章节：调用后端删除当前章节文件；handler 内应有确认，避免误删正文。 */}
                             <button className="delete-btn chapter-delete" disabled={!cf} onClick={(e) => cf && handleDeleteChapter(cf, e)}>删除</button>
                           </li>
                           );
@@ -2496,6 +2509,7 @@ function App() {
 
         {isMobile && mobileView === 'writing' && (
           <div className="panel panel-main mobile-writing-view">
+            {/* 返回写作来源页：走应用内返回逻辑，不保存当前写作输入或输出。 */}
             <button className="mobile-back-btn" onClick={onBackClick}>
               ← 返回
             </button>
@@ -2526,6 +2540,7 @@ function App() {
                   { value: 'deepseek-v4-flash', title: '快速模式', sub: '适合日常续写' },
                   { value: 'deepseek-v4-pro', title: '深度模式', sub: '适合复杂伏笔' },
                 ].map((item) => (
+                  /* 模型选择：只切换本地 model 状态，影响下一次生成请求。 */
                   <button
                     key={item.value}
                     className={model === item.value ? 'active' : ''}
@@ -2540,6 +2555,7 @@ function App() {
 
               <WritingControlPanel prefs={writingPrefs} onChange={setWritingPrefs} />
 
+              {/* 开始生成/生成候选：根据移动端写作类型调用后端 AI 生成接口；候选不会直接覆盖正文。 */}
               <button
                 className="btn mobile-writing-generate"
                 onClick={handleMobileWritingGenerate}
@@ -2561,6 +2577,7 @@ function App() {
                 {mobileWritingOutput || (readingChapter === '_streaming' ? readingContent : '') || '生成内容会实时出现在这里。'}
               </div>
               <div className="mobile-writing-actions">
+                {/* 返回阅读页：只切换到章节阅读视图，不保存写作面板内容。 */}
                 <button
                   className="btn"
                   disabled={!readingChapter || readingChapter === '_streaming'}
@@ -2568,6 +2585,7 @@ function App() {
                 >
                   返回阅读页
                 </button>
+                {/* 继续追加：清空本地输出并重置续写提示，不会请求后端或保存内容。 */}
                 <button
                   className="btn btn-secondary"
                   disabled={loading || regenerating}
@@ -2578,6 +2596,7 @@ function App() {
                 >
                   继续追加
                 </button>
+                {/* 取消写作：走应用内返回逻辑，不保存当前写作输入。 */}
                 <button className="btn btn-secondary" onClick={onBackClick}>
                   取消
                 </button>
@@ -2588,6 +2607,7 @@ function App() {
 
         {isMobile && mobileView === 'outline' && currentProject && (
           <div className="panel panel-main mobile-outline-view">
+            {/* 返回项目页：走应用内返回逻辑，不保存大纲或设定。 */}
             <button className="mobile-back-btn" onClick={onBackClick}>
               ← 返回
             </button>
@@ -2634,9 +2654,11 @@ function App() {
                     </div>
                   )}
                   <div className="mobile-outline-actions">
+                    {/* 编辑剧情摘要：打开项目设定编辑并定位摘要，不会立即保存。 */}
                     <button className="btn" onClick={() => { openSettingsEditor(projectDetails, currentProject, 'summary'); navigateTo('project'); }}>
                       编辑剧情摘要
                     </button>
+                    {/* 编辑章节规划：切换到项目页并打开大纲编辑面板，不会立即保存。 */}
                     <button className="btn btn-secondary" onClick={() => { setShowOutline(true); navigateTo('project'); }}>
                       编辑章节规划
                     </button>
@@ -2649,6 +2671,7 @@ function App() {
 
         {isMobile && mobileView === 'allProjects' && (
           <div className="panel panel-main mobile-all-projects-view">
+            {/* 返回上一层：走应用内返回逻辑，只切换移动端视图。 */}
             <button className="mobile-back-btn" onClick={onBackClick}>
               ← 返回
             </button>
@@ -2663,6 +2686,7 @@ function App() {
                 {[...sortedProjects].sort((a, b) => b.updatedAt - a.updatedAt).map((project) => {
                   const details = allProjectDetails[project.name];
                   return (
+                    /* 打开项目：加载所选项目详情并进入移动端项目页，会改变当前项目状态。 */
                     <button
                       className="mobile-all-project-card"
                       key={project.name}
@@ -2889,9 +2913,11 @@ function App() {
               {createError && <div className="error">{createError}</div>}
 
               <div className="form-actions">
+                {/* 创建项目：提交当前表单并调用后端创建项目接口，成功后刷新项目列表。 */}
                 <button className="btn" disabled={creating} onClick={handleCreateProject}>
                   {creating ? '创建中...' : '创建'}
                 </button>
+                {/* 取消创建：只关闭表单并清空本地临时输入/错误，不会请求后端。 */}
                 <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); setNewProjectName(''); setNewWorld(''); setNewCharacters(''); setNewStyle(''); setNewSummary(''); }}>
                   取消
                 </button>
@@ -2905,8 +2931,10 @@ function App() {
             <>
               <div className="current-project-label">
                 当前项目：<strong>{currentProject}</strong>
+                {/* 编辑设定：打开当前项目设定面板，只切换编辑状态，不会立即保存。 */}
                 <button className="btn-link" onClick={handleOpenSettings}>编辑设定</button>
                 {!isMobile && (
+                /* 章节规划：切换大纲面板；首次打开会请求后端加载当前项目大纲。 */
                 <button className="btn-link" onClick={() => { setShowOutline(!showOutline); if (!showOutline) handleLoadOutline(); }}>章节规划</button>
                 )}
               </div>
@@ -2984,9 +3012,11 @@ function App() {
                     </div>
                   </details>
                   <div className="form-actions">
+                    {/* 保存设定：把当前项目设定 PUT 到服务器，会覆盖该项目现有设定字段。 */}
                     <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>
                       {savingSettings ? '保存中...' : '保存设定'}
                     </button>
+                    {/* 关闭设定：只关闭设定面板，不会自动保存未提交内容。 */}
                     <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>
                       关闭
                     </button>
@@ -3014,9 +3044,11 @@ function App() {
                     </div>
                   )}
                   <div className="form-actions" style={{ marginTop: 8 }}>
+                    {/* 保存规划：把当前大纲 JSON 保存到服务器，会覆盖当前项目的大纲内容。 */}
                     <button className="btn" onClick={handleSaveOutline} disabled={outlineSaving}>
                       {outlineSaving ? '保存中...' : '保存规划'}
                     </button>
+                    {/* 关闭规划：只关闭大纲面板并清理错误提示，不会保存文本。 */}
                     <button className="btn btn-secondary" onClick={() => { setShowOutline(false); setOutlineError(''); }}>
                       关闭
                     </button>
@@ -3024,7 +3056,7 @@ function App() {
                 </div>
               )}
 
-              {/* Desktop: generate settings */}
+              {/* 已禁用的移动端生成设置遗留块：条件为 false，不会实际渲染。 */}
               {false && isMobile && (
                 <button
                   className="mobile-section-toggle"
@@ -3078,6 +3110,7 @@ function App() {
                 onChange={setWritingPrefs}
               />
 
+              {/* 生成下一段：基于当前项目上下文调用后端/AI 生成接口，成功后刷新章节和阅读内容。 */}
               <button className="btn" onClick={handleGenerate} disabled={loading || regenerating}>
                 {loading ? '生成中...' : '生成下一段'}
               </button>
@@ -3106,7 +3139,9 @@ function App() {
                             className="reading-title-input"
                             autoFocus
                           />
+                          {/* 保存标题：把当前标题保存到服务器上的当前章节标题，不修改正文内容。 */}
                           <button className="btn" onClick={handleSaveTitle}>保存</button>
+                          {/* 取消标题编辑：只退出本地标题编辑状态，不会保存输入。 */}
                           <button className="btn btn-secondary" onClick={handleCancelEditTitle}>取消</button>
                         </div>
                       ) : (
@@ -3116,6 +3151,7 @@ function App() {
                             <span className="reading-filename">{readingChapter}</span>
                           )}
                           {readingChapter !== '_streaming' && (
+                            /* 编辑标题入口：只进入标题编辑状态，不会立即保存到后端。 */
                             <button className="btn-link reading-title-edit-btn" onClick={handleStartEditTitle}>编辑标题</button>
                           )}
                         </h3>
@@ -3123,16 +3159,19 @@ function App() {
                     </div>
                     <div className="reading-actions">
                       {readingChapter !== '_streaming' && !isMobile && (
+                      /* 重写本章：只打开或关闭重写输入区，不会立即调用生成接口或覆盖正文。 */
                       <button className="btn" onClick={() => { if (showRewriteInput) { setShowRewriteInput(false); setRewritePrompt(''); } else { handleLoadRewritePrompt(); } }}>
                         {showRewriteInput ? '取消重写' : '重写本章'}
                       </button>
                       )}
                       {readingChapter !== '_streaming' && !isMobile && (
+                      /* 复制本章：只把当前章节内容写入剪贴板，不请求后端也不修改状态。 */
                       <button className="btn btn-success" onClick={handleCopyChapter}>
                         {copied ? '已复制' : '复制本章'}
                       </button>
                       )}
                       {readingChapter !== '_streaming' && !isMobile && displayContent && (
+                        /* 复制全文：只把当前生成/展示全文写入剪贴板，不修改项目内容。 */
                         <button className="btn btn-success" onClick={handleCopyFull}>
                           复制全文
                         </button>
@@ -3166,6 +3205,7 @@ function App() {
                         userPrompt={enhancedRewritePrompt}
                         fileName={readingChapter}
                       />
+                      {/* 生成候选版本：调用后端重写接口生成候选，不会直接覆盖当前正文。 */}
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating || loading}>
                         {regenerating ? '重写中...' : '生成候选版本'}
                       </button>
@@ -3186,7 +3226,9 @@ function App() {
                         {readingChapterRecord.staleReason && <span>{readingChapterRecord.staleReason}</span>}
                       </div>
                       <div className="stale-chapter-actions">
+                        {/* 确认保留：调用后端接口清除当前章节待检查标记，不改写正文。 */}
                         <button className="btn btn-secondary" onClick={handleConfirmKeepChapter}>确认保留</button>
+                        {/* 重写本章：只打开重写输入区，不会立即覆盖正文。 */}
                         <button className="btn" onClick={() => { if (!showRewriteInput) handleLoadRewritePrompt(); }}>重写本章</button>
                       </div>
                     </div>
@@ -3245,6 +3287,7 @@ function App() {
                   >{variantPreview ? variantPreview.content : readingContent}</div>
 
                   {showScrollTop && (
+                    /* 回到开头：只滚动当前阅读容器或移动端页面，不保存或请求后端。 */
                     <button className="scroll-to-top-btn" onClick={handleScrollToTop} title="回到开头" aria-label="回到开头">
                       &uarr;
                     </button>
@@ -3253,9 +3296,11 @@ function App() {
                   {/* Mobile: rewrite button after content */}
                   {readingChapter !== '_streaming' && isMobile && (
                     <div className="mobile-reading-writing-actions" style={{ marginTop: 16 }}>
+                      {/* 生成下一段：进入移动端写作页准备续写，不会在点击时立即调用生成接口。 */}
                       <button className="btn" style={{ width: '100%' }} onClick={() => handleOpenMobileWriting(currentProject, { kind: 'generate', fileName: readingChapter })}>
                         生成下一段
                       </button>
+                      {/* 重写本章：进入移动端写作页准备重写当前章节，不会在点击时立即覆盖正文。 */}
                       <button className="btn" style={{ width: '100%' }} onClick={() => handleOpenMobileWriting(currentProject, { kind: 'rewrite', fileName: readingChapter })}>
                         重写本章
                       </button>
@@ -3281,6 +3326,7 @@ function App() {
                         userPrompt={enhancedRewritePrompt}
                         fileName={readingChapter}
                       />
+                      {/* 生成候选版本：调用后端重写接口生成候选，不会直接覆盖当前正文。 */}
                       <button className="btn" onClick={handleRegenerate} disabled={regenerating || loading}>
                         {regenerating ? '重写中...' : '生成候选版本'}
                       </button>
@@ -3300,12 +3346,14 @@ function App() {
                     <div className="editor-room-header">
                       <h3>编辑室</h3>
                       <div className="editor-room-tabs">
+                        {/* 编辑备注标签：只切换本地编辑器房间 tab，不请求后端。 */}
                         <button
                           className={'editor-room-tab' + (editorRoomTab === 'notes' ? ' active' : '')}
                           onClick={() => setEditorRoomTab('notes')}
                         >
                           编辑备注
                         </button>
+                        {/* 编辑对话标签：只切换本地编辑器房间 tab，不请求后端。 */}
                         <button
                           className={'editor-room-tab' + (editorRoomTab === 'chat' ? ' active' : '')}
                           onClick={() => setEditorRoomTab('chat')}
@@ -3318,6 +3366,7 @@ function App() {
                     {editorRoomTab === 'notes' && (
                       <div className="editor-room-notes">
                         <div className="editor-room-toolbar">
+                          {/* 生成编辑备注：调用后端 AI 编辑备注接口，只生成草稿，不会自动保存为备注。 */}
                           <button className="btn btn-ai" onClick={handleEditorNote} disabled={editorNoteLoading}>
                             {editorNoteLoading ? '生成中...' : '生成本章编辑备注'}
                           </button>
@@ -3332,6 +3381,7 @@ function App() {
                         {!editorNoteLoading && editorNoteResult && (
                           <div className="editor-note-draft">
                             <div className="editor-note-text">{editorNoteResult}</div>
+                            {/* 保存备注：把生成的编辑备注保存到当前章节备注，不覆盖正文。 */}
                             <button
                               className="btn btn-secondary"
                               disabled={savingEditorNoteId === 'generated-note'}
@@ -3357,10 +3407,11 @@ function App() {
 
                     {editorRoomTab === 'chat' && (
                       <div className="editor-room-chat">
-                        <div className="editor-chat-toolbar">
-                          <button className="btn btn-secondary" onClick={handleClearEditorChats} disabled={editorChatSending || editorChats.length === 0}>
-                            清空对话
-                          </button>
+                      <div className="editor-chat-toolbar">
+                        {/* 清空对话：调用后端删除当前章节编辑对话记录；只删除对话，不影响正文和备注。 */}
+                        <button className="btn btn-secondary" onClick={handleClearEditorChats} disabled={editorChatSending || editorChats.length === 0}>
+                          清空对话
+                        </button>
                         </div>
                         <div className="editor-chat-messages" ref={editorChatListRef}>
                           {editorChats.length > 0 ? (
@@ -3372,6 +3423,7 @@ function App() {
                                   </div>
                                   <div className="editor-chat-content">{chat.content}</div>
                                   {chat.role === 'editor' && (
+                                    /* 保存备注：把该条编辑回复保存为当前章节备注，不覆盖正文。 */
                                     <button
                                       className="btn btn-secondary editor-chat-save"
                                       disabled={savingEditorNoteId === chat.id}
@@ -3405,6 +3457,7 @@ function App() {
                               { mode: 'normal', label: '标准', desc: '读取章节，适合分析' },
                               { mode: 'full', label: '全量', desc: '读取完整设定，消耗较高' },
                             ].map(({ mode, label }) => (
+                              /* 对话上下文模式：只切换本地发送参数，影响下一次编辑对话请求的上下文范围。 */
                               <button
                                 key={mode}
                                 className={`btn btn-mode${editorChatContextMode === mode ? ' active' : ''}`}
@@ -3430,6 +3483,7 @@ function App() {
                               disabled={editorChatSending}
                             />
                               </div>
+                          {/* 发送对话：调用后端编辑对话接口，新增对话记录但不修改正文。 */}
                           <button className="btn" onClick={handleSendEditorChat} disabled={editorChatSending || !editorChatInput.trim()}>
                             {editorChatSending ? '发送中...' : '发送'}
                           </button>
@@ -3451,12 +3505,15 @@ function App() {
                     const nextFn = next ? (next.fileName || next.filename) : null;
                     return (
                       <div className="chapter-bottom-nav">
+                        {/* 上一章：读取上一章正文并关闭移动端生成/候选浮层，会改变当前阅读章节。 */}
                         <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { handleReadChapter(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           上一章
                         </button>
+                        {/* 返回目录：移动端走应用内返回；桌面端只滚动到页面顶部，不保存内容。 */}
                         <button className="btn btn-secondary" onClick={() => { if (isMobile) { onBackClick(); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
                           {isMobile ? '目录' : '回目录'}
                         </button>
+                        {/* 下一章：读取下一章正文并关闭移动端生成/候选浮层，会改变当前阅读章节。 */}
                         <button className="btn" disabled={!next} onClick={() => { if (nextFn) { handleReadChapter(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
                           下一章
                         </button>
@@ -3467,6 +3524,7 @@ function App() {
                   {/* Mobile: simple edit button */}
                   {isMobile && !showMobileEdit && (
                     <div style={{ marginTop: 12 }}>
+                      {/* 编辑本文：把当前章节标题和正文复制到移动端临时编辑表单，不会立即保存。 */}
                       <button
                         className="btn"
                         style={{ width: '100%' }}
@@ -3502,9 +3560,11 @@ function App() {
                         style={{ width: '100%', marginBottom: 12 }}
                       />
                       <div className="form-actions">
+                        {/* 保存正文：把移动端编辑表单内容保存到服务器当前章节，会覆盖该章节正文。 */}
                         <button className="btn" onClick={handleMobileSaveEdit} disabled={mobileEditSaving}>
                           {mobileEditSaving ? '保存中...' : '保存'}
                         </button>
+                        {/* 取消编辑：只关闭移动端临时编辑表单，不保存输入内容。 */}
                         <button className="btn btn-secondary" onClick={() => setShowMobileEdit(false)}>
                           取消
                         </button>
@@ -3516,6 +3576,7 @@ function App() {
                   {variants.length > 0 && (
                     <>
                       {isMobile && (
+                        /* 候选版本开关：只切换移动端候选列表显示状态，不请求后端。 */
                         <button
                           className="mobile-section-toggle"
                           onClick={() => setMobileVariantsOpen(!mobileVariantsOpen)}
@@ -3559,6 +3620,7 @@ function App() {
                                 )}
                               </div>
                               <div className="variant-actions">
+                                {/* 查看正文：只预览/关闭该候选版本正文，不会应用到主线。 */}
                                 <button
                                   className={'btn' + (variantPreview?.id === v.id ? ' active' : '')}
                                   onClick={() => {
@@ -3573,6 +3635,7 @@ function App() {
                                 >
                                   {variantPreview?.id === v.id ? '关闭正文' : '查看正文'}
                                 </button>
+                                {/* 沿此版本继续：把候选版本应用为当前主线内容，会改变当前章节版本。 */}
                                 <button
                                   className="btn btn-secondary"
                                   disabled={applyingVariant || v.id === activeVersionId}
@@ -3641,16 +3704,21 @@ function App() {
         {/* ===== Mobile: Project View (chapter list) ===== */}
         {isMobile && mobileView === 'project' && currentProject && (
           <div className="panel mobile-project-view">
+            {/* 返回书架：走应用内返回逻辑，可能清理当前项目/章节状态，不会自动保存正文。 */}
             <button className="mobile-back-btn" onClick={onBackClick}>
               ← 返回书架
             </button>
             <h2 className="mobile-project-title">{currentProject}</h2>
             <div className="mobile-project-tools">
+              {/* 导出全文：调用后端导出当前项目全文，不修改项目内容。 */}
               <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
                 {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
               </button>
+              {/* 导出备份：调用后端备份接口下载当前项目数据，不修改服务器内容。 */}
               <button className="btn btn-secondary" onClick={handleBackup}>导出备份</button>
+              {/* 编辑设定：打开当前项目设定面板，只切换编辑状态，不会立即保存。 */}
               <button className="btn btn-secondary" onClick={handleOpenSettings}>编辑设定</button>
+              {/* 刷新：重新请求当前项目详情/章节列表，不保存当前编辑器内容。 */}
               <button className="btn btn-secondary" onClick={handleRefresh}>刷新</button>
             </div>
 
@@ -3661,11 +3729,15 @@ function App() {
                   <p>当前版本先接入可用的导出、备份和刷新能力，便于整理项目资料。</p>
                 </div>
                 <div className="mobile-materials-actions">
+                  {/* 导出备份：调用后端备份接口下载当前项目数据，不修改服务器内容。 */}
                   <button className="btn" onClick={handleBackup}>导出备份</button>
+                  {/* 导出全文：调用后端导出当前项目全文，不修改项目内容。 */}
                   <button className="btn btn-secondary" onClick={handleExport} disabled={exportStatus === 'exporting'}>
                     {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
                   </button>
+                  {/* 刷新项目：重新请求当前项目详情/章节列表，不保存当前编辑器内容。 */}
                   <button className="btn btn-secondary" onClick={handleRefresh}>刷新项目</button>
+                  {/* 关闭素材面板：只切换前端显示状态，不请求后端。 */}
                   <button className="btn btn-secondary" onClick={() => setMobileMaterialsOpen(false)}>关闭</button>
                 </div>
               </div>
@@ -3687,7 +3759,9 @@ function App() {
                 <div className="settings-hint">记录跨章节人物关系、伏笔、长期写作风险和编辑判断。不同于剧情摘要：摘要记录剧情事实，这里记录编辑分析。</div>
                 <textarea className="settings-input" value={editEditorialMemory} onChange={(e) => setEditEditorialMemory(e.target.value)} rows={6} placeholder="项目编辑记忆..." />
                 <div className="form-actions">
+                  {/* 保存设定：把当前项目设定 PUT 到服务器，会覆盖该项目现有设定字段。 */}
                   <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
+                  {/* 关闭设定：只关闭设定面板，不会自动保存未提交内容。 */}
                   <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>关闭</button>
                 </div>
               </div>
@@ -3713,9 +3787,11 @@ function App() {
                   </div>
                 )}
                 <div className="form-actions" style={{ marginTop: 8 }}>
+                  {/* 保存规划：把当前大纲 JSON 保存到服务器，会覆盖当前项目的大纲内容。 */}
                   <button className="btn" onClick={handleSaveOutline} disabled={outlineSaving}>
                     {outlineSaving ? '保存中...' : '保存规划'}
                   </button>
+                  {/* 关闭规划：只关闭大纲编辑面板并清理错误提示，不保存文本。 */}
                   <button className="btn btn-secondary" onClick={() => { setShowOutline(false); setOutlineError(''); }}>
                     关闭
                   </button>
@@ -3724,6 +3800,7 @@ function App() {
             )}
 
             {!showSettings && !showOutline && !mobileMaterialsOpen && (
+              /* 继续写作：进入移动端写作页准备续写，不会在点击时立即调用生成接口。 */
               <button
                 className="btn mobile-project-write-btn"
                 onClick={() => handleOpenMobileWriting(currentProject, { kind: 'generate' })}
@@ -3756,6 +3833,7 @@ function App() {
                       {ch.staleAfterRewrite && <span className="chapter-stale-badge">待检查</span>}
                       {cf && (
                         <>
+                          {/* 章节菜单：只打开/关闭该章节的移动端操作菜单，不请求后端。 */}
                           <button
                             className="mobile-chapter-menu-btn"
                             onClick={(e) => {
@@ -3765,6 +3843,7 @@ function App() {
                           >⋯</button>
                           {menuOpen && (
                             <div className="mobile-chapter-menu-dropdown" onClick={(e) => e.stopPropagation()}>
+                              {/* 删除章节：调用后端删除当前章节文件；handler 内应有确认，避免误删正文。 */}
                               <button
                                 className="mobile-chapter-menu-delete"
                                 onClick={() => handleMobileDeleteChapter(cf)}
@@ -3780,6 +3859,7 @@ function App() {
             ) : (
               <div className="mobile-chapter-empty">
                 <p className="hint">暂无章节</p>
+                {/* 开始第一章：只切换到章节/生成入口视图并打开生成面板，不会立即调用生成接口。 */}
                 <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => { navigateTo('chapter'); setMobileGenerateOpen(true); }}>
                   开始写第一章
                 </button>
@@ -3789,11 +3869,13 @@ function App() {
         )}
 
         </div>
+      )}
 
       {notification && (
         <div className="notification-card">
           <div className="notification-header">
             <span className="notification-title">{notification.title}</span>
+            {/* 关闭通知：只清除前端通知状态，不影响项目数据。 */}
             <button className="notification-close" onClick={() => setNotification(null)}>×</button>
           </div>
           <div className="notification-body">{notification.message}</div>

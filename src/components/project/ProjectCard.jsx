@@ -7,6 +7,7 @@ export default function ProjectCard({ project, isActive, onSelect, onDelete }) {
       >
         <span className="project-name">{project.name}</span>
       </div>
+      {/* 删除项目：调用父级删除流程，预期会触发后端删除项目；确认逻辑由父级 handler 负责。 */}
       <button className="delete-btn project-delete" onClick={(e) => onDelete(project.name, e)}>删除</button>
     </div>
   );

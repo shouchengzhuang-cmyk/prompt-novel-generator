@@ -46,7 +46,9 @@ export default function HomePage({
           <textarea value={newSummary} onChange={(e) => onNewSummaryChange(e.target.value)} placeholder="剧情摘要…" rows={3} />
           {createError && <div className="error">{createError}</div>}
           <div className="form-actions">
+            {/* 创建项目：提交当前表单给父级创建流程，预期会调用后端创建项目接口。 */}
             <button className="btn" disabled={creating} onClick={onCreateProject}>{creating ? '创建中...' : '创建'}</button>
+            {/* 取消创建：只关闭创建表单并清理临时输入/错误状态，不会保存到后端。 */}
             <button className="btn btn-secondary" disabled={creating} onClick={onCancelCreate}>取消</button>
           </div>
         </div>
@@ -58,7 +60,9 @@ export default function HomePage({
               <p className="shelf-subtitle">把灵感写成长篇</p>
             </div>
             <div className="mobile-home-actions" aria-label="首页操作">
+              {/* 搜索项目：只打开移动端搜索浮层；搜索索引加载由父级流程负责。 */}
               <button className="mobile-icon-btn" type="button" aria-label="搜索项目" data-action="search" onClick={onOpenMobileSearch}>⌕</button>
+              {/* 新增项目入口：只打开创建项目表单，不会立即请求后端。 */}
               <button
                 className="mobile-icon-btn mobile-icon-btn-primary"
                 type="button"
@@ -79,6 +83,7 @@ export default function HomePage({
               <p>{featuredChapterLabel}</p>
               <p className="mobile-current-updated">{featuredUpdatedLabel}</p>
               <div className="mobile-current-actions">
+                {/* 继续写作：基于当前推荐项目进入写作流程，可能先加载项目详情并切换移动端视图。 */}
                 <button
                   className="mobile-primary-action"
                   type="button"
@@ -95,7 +100,7 @@ export default function HomePage({
           <section className="mobile-home-section">
             <h3 className="mobile-section-title">快捷入口</h3>
 
-            {/* 写作 - 主卡 */}
+            {/* 写作快捷入口：进入当前推荐项目的写作视图，必要时由父级加载项目详情。 */}
             <button
               className="mobile-shortcut-card-primary"
               type="button"
@@ -115,7 +120,6 @@ export default function HomePage({
               <span className="mobile-shortcut-primary-arrow">›</span>
             </button>
 
-            {/* 其余四个 - 2列小卡 */}
             <div className="mobile-shortcut-subgrid">
               {[
                 ['world', '世界观', '设定世界、势力、规则', 'world'],
@@ -123,6 +127,7 @@ export default function HomePage({
                 ['outline', '大纲', '剧情摘要与章节规划', 'outline'],
                 ['materials', '素材库', '备份、导入、资料', 'materials'],
               ].map(([icon, label, desc, type]) => (
+                /* 快捷入口：按 type 交给父级处理；可能只切换视图，也可能先加载当前项目详情。 */
                 <button
                   key={label}
                   className="mobile-shortcut-card"
@@ -174,12 +179,14 @@ export default function HomePage({
           <section className="mobile-home-section">
             <div className="mobile-section-heading">
               <h3 className="mobile-section-title">最近项目</h3>
+              {/* 全部项目：进入移动端项目列表视图，父级会确保项目列表/详情索引可用。 */}
               <button className="mobile-all-projects-btn" type="button" data-action="all-projects" onClick={onOpenAllProjects}>全部项目 ›</button>
             </div>
             <div className="mobile-recent-list">
               {hasHomeProjects ? recentHomeProjects.map((p, index) => {
               const count = getProjectChapterCount(p);
               return (
+              /* 打开项目：加载所选项目详情并进入项目工作区，会改变 currentProject / projectDetails。 */
               <button key={p.name} className="mobile-recent-item" type="button" data-action="open-project" aria-label={p.name} onClick={() => onHomeProjectOpen(p.name)}>
                 <span className={`mobile-recent-thumb tone-${(index % 3) + 1}`}>
                   <span>{p.name.charAt(0)}</span>
@@ -219,6 +226,7 @@ export default function HomePage({
               ['▤', '素材', null, 'materials'],
               ['●', '我的', null, null],
             ].map(([icon, label, view, type]) => (
+              /* 底部导航：有 view 时只切换移动端前端视图；有 type 时交给快捷入口流程处理。 */
               <button
                 key={label}
                 className={view === 'shelf' ? 'active' : ''}

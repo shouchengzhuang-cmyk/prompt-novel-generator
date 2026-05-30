@@ -162,6 +162,7 @@ export default function VaultPanel() {
         <h2>Prompt 模板</h2>
         <div className="vault-header-actions">
           {message && <span className="vault-message">{message}</span>}
+          {/* 新建模板：只在前端初始化空模板编辑表单，不会立即写入后端。 */}
           <button className="btn" onClick={newTemplate}>+ 新建模板</button>
         </div>
       </div>
@@ -286,12 +287,15 @@ export default function VaultPanel() {
           )}
 
           <div className="vault-editor-actions">
+            {/* 保存模板：根据是否已有 selectedId 调用后端 POST/PUT，会覆盖服务器上的模板内容。 */}
             <button className="btn" disabled={saving} onClick={handleSave}>
               {saving ? '保存中...' : '保存'}
             </button>
             {selectedId && (
+              /* 删除模板：调用后端 DELETE 删除当前模板；handler 内已有 confirm 二次确认。 */
               <button className="btn btn-danger" onClick={handleDelete}>删除</button>
             )}
+            {/* 预览 Prompt：只切换本地预览面板状态，不会保存模板或请求生成接口。 */}
             <button
               className={'btn btn-secondary' + (previewOpen ? ' active' : '')}
               onClick={() => setPreviewOpen((p) => !p)}
@@ -332,6 +336,7 @@ export default function VaultPanel() {
               </div>
             ))}
           </div>
+          {/* 渲染预览：只用当前表单变量在前端渲染模板，不会调用后端或覆盖模板。 */}
           <button className="btn" onClick={handlePreview}>渲染预览</button>
 
           {renderedSystem && (

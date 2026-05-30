@@ -52,6 +52,7 @@ export default function PromptPreviewPanel({ taskType, projectDetails, userPromp
 
   return (
     <div className="prompt-preview-panel">
+      {/* 查看完整 Prompt：展开时会向后端请求渲染后的 prompt 预览，不会触发 AI 生成或保存内容。 */}
       <button
         className="prompt-preview-toggle"
         onClick={() => setExpanded((p) => !p)}
