@@ -2678,6 +2678,7 @@ function App() {
           readingContent={readingContent}
           showScrollTop={showScrollTop}
           handleScrollToTop={handleScrollToTop}
+          debugPromptInfo={debugPromptInfo}
           handleOpenMobileWriting={handleOpenMobileWriting}
           showMobileEdit={showMobileEdit}
           setMobileEditTitle={setMobileEditTitle}

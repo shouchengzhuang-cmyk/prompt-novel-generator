@@ -104,6 +104,7 @@ export default function MobileReaderEditorPage(props) {
     displayContent,
     handleCopyFull,
     enhancedRewritePrompt,
+    debugPromptInfo,
     handleRegenerate,
     readingChapterRecord,
     handleConfirmKeepChapter,
