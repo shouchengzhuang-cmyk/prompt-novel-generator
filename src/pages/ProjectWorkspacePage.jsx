@@ -31,8 +31,8 @@ export default function ProjectWorkspacePage({
   showOutline,
   outlineSaving,
   outlineError,
+  outlineText,
   desktopAiMode,
-  desktopWritingMode,
   desktopEditorContent,
   desktopSavingContent,
   desktopChapterQuery,
@@ -92,7 +92,6 @@ export default function ProjectWorkspacePage({
   onNotifyDevFeature,
   onSetRewritePrompt,
   onSetShowRewriteInput,
-  onSetDesktopWritingMode,
   onSetShowCreateForm,
   onSetCreateError,
   onSetDesktopView,
@@ -118,6 +117,8 @@ export default function ProjectWorkspacePage({
   onSetNewCharacters,
   onSetNewStyle,
   onSetNewSummary,
+  onSetOutlineText,
+  onSetOutlineError,
   onHandleLogout,
   onHandleSelectProject,
   onHandleGenerate,
@@ -410,11 +411,11 @@ export default function ProjectWorkspacePage({
                   {showOutline && (
                     <section className="settings-panel">
                       <h3>章节规划</h3>
-                      <textarea className="settings-input" value={outlineText} onChange={(e) => { setOutlineText(e.target.value); setOutlineError(''); }} rows={10} />
+                      <textarea className="settings-input" value={outlineText} onChange={(e) => { onSetOutlineText(e.target.value); onSetOutlineError(''); }} rows={10} />
                       {outlineError && <div className={outlineError === '已保存' ? '' : 'error'}>{outlineError}</div>}
                       <div className="form-actions">
                         <button className="btn" onClick={onSaveOutline} disabled={outlineSaving}>{outlineSaving ? '保存中...' : '保存规划'}</button>
-                        <button className="btn btn-secondary" onClick={() => { onSetShowOutline(false); setOutlineError(''); }}>关闭</button>
+                        <button className="btn btn-secondary" onClick={() => { onSetShowOutline(false); onSetOutlineError(''); }}>关闭</button>
                       </div>
                     </section>
                   )}
@@ -454,7 +455,6 @@ export default function ProjectWorkspacePage({
                 ref={readingContentRef}
                 value={desktopEditorContent}
                 onChange={(e) => onSetDesktopEditorContent(e.target.value)}
-                onScroll={handleReadingContentScroll}
                 readOnly={!!variantPreview || !readingChapter || readingChapter === '_streaming'}
                 placeholder="从左侧选择章节，或在右侧写下本轮要求后生成正文。"
               />

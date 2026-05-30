@@ -2250,7 +2250,6 @@ function App() {
           outlineSaving={outlineSaving}
           outlineError={outlineError}
           desktopAiMode={desktopAiMode}
-          desktopWritingMode={desktopWritingMode}
           desktopEditorContent={desktopEditorContent}
           desktopSavingContent={desktopSavingContent}
           desktopChapterQuery={desktopChapterQuery}
@@ -2281,6 +2280,7 @@ function App() {
           enhancedPrompt={enhancedPrompt}
           enhancedRewritePrompt={enhancedRewritePrompt}
           outline={outline}
+          outlineText={outlineText}
           readingChapterRecord={readingChapterRecord}
           onDesktopNav={handleDesktopNav}
           onSelectProject={handleSelectProject}
@@ -2310,13 +2310,14 @@ function App() {
           onNotifyDevFeature={notifyDevFeature}
           onSetRewritePrompt={setRewritePrompt}
           onSetShowRewriteInput={setShowRewriteInput}
-          onSetDesktopWritingMode={setDesktopWritingMode}
           onSetShowCreateForm={setShowCreateForm}
           onSetCreateError={setCreateError}
           onSetDesktopView={setDesktopView}
           onCreateProject={handleCreateProject}
           onLoadOutline={handleLoadOutline}
           onSaveOutline={handleSaveOutline}
+          onSetOutlineText={setOutlineText}
+          onSetOutlineError={setOutlineError}
           onSetEditWorld={setEditWorld}
           onSetEditCharacters={setEditCharacters}
           onSetEditStyle={setEditStyle}
