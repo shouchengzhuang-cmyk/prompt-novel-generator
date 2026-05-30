@@ -56,7 +56,6 @@ export default function ProjectWorkspacePage({
   desktopChapterNumber,
   desktopChapterWords,
   desktopTotalWords,
-  desktopProgressPercent,
   desktopLastSaved,
   sortedProjects,
   enhancedPrompt,
@@ -326,7 +325,7 @@ export default function ProjectWorkspacePage({
                       }}
                     >
                       <strong>{project.name}</strong>
-                      <span>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章</span>
+                      <span>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章 · {(Number(project.totalWords) || 0).toLocaleString()} 字</span>
                     </button>
                     <div className="desktop-library-item-actions">
                       {/* 重命名项目：弹窗编辑项目名，不会立即请求后端。 */}
@@ -400,25 +399,6 @@ export default function ProjectWorkspacePage({
                     </div>
                   )}
 
-                  <div className="desktop-writing-brief">
-                    <section>
-                      <h3>小节目标</h3>
-                      <p>{outline[desktopChapterNumber - 1]?.goal || '推进本章核心冲突，保持人物动机清晰。'}</p>
-                    </section>
-                    <section>
-                      <h3>本章摘要</h3>
-                      <p>{desktopCurrentChapter?.summary || projectDetails?.summary?.slice(0, 72) || '等待生成或补充本章摘要。'}</p>
-                    </section>
-                    <section>
-                      <h3>场景标签</h3>
-                      <div className="desktop-tags">
-                        <span>宗门秘辛</span>
-                        <span>试探</span>
-                        <span>关系推进</span>
-                      </div>
-                    </section>
-                  </div>
-
                   <div className="desktop-editor-toolbar">
                     <span>正文</span>
                     <em>{desktopChapterWords.toLocaleString()} 字</em>
@@ -460,9 +440,7 @@ export default function ProjectWorkspacePage({
                   <footer className="desktop-editor-status">
                     <span>自动保存已开启</span>
                     <span>第 {desktopChapterNumber} 章 · {desktopChapterWords.toLocaleString()} 字</span>
-                    <span>目标 4,000 字</span>
-                    <div><i style={{ width: `${desktopProgressPercent}%` }}></i></div>
-                    <strong>{desktopProgressPercent}%</strong>
+                    <span>本书总字数 · {desktopTotalWords.toLocaleString()} 字</span>
                   </footer>
                 </>
               )}
@@ -639,8 +617,6 @@ export default function ProjectWorkspacePage({
                     <button type="button" onClick={() => handleDesktopApplyVariant(v.id)} disabled={applyingVariant}>采用</button>
                     {/* 预览候选：在正文编辑区预览候选版本，不覆盖正文。 */}
                     <button type="button" onClick={() => handlePreviewVariant(v)}>预览</button>
-                    {/* 再来一版：再次调用重写/生成候选接口，只新增候选，不直接覆盖正文。 */}
-                    <button type="button" onClick={handleRegenerate} disabled={regenerating || loading}>再来一版</button>
                   </div>
                 </article>
               )) : (

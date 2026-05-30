@@ -119,6 +119,11 @@ async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
 
+function countChars(text) {
+  if (!text) return 0;
+  return text.replace(/\s/g, '').length;
+}
+
 // ---- Editor Note ----
 
 async function buildEditorNote(projectName, chapterFileName) {
@@ -480,6 +485,24 @@ function clearRewriteStaleMarker(entry) {
   delete entry.staleAt;
 }
 
+async function updateChapterWordCount(chaptersDir, fileName) {
+  const filePath = path.join(chaptersDir, fileName);
+  let content;
+  try {
+    content = await fs.readFile(filePath, 'utf-8');
+  } catch {
+    return 0;
+  }
+  const count = countChars(content);
+  const entries = await readChapterIndex(chaptersDir);
+  const entry = entries.find((e) => e.fileName === fileName);
+  if (entry) {
+    entry.wordCount = count;
+    await writeChapterIndex(chaptersDir, entries);
+  }
+  return count;
+}
+
 function markChaptersStaleAfterRewrite(chapters, rewrittenFileName, staleAt = Date.now()) {
   const rewrittenIndex = chapters.findIndex((item) => item.fileName === rewrittenFileName);
   if (rewrittenIndex < 0) return chapters;
@@ -644,14 +667,17 @@ app.get('/api/projects', async (_req, res) => {
       try {
         const stats = await collectProjectStats(projectDir);
         let chapterCount = 0;
+        let totalWords = 0;
         try {
           const chaptersDir = path.join(projectDir, 'chapters');
           const chapterFiles = await fs.readdir(chaptersDir);
           chapterCount = chapterFiles.filter((file) => isValidChapterFileName(file)).length;
+          const indexEntries = await readChapterIndex(chaptersDir);
+          totalWords = indexEntries.reduce((sum, e) => sum + (Number(e.wordCount) || 0), 0);
         } catch {
           chapterCount = 0;
         }
-        return { name, size: stats.totalSize, updatedAt: stats.latestMtime, chapterCount };
+        return { name, size: stats.totalSize, updatedAt: stats.latestMtime, chapterCount, totalWords };
       } catch {
         return { name, size: 0, updatedAt: 0, chapterCount: 0 };
       }
@@ -771,7 +797,8 @@ app.get('/api/projects/:projectName', async (req, res) => {
       // chapters dir may not exist
     }
 
-    res.json({ projectName, world, characters, summary, style, editorialMemory, chapters, recentContent });
+    const totalWords = chapters.reduce((sum, ch) => sum + (Number(ch.wordCount) || 0), 0);
+    res.json({ projectName, world, characters, summary, style, editorialMemory, chapters, recentContent, totalWords });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1018,14 +1045,17 @@ app.put('/api/projects/:projectName/chapters/:fileName/content', async (req, res
     // 2. Write new content
     await fs.writeFile(chapterPath, content, 'utf-8');
 
-    // 3. Update title in index if provided
-    if (typeof title === 'string' && title.trim()) {
-      const indexEntries = await readChapterIndex(chaptersDir);
-      const entry = indexEntries.find((e) => e.fileName === fileName);
-      if (entry) {
-        entry.title = title.trim();
-        await writeChapterIndex(chaptersDir, indexEntries);
+    // 3. Update word count in index
+    const count = countChars(content);
+    const idxEntries = await readChapterIndex(chaptersDir);
+    const idxEntry = idxEntries.find((e) => e.fileName === fileName);
+    if (idxEntry) {
+      idxEntry.wordCount = count;
+      // Update title in index if provided
+      if (typeof title === 'string' && title.trim()) {
+        idxEntry.title = title.trim();
       }
+      await writeChapterIndex(chaptersDir, idxEntries);
     }
 
     console.log(`[编辑正文] 已保存 项目=${projectName} 章节=${fileName}`);
@@ -1368,6 +1398,7 @@ app.post('/api/generate', async (req, res) => {
       createdAt: now,
       userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
       activeVersionId: 'v-original',
+      wordCount: countChars(content),
       versions: [
         {
           id: 'v-original',
@@ -1380,7 +1411,7 @@ app.post('/api/generate', async (req, res) => {
     await writeChapterIndex(chaptersDir, indexEntries);
 
     // 6. 立即返回成功响应，摘要和编辑记忆改为后台异步更新
-    res.json({ content, fileName: filename, title, debugPromptInfo });
+    res.json({ content, fileName: filename, title, debugPromptInfo, wordCount: countChars(content) });
 
     // 6b. 后台异步更新 summary.md（不阻塞响应）
     setImmediate(async () => {
@@ -1557,6 +1588,7 @@ app.post('/api/generate-stream', async (req, res) => {
       createdAt: now,
       userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
       activeVersionId: 'v-original',
+      wordCount: countChars(fullContent),
       versions: [
         {
           id: 'v-original',
@@ -1571,7 +1603,7 @@ app.post('/api/generate-stream', async (req, res) => {
     console.log(`[流式生成] 已保存章节 ${filename}`);
 
     // 发送完成事件（包含完整内容和元数据）
-    sendEvent({ type: 'done', fileName: filename, title, content: fullContent, debugPromptInfo: ctx.debugPromptInfo });
+    sendEvent({ type: 'done', fileName: filename, title, content: fullContent, debugPromptInfo: ctx.debugPromptInfo, wordCount: countChars(fullContent) });
 
     // 后台异步更新
     setImmediate(async () => {
@@ -2470,6 +2502,9 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
 
     // Write content to the main .txt file
     await fs.writeFile(chapterPath, variant.content, 'utf-8');
+
+    // Update word count in index
+    await updateChapterWordCount(chaptersDir, fileName);
 
     // Update index.json: set activeVersionId and track the version
     let indexEntries = await readChapterIndex(chaptersDir);

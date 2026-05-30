@@ -2150,25 +2150,18 @@ function App() {
         body: JSON.stringify({ title: readingChapterTitle, content: desktopEditorContent }),
       });
       setReadingContent(desktopEditorContent);
+      // Refresh project details to update word counts
+      try {
+        const refreshData = await ProjectsApi.fetchProjectDetails(currentProject);
+        if (refreshData.chapters) refreshData.chapters = normalizeChapters(refreshData.chapters);
+        setProjectDetails(refreshData);
+      } catch { /* non-critical refresh */ }
       setNotification({ title: '已保存', message: '当前章节正文已保存。' });
     } catch (err) {
       setError(err.message);
     } finally {
       setDesktopSavingContent(false);
     }
-  };
-
-  const ensureDesktopSelectionForRewrite = (modeLabel) => {
-    const editor = readingContentRef.current;
-    const textareaSelection = editor && typeof editor.selectionStart === 'number'
-      ? desktopEditorContent.slice(editor.selectionStart, editor.selectionEnd).trim()
-      : '';
-    const selected = textareaSelection || (typeof window !== 'undefined' ? String(window.getSelection?.() || '').trim() : '');
-    if (!selected && desktopAiMode === 'rewrite') {
-      setNotification({ title: `请先选中文本`, message: `请先选中要${modeLabel}的段落。当前后端只支持整章候选生成，局部处理会作为后续能力接入。` });
-      return false;
-    }
-    return true;
   };
 
   const prepareDesktopMode = (mode) => {
@@ -2193,8 +2186,6 @@ function App() {
       await handleGenerate();
       return;
     }
-    const label = '改写';
-    if (!ensureDesktopSelectionForRewrite(label)) return;
     await handleRegenerate();
   };
 
@@ -2217,9 +2208,7 @@ function App() {
   const desktopChapterIndex = desktopChapters.findIndex((ch) => (ch.fileName || ch.filename) === readingChapter);
   const desktopChapterNumber = desktopChapterIndex >= 0 ? desktopChapterIndex + 1 : desktopChapters.length || 1;
   const desktopChapterWords = (variantPreview ? variantPreview.content : readingContent || '').replace(/\s/g, '').length;
-  const desktopProjectWords = desktopChapters.reduce((sum, ch) => sum + (Number(ch.wordCount) || Number(ch.words) || 0), 0);
-  const desktopTotalWords = Number(projectDetails?.totalWords) || Number(projectDetails?.wordCount) || desktopProjectWords || desktopChapterWords;
-  const desktopProgressPercent = Math.min(100, Math.round((desktopChapterWords / 4000) * 100)) || 0;
+  const desktopTotalWords = desktopChapters.reduce((sum, ch) => sum + (Number(ch.wordCount) || Number(ch.words) || 0), 0);
   const desktopLastSaved = readingChapter === '_streaming'
     ? '正在生成'
     : readingChapter
@@ -2338,7 +2327,6 @@ function App() {
           desktopChapterNumber={desktopChapterNumber}
           desktopChapterWords={desktopChapterWords}
           desktopTotalWords={desktopTotalWords}
-          desktopProgressPercent={desktopProgressPercent}
           desktopLastSaved={desktopLastSaved}
           sortedProjects={sortedProjects}
           enhancedPrompt={enhancedPrompt}
@@ -2354,7 +2342,6 @@ function App() {
           onDesktopSaveContent={handleDesktopSaveContent}
           onDesktopGenerateByMode={handleDesktopGenerateByMode}
           onPrepareDesktopMode={prepareDesktopMode}
-          onEnsureDesktopSelectionForRewrite={ensureDesktopSelectionForRewrite}
           onOpenSettings={handleOpenSettings}
           onSaveSettings={handleSaveSettings}
           onLoadRewritePrompt={handleLoadRewritePrompt}

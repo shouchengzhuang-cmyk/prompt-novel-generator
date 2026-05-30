@@ -580,7 +580,6 @@ body {
 
 .desktop-title-edit,
 .desktop-inline-panels,
-.desktop-writing-brief,
 .desktop-editor-toolbar,
 .desktop-editor-actions,
 .desktop-editor-status,
@@ -611,47 +610,6 @@ body {
 
 .desktop-inline-panels {
   margin-top: 8px;
-}
-
-.desktop-writing-brief {
-  display: grid;
-  grid-template-columns: 1fr 1.2fr 0.9fr;
-  gap: 8px;
-  margin-top: 10px;
-  padding: 9px;
-  border: 1px solid var(--desk-border);
-  border-radius: 8px;
-  background: rgba(17, 26, 48, 0.72);
-}
-
-.desktop-writing-brief h3 {
-  margin: 0 0 5px;
-  color: #aeb9d7;
-  font-size: 13px;
-}
-
-.desktop-writing-brief p {
-  color: #c8d1e8;
-  font-size: 13px;
-  line-height: 1.4;
-  max-height: 38px;
-  overflow: hidden;
-}
-
-.desktop-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.desktop-tags span,
-.desktop-tags button {
-  padding: 4px 7px;
-  border: 1px solid var(--desk-border);
-  border-radius: 7px;
-  background: rgba(148, 163, 184, 0.08);
-  color: #cbd5ef;
-  font-size: 12px;
 }
 
 .desktop-editor-toolbar {
