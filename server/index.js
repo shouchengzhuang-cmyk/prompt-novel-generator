@@ -1066,6 +1066,54 @@ app.delete('/api/projects/:projectName', async (req, res) => {
   }
 });
 
+// ---- POST /api/projects/:projectName/rename ----
+
+app.post('/api/projects/:projectName/rename', async (req, res) => {
+  const { projectName } = req.params;
+  const { newName } = req.body;
+
+  if (!newName || !newName.trim()) {
+    return res.status(400).json({ error: '新项目名不能为空' });
+  }
+
+  const trimmed = newName.trim();
+
+  // Validate: no path separator or illegal chars
+  if (/[/\\:*?"<>|]/.test(trimmed)) {
+    return res.status(400).json({ error: '项目名包含非法字符（/ \\ : * ? " < > |）' });
+  }
+
+  let oldDir, newDir;
+  try {
+    oldDir = safeProjectDir(projectName);
+    newDir = safeProjectDir(trimmed);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  // Check old exists
+  try {
+    await fs.access(oldDir);
+  } catch {
+    return res.status(404).json({ error: '原项目不存在' });
+  }
+
+  // Check new doesn't exist
+  try {
+    await fs.access(newDir);
+    return res.status(409).json({ error: `项目「${trimmed}」已存在` });
+  } catch {
+    // good — new name doesn't exist
+  }
+
+  try {
+    await fs.rename(oldDir, newDir);
+    res.json({ ok: true, projectName: trimmed, oldName: projectName });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---- PUT /api/projects/:projectName ----
 
 app.put('/api/projects/:projectName', async (req, res) => {
@@ -2614,6 +2662,110 @@ app.put('/api/projects/:projectName/outline', async (req, res) => {
   try {
     await writeOutline(projectName, outline);
     res.json({ ok: true, outline });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- POST /api/projects/:projectName/outline/generate ----
+
+app.post('/api/projects/:projectName/outline/generate', async (req, res) => {
+  const { projectName } = req.params;
+  const { model: reqModel } = req.body;
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const allowedModels = ['deepseek-v4-flash', 'deepseek-v4-pro'];
+  const model = allowedModels.includes(reqModel) ? reqModel : 'deepseek-v4-flash';
+  const chaptersDir = path.join(projectDir, 'chapters');
+
+  try {
+    // 1. Read project settings
+    const [world, characters, summary, style] = await Promise.all([
+      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
+      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+    ]);
+
+    // 2. Read chapter titles
+    const chaptersDirExists = await fs.stat(chaptersDir).then(() => true).catch(() => false);
+    let chapterTitles = [];
+    if (chaptersDirExists) {
+      const indexEntries = await readChapterIndex(chaptersDir);
+      chapterTitles = indexEntries.map((entry, i) => ({
+        number: i + 1,
+        title: entry.title || `第${i + 1}章`,
+        fileName: entry.fileName,
+      }));
+    }
+
+    // 3. Build the prompt
+    let contextSections = [];
+    if (world) contextSections.push(`【世界观设定】\n${world}`);
+    if (characters) contextSections.push(`【人物设定】\n${characters}`);
+    if (style) contextSections.push(`【写作规则】\n${style}`);
+    if (summary) contextSections.push(`【剧情摘要】\n${summary}`);
+
+    let chapterListing = '暂无章节';
+    if (chapterTitles.length > 0) {
+      chapterListing = chapterTitles.map((ch) => `第${ch.number}章：${ch.title}`).join('\n');
+    }
+
+    const systemPrompt = '你是一个专业的小说章节大纲生成器。根据项目设定和已有章节，为接下来的章节生成结构化大纲。';
+    const userPrompt = `${contextSections.join('\n\n')}\n\n【已有章节】\n${chapterListing}\n\n请根据以上信息和小说创作规律，为尚未编写的章节生成大纲。\n\n要求：\n1. 返回 JSON 数组，每个元素包含字段：number（章节号）, goal（本章目标）, keyEvents（关键事件数组）, characterChanges（人物变化）, status（状态，用"planned"）。\n2. 如果已有章节，从下一章开始规划 5 章。\n3. 如果没有章节，从第 1 章开始规划 5 章。\n4. 只返回 JSON，不要额外文字。`;
+
+    const content = await callDeepSeek(model, [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt },
+    ]);
+
+    // Parse the returned JSON
+    let outline;
+    try {
+      // Try to extract JSON from code block if present
+      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+      const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
+      outline = JSON.parse(jsonStr);
+      if (!Array.isArray(outline)) {
+        // Maybe it's wrapped in an object
+        if (outline.outline && Array.isArray(outline.outline)) {
+          outline = outline.outline;
+        } else {
+          throw new Error('返回数据不是数组');
+        }
+      }
+    } catch (parseErr) {
+      return res.status(500).json({ error: 'AI 返回格式异常，请重试', raw: content });
+    }
+
+    // Merge with existing outline: keep chapters that already have entries
+    const existing = await readOutline(projectName);
+    const merged = [...outline];
+    for (const item of existing) {
+      const idx = merged.findIndex((m) => m.number === item.number);
+      if (idx >= 0) {
+        // Keep existing status and details if they exist
+        merged[idx] = { ...merged[idx], ...item, number: item.number };
+      } else {
+        merged.push(item);
+      }
+    }
+    merged.sort((a, b) => a.number - b.number);
+
+    await writeOutline(projectName, merged);
+    res.json({ outline: merged });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

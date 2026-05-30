@@ -28,6 +28,15 @@ export function deleteProject(name) {
   });
 }
 
+/** 重命名项目 */
+export function renameProject(name, newName) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(name)}/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newName }),
+  });
+}
+
 /** 更新项目设定 */
 export function updateProjectSettings(name, settings) {
   return safeJsonFetch(`/api/projects/${encodeURIComponent(name)}`, {

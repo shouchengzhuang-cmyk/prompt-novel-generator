@@ -2,13 +2,13 @@ import GenerationProgress from '../components/GenerationProgress';
 
 export default function ProjectWorkspacePage({
   desktopView,
+  desktopEditorTab,
   showCreateForm,
   currentProject,
   projectDetails,
   readingChapter,
   readingChapterTitle,
   readingContent,
-  showRewriteInput,
   rewritePrompt,
   variants,
   variantPreview,
@@ -56,7 +56,6 @@ export default function ProjectWorkspacePage({
   desktopChapterNumber,
   desktopChapterWords,
   desktopTotalWords,
-  desktopRecentProjects,
   desktopProgressPercent,
   desktopLastSaved,
   sortedProjects,
@@ -72,10 +71,8 @@ export default function ProjectWorkspacePage({
   onDesktopSaveContent,
   onDesktopGenerateByMode,
   onPrepareDesktopMode,
-  onEnsureDesktopSelectionForRewrite,
   onOpenSettings,
   onSaveSettings,
-  onLoadRewritePrompt,
   onStartEditTitle,
   onSaveTitle,
   onCancelEditTitle,
@@ -89,12 +86,11 @@ export default function ProjectWorkspacePage({
   onGenProgressDone,
   onCopyChapter,
   onCopyFull,
-  onNotifyDevFeature,
   onSetRewritePrompt,
-  onSetShowRewriteInput,
   onSetShowCreateForm,
   onSetCreateError,
   onSetDesktopView,
+  onSetDesktopEditorTab,
   onCreateProject,
   onLoadOutline,
   onSaveOutline,
@@ -108,7 +104,6 @@ export default function ProjectWorkspacePage({
   onSetModel,
   onSetWritingPrefs,
   onSetUserPrompt,
-  onSetDesktopAiMode,
   onSetDesktopEditorContent,
   onSetDesktopChapterQuery,
   onSetEditTitleValue,
@@ -121,7 +116,9 @@ export default function ProjectWorkspacePage({
   onSetOutlineError,
   onHandleLogout,
   onHandleSelectProject,
-  onHandleGenerate,
+  onRenameProject,
+  onDeleteProject,
+  onGenerateOutline,
   formatProjectUpdatedAt,
   getProjectChapterCount,
 }) {
@@ -132,7 +129,6 @@ export default function ProjectWorkspacePage({
   const handleRegenerate = onRegenerate;
   const handleOpenSettings = onOpenSettings;
   const handleSaveSettings = onSaveSettings;
-  const handleLoadRewritePrompt = onLoadRewritePrompt;
   const handleStartEditTitle = onStartEditTitle;
   const handleSaveTitle = onSaveTitle;
   const handleCancelEditTitle = onCancelEditTitle;
@@ -146,9 +142,7 @@ export default function ProjectWorkspacePage({
   const handleGenProgressDone = onGenProgressDone;
   const handleCopyChapter = onCopyChapter;
   const handleCopyFull = onCopyFull;
-  const notifyDevFeature = onNotifyDevFeature;
   const prepareDesktopMode = onPrepareDesktopMode;
-  const ensureDesktopSelectionForRewrite = onEnsureDesktopSelectionForRewrite;
 
   const getProjectIntro = (details) => {
     return details?.summary || details?.world || details?.style || '';
@@ -163,18 +157,12 @@ export default function ProjectWorkspacePage({
         </div>
         <div className="desktop-search">
           <span>⌕</span>
-          <input placeholder="搜索项目 / 章节 / 角色 / 世界观" readOnly onFocus={() => notifyDevFeature('全局搜索')} />
+          <input placeholder="搜索项目 / 章节 / 角色 / 世界观" />
           <kbd>⌘ K</kbd>
         </div>
         <div className="desktop-top-actions">
           {/* 新建项目：只打开桌面创建表单并清理创建错误，不会立即调用后端。 */}
           <button className="desktop-action primary" type="button" onClick={() => { onSetShowCreateForm(true); onSetCreateError(''); }}>＋ 新建项目</button>
-          {/* 导入入口：当前仅触发开发中提示，不会上传文件或修改项目。 */}
-          <button className="desktop-action" type="button" onClick={() => notifyDevFeature('导入')}>⇩ 导入</button>
-          {/* 同步入口：当前仅触发开发中提示，不会请求后端同步。 */}
-          <button className="desktop-action" type="button" onClick={() => notifyDevFeature('同步')}>⟳ 同步</button>
-          {/* 通知入口：当前仅触发开发中提示，不会拉取通知数据。 */}
-          <button className="desktop-icon-action" type="button" aria-label="通知" onClick={() => notifyDevFeature('通知中心')}>♢<em>3</em></button>
           {/* 退出登录：调用父级退出流程，预期会请求认证退出接口并回到登录状态。 */}
           <button className="desktop-avatar" type="button" onClick={onHandleLogout} title="退出登录">墨</button>
         </div>
@@ -189,8 +177,6 @@ export default function ProjectWorkspacePage({
             ['♙', '人物'],
             ['☷', '章节'],
             ['☰', '大纲'],
-            ['◇', '草稿箱'],
-            ['✦', '提示词实验室'],
             ['⚙', '设置'],
           ].map(([icon, label]) => {
             const navActive =
@@ -214,26 +200,31 @@ export default function ProjectWorkspacePage({
             </button>
             );
           })}
-          <div className="desktop-sync-card">
-            <span>存储与同步</span>
-            <strong>68%</strong>
-            <small>68.2 GB / 100 GB</small>
-          </div>
         </nav>
 
         <aside className="desktop-project-rail">
           <section className="desktop-card desktop-current-project">
             <div className="desktop-card-head">
               <h2>当前项目</h2>
-              {/* 项目设置：打开当前项目设定编辑面板，只切换编辑状态，不会立即保存。 */}
-              <button type="button" onClick={handleOpenSettings}>⚙</button>
+              {/* 项目设置：切换到设定页签编辑当前项目设定。 */}
+              <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>⚙</button>
             </div>
             {currentProject ? (
               <>
                 <div className="desktop-project-cover">
                   <span>{currentProject.slice(0, 1)}</span>
                   <div>
-                    <h3>{currentProject}</h3>
+                    <h3>
+                      {currentProject}
+                      {/* 重命名当前项目：弹窗编辑项目名。 */}
+                      <button type="button" className="desktop-project-rename-btn" title="重命名" onClick={(e) => {
+                        e.stopPropagation();
+                        const newName = window.prompt(`将「${currentProject}」重命名为：`, currentProject);
+                        if (newName && newName.trim() !== currentProject) {
+                          onRenameProject(currentProject, newName.trim());
+                        }
+                      }}>✎</button>
+                    </h3>
                     <em>长篇玄幻</em>
                     <p>{getProjectIntro(projectDetails).slice(0, 46) || '在这里沉淀世界观、人物与章节主线。'}</p>
                   </div>
@@ -252,10 +243,6 @@ export default function ProjectWorkspacePage({
           <section className="desktop-card desktop-chapter-card">
             <div className="desktop-card-head">
               <h2>章节列表</h2>
-              <div>
-                {/* 新建空章节：当前没有后端接口，仅提示开发中，不会创建文件。 */}
-                <button type="button" onClick={() => notifyDevFeature('新建空章节：当前后端还没有创建空章节接口')} disabled={!currentProject}>＋</button>
-              </div>
             </div>
             <div className="desktop-chapter-search">
               <input
@@ -276,7 +263,7 @@ export default function ProjectWorkspacePage({
                     className={isActive ? 'active' : ''}
                     type="button"
                     disabled={!cf}
-                    onClick={() => cf && handleReadChapter(cf)}
+                    onClick={() => { if (cf) { handleReadChapter(cf); onSetDesktopEditorTab('writing'); } }}
                   >
                     <strong>第{chapterNo}章　{ch.title || cf?.replace(/\.txt$/, '') || '未命名章节'}</strong>
                     <span>{ch.date || ch.createdAt ? formatProjectUpdatedAt(ch.date || ch.createdAt) : '未记录'} · {(Number(ch.wordCount) || Number(ch.words) || 0).toLocaleString()} 字</span>
@@ -289,24 +276,6 @@ export default function ProjectWorkspacePage({
             </div>
           </section>
 
-          <section className="desktop-card desktop-recent-card">
-            <div className="desktop-card-head">
-              <h2>最近项目</h2>
-              {/* 查看全部项目：只切换到桌面项目库视图，不重新保存当前正文。 */}
-              <button type="button" onClick={() => onSetDesktopView('projects')}>查看全部</button>
-            </div>
-            {desktopRecentProjects.map((project, index) => (
-              /* 打开最近项目：加载所选项目详情并更新 currentProject / projectDetails。 */
-              <button className="desktop-recent-project" key={project.name} type="button" onClick={() => handleSelectProject(project.name)}>
-                <span>{project.name.slice(0, 1)}</span>
-                <div>
-                  <strong>{project.name}</strong>
-                  <small>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章</small>
-                </div>
-                <em>{index === 0 ? desktopTotalWords.toLocaleString() : ''}</em>
-              </button>
-            ))}
-          </section>
         </aside>
 
         <main className="desktop-writing-main">
@@ -346,19 +315,34 @@ export default function ProjectWorkspacePage({
               </div>
               <div className="desktop-library-list">
                 {sortedProjects.length > 0 ? sortedProjects.map((project) => (
-                  /* 打开项目：加载项目详情并切回工作台，会改变当前项目状态。 */
-                  <button
-                    key={project.name}
-                    type="button"
-                    className={currentProject === project.name ? 'active' : ''}
-                    onClick={() => {
-                      onHandleSelectProject(project.name);
-                      onSetDesktopView('workbench');
-                    }}
-                  >
-                    <strong>{project.name}</strong>
-                    <span>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章</span>
-                  </button>
+                  <div key={project.name} className="desktop-library-item">
+                    {/* 打开项目：加载项目详情并切回工作台，会改变当前项目状态。 */}
+                    <button
+                      type="button"
+                      className={"desktop-library-item-main" + (currentProject === project.name ? ' active' : '')}
+                      onClick={() => {
+                        onHandleSelectProject(project.name);
+                        onSetDesktopView('workbench');
+                      }}
+                    >
+                      <strong>{project.name}</strong>
+                      <span>{formatProjectUpdatedAt(project.updatedAt)} · {getProjectChapterCount(project)} 章</span>
+                    </button>
+                    <div className="desktop-library-item-actions">
+                      {/* 重命名项目：弹窗编辑项目名，不会立即请求后端。 */}
+                      <button type="button" className="desktop-library-action" title="重命名" onClick={(e) => {
+                        e.stopPropagation();
+                        const newName = window.prompt(`将「${project.name}」重命名为：`, project.name);
+                        if (newName && newName.trim() !== project.name) {
+                          onRenameProject(project.name, newName.trim());
+                        }
+                      }}>✎</button>
+                      {/* 删除项目：二次确认后删除，不可恢复。 */}
+                      <button type="button" className="desktop-library-action danger" title="删除" onClick={(e) => {
+                        onDeleteProject(project.name, e);
+                      }}>✕</button>
+                    </div>
+                  </div>
                 )) : (
                   <p className="desktop-empty">暂无项目，请先创建一个小说项目。</p>
                 )}
@@ -374,22 +358,22 @@ export default function ProjectWorkspacePage({
                     {readingChapter !== '_streaming' && readingChapter && <button type="button" onClick={handleStartEditTitle}>✎</button>}
                   </h2>
                   <div className="desktop-tabs">
-                    {['总览', '写作', '设定', '版本记录'].map((tab) => (
-                      <button
-                        key={tab}
-                        className={tab === '写作' ? 'active' : ''}
-                        type="button"
-                        onClick={
-                          tab === '设定'
-                            ? () => { onSetDesktopView('settings'); handleOpenSettings(); }
-                            : tab === '写作'
-                              ? () => onSetDesktopView('workbench')
-                              : () => notifyDevFeature(tab)
-                        }
-                      >
-                        {tab}
-                      </button>
-                    ))}
+                    {['总览', '写作', '设定', '版本记录'].map((tab) => {
+                      const tabKey = tab === '总览' ? 'overview' : tab === '写作' ? 'writing' : tab === '设定' ? 'settings' : 'versions';
+                      return (
+                        <button
+                          key={tab}
+                          className={desktopEditorTab === tabKey ? 'active' : ''}
+                          type="button"
+                          onClick={() => {
+                            onSetDesktopEditorTab(tabKey);
+                            if (tabKey === 'settings') handleOpenSettings();
+                          }}
+                        >
+                          {tab}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="desktop-save-state">
@@ -398,141 +382,150 @@ export default function ProjectWorkspacePage({
                 </div>
               </div>
 
-              {editingTitle && (
-                <div className="desktop-title-edit">
-                  <input value={editTitleValue} onChange={(e) => onSetEditTitleValue(e.target.value)} autoFocus />
-                  {/* 保存标题：把当前标题保存到服务器上的当前章节标题，不修改正文内容。 */}
-                  <button className="btn" onClick={handleSaveTitle}>保存</button>
-                  {/* 取消标题编辑：只退出本地标题编辑状态，不会保存输入内容。 */}
-                  <button className="btn btn-secondary" onClick={handleCancelEditTitle}>取消</button>
+              {desktopEditorTab === 'overview' && (
+                <div className="desktop-overview-panel">
+                  <h3>章节总览</h3>
+                  <p>当前项目 {currentProject}，共 {desktopChapters.length} 章，总计 {desktopTotalWords.toLocaleString()} 字。</p>
+                  <p>{projectDetails?.summary || '暂无剧情摘要，可在设定页签中补充。'}</p>
                 </div>
               )}
 
-              {(showSettings || showOutline) && (
-                <div className="desktop-inline-panels">
-                  {showSettings && (
-                    <section className="settings-panel">
-                      <h3>项目设定</h3>
+              {desktopEditorTab === 'writing' && (
+                <>
+                  {editingTitle && (
+                    <div className="desktop-title-edit">
+                      <input value={editTitleValue} onChange={(e) => onSetEditTitleValue(e.target.value)} autoFocus />
+                      <button className="btn" onClick={handleSaveTitle}>保存</button>
+                      <button className="btn btn-secondary" onClick={handleCancelEditTitle}>取消</button>
+                    </div>
+                  )}
+
+                  <div className="desktop-writing-brief">
+                    <section>
+                      <h3>小节目标</h3>
+                      <p>{outline[desktopChapterNumber - 1]?.goal || '推进本章核心冲突，保持人物动机清晰。'}</p>
+                    </section>
+                    <section>
+                      <h3>本章摘要</h3>
+                      <p>{desktopCurrentChapter?.summary || projectDetails?.summary?.slice(0, 72) || '等待生成或补充本章摘要。'}</p>
+                    </section>
+                    <section>
+                      <h3>场景标签</h3>
+                      <div className="desktop-tags">
+                        <span>宗门秘辛</span>
+                        <span>试探</span>
+                        <span>关系推进</span>
+                      </div>
+                    </section>
+                  </div>
+
+                  <div className="desktop-editor-toolbar">
+                    <span>正文</span>
+                    <em>{desktopChapterWords.toLocaleString()} 字</em>
+                  </div>
+
+                  <textarea
+                    className="desktop-manuscript"
+                    ref={readingContentRef}
+                    value={desktopEditorContent}
+                    onChange={(e) => onSetDesktopEditorContent(e.target.value)}
+                    readOnly={!!variantPreview || !readingChapter || readingChapter === '_streaming'}
+                    placeholder="从左侧选择章节，或在右侧写下本轮要求后生成正文。"
+                  />
+
+                  {debugPromptInfo && !debugPromptInfo.usedFallback && (
+                    <div className="debug-prompt-info">本次使用模板：{debugPromptInfo.templateTitle || '未知'}</div>
+                  )}
+                  {readingChapterRecord?.staleAfterRewrite && !variantPreview && (
+                    <div className="stale-chapter-notice">
+                      <div><strong>这章生成于前文重写之前，可能与当前剧情不连续。</strong></div>
+                      <div className="stale-chapter-actions">
+                        <button className="btn btn-secondary" onClick={handleConfirmKeepChapter}>确认保留</button>
+                        <button className="btn" onClick={() => prepareDesktopMode('rewrite')}>重写本章</button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="desktop-editor-actions">
+                    <button className="btn" onClick={onDesktopGenerateByMode} disabled={loading || regenerating}>{loading ? '生成中...' : '继续生成'}</button>
+                    <button className="btn btn-secondary" onClick={() => prepareDesktopMode('rewrite')} disabled={!readingChapter || readingChapter === '_streaming'}>改写</button>
+                    <button className="btn btn-secondary" onClick={onDesktopSaveContent} disabled={!readingChapter || readingChapter === '_streaming' || desktopSavingContent || !!variantPreview}>
+                      {desktopSavingContent ? '保存中...' : '保存草稿'}
+                    </button>
+                  </div>
+
+                  <GenerationProgress visible={genProgress.visible} mode={genProgress.mode} status={genProgress.status} errorMessage={genProgress.errorMessage} onComplete={handleGenProgressDone} />
+                  {error && <div className="error">{error}</div>}
+
+                  <footer className="desktop-editor-status">
+                    <span>自动保存已开启</span>
+                    <span>第 {desktopChapterNumber} 章 · {desktopChapterWords.toLocaleString()} 字</span>
+                    <span>目标 4,000 字</span>
+                    <div><i style={{ width: `${desktopProgressPercent}%` }}></i></div>
+                    <strong>{desktopProgressPercent}%</strong>
+                  </footer>
+                </>
+              )}
+
+              {desktopEditorTab === 'settings' && (
+                <div className="desktop-settings-wrapper">
+                  <div className="desktop-settings-grid">
+                    <div className="desktop-settings-field">
                       <label>世界观设定</label>
-                      <textarea className="settings-input" value={editWorld} onChange={(e) => onSetEditWorld(e.target.value)} rows={3} />
+                      <textarea className="settings-input" value={editWorld} onChange={(e) => onSetEditWorld(e.target.value)} />
+                    </div>
+                    <div className="desktop-settings-field">
                       <label>人物设定</label>
-                      <textarea className="settings-input" value={editCharacters} onChange={(e) => onSetEditCharacters(e.target.value)} rows={3} />
+                      <textarea className="settings-input" value={editCharacters} onChange={(e) => onSetEditCharacters(e.target.value)} />
+                    </div>
+                    <div className="desktop-settings-field">
                       <label>写作规则</label>
-                      <textarea className="settings-input" value={editStyle} onChange={(e) => onSetEditStyle(e.target.value)} rows={4} />
+                      <textarea className="settings-input" value={editStyle} onChange={(e) => onSetEditStyle(e.target.value)} />
+                    </div>
+                    <div className="desktop-settings-field">
                       <label>剧情摘要</label>
-                      <textarea className="settings-input" value={editSummary} onChange={(e) => onSetEditSummary(e.target.value)} rows={4} />
-                      <div className="form-actions">
-                        {/* 保存设定：把当前项目设定 PUT 到服务器，会覆盖服务器上的项目设定字段。 */}
-                        <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
-                        {/* 关闭设定：只关闭设定面板，不会自动保存未提交内容。 */}
-                        <button className="btn btn-secondary" disabled={savingSettings} onClick={() => onSetShowSettings(false)}>关闭</button>
-                      </div>
-                    </section>
-                  )}
-                  {showOutline && (
-                    <section className="settings-panel">
-                      <h3>章节规划</h3>
-                      <textarea className="settings-input" value={outlineText} onChange={(e) => { onSetOutlineText(e.target.value); onSetOutlineError(''); }} rows={10} />
-                      {outlineError && <div className={outlineError === '已保存' ? '' : 'error'}>{outlineError}</div>}
-                      <div className="form-actions">
-                        {/* 保存规划：把当前大纲 JSON 保存到服务器，会覆盖当前项目的大纲内容。 */}
-                        <button className="btn" onClick={onSaveOutline} disabled={outlineSaving}>{outlineSaving ? '保存中...' : '保存规划'}</button>
-                        {/* 关闭规划：只关闭大纲编辑面板并清理错误提示，不会保存文本。 */}
-                        <button className="btn btn-secondary" onClick={() => { onSetShowOutline(false); onSetOutlineError(''); }}>关闭</button>
-                      </div>
-                    </section>
-                  )}
-                </div>
-              )}
-
-              <div className="desktop-writing-brief">
-                <section>
-                  <h3>小节目标</h3>
-                  <p>{outline[desktopChapterNumber - 1]?.goal || '推进本章核心冲突，保持人物动机清晰。'}</p>
-                </section>
-                <section>
-                  <h3>本章摘要</h3>
-                  <p>{desktopCurrentChapter?.summary || projectDetails?.summary?.slice(0, 72) || '等待生成或补充本章摘要。'}</p>
-                </section>
-                <section>
-                  <h3>场景标签</h3>
-                  <div className="desktop-tags">
-                    <span>宗门秘辛</span>
-                    <span>试探</span>
-                    <span>关系推进</span>
-                    <button type="button" onClick={() => notifyDevFeature('场景标签管理')}>＋</button>
+                      <textarea className="settings-input" value={editSummary} onChange={(e) => onSetEditSummary(e.target.value)} />
+                    </div>
                   </div>
-                </section>
-              </div>
-
-              <div className="desktop-editor-toolbar">
-                <span>正文</span>
-                {['↶', '↷', 'B', 'I', 'U', '☷', '🔗'].map((item) => (
-                  <button key={item} type="button" disabled title="编辑器工具开发中">{item}</button>
-                ))}
-                <em>{desktopChapterWords.toLocaleString()} 字</em>
-              </div>
-
-              <textarea
-                className="desktop-manuscript"
-                ref={readingContentRef}
-                value={desktopEditorContent}
-                onChange={(e) => onSetDesktopEditorContent(e.target.value)}
-                readOnly={!!variantPreview || !readingChapter || readingChapter === '_streaming'}
-                placeholder="从左侧选择章节，或在右侧写下本轮要求后生成正文。"
-              />
-
-              {debugPromptInfo && !debugPromptInfo.usedFallback && (
-                <div className="debug-prompt-info">本次使用模板：{debugPromptInfo.templateTitle || '未知'}</div>
-              )}
-              {readingChapterRecord?.staleAfterRewrite && !variantPreview && (
-                <div className="stale-chapter-notice">
-                  <div><strong>这章生成于前文重写之前，可能与当前剧情不连续。</strong></div>
-                  <div className="stale-chapter-actions">
-                    {/* 确认保留：调用后端接口清除当前章节的待检查标记，不改写正文。 */}
-                    <button className="btn btn-secondary" onClick={handleConfirmKeepChapter}>确认保留</button>
-                    {/* 重写本章：只打开/加载重写输入，不会立刻覆盖正文。 */}
-                    <button className="btn" onClick={() => { if (!showRewriteInput) handleLoadRewritePrompt(); }}>重写本章</button>
+                  <div className="desktop-settings-footer">
+                    <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
                   </div>
                 </div>
               )}
 
-              <div className="desktop-editor-actions">
-                {/* 继续生成：基于当前项目上下文调用生成接口，成功后刷新章节列表和当前正文。 */}
-                <button className="btn" onClick={() => { onSetDesktopAiMode('continue'); onHandleGenerate(); }} disabled={loading || regenerating}>{loading ? '生成中...' : '继续生成'}</button>
-                {/* 改写选中段落：只准备改写模式并校验当前选区，不直接调用生成接口或覆盖正文。 */}
-                <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('rewrite'); ensureDesktopSelectionForRewrite('改写'); }} disabled={!readingChapter || readingChapter === '_streaming'}>
-                  {showRewriteInput ? '取消改写' : '改写选中段落'}
-                </button>
-                {/* 润色：切换到润色候选生成模式并要求选中文本，不会立即覆盖正文。 */}
-                <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('polish'); ensureDesktopSelectionForRewrite('润色'); }}>润色</button>
-                {/* 扩写：切换到扩写候选生成模式并要求选中文本，不会立即覆盖正文。 */}
-                <button className="btn btn-secondary" onClick={() => { prepareDesktopMode('expand'); ensureDesktopSelectionForRewrite('扩写'); }}>扩写</button>
-                {/* 保存草稿：把当前编辑器正文 PUT 到当前章节文件，会覆盖服务器端该章节正文。 */}
-                <button className="btn btn-secondary" onClick={onDesktopSaveContent} disabled={!readingChapter || readingChapter === '_streaming' || desktopSavingContent || !!variantPreview}>
-                  {desktopSavingContent ? '保存中...' : '保存草稿'}
-                </button>
-              </div>
-
-              {showRewriteInput && (
-                <div className="rewrite-input-area desktop-rewrite-area">
-                  <h3>本次改写要求</h3>
-                  <textarea className="prompt-input" value={rewritePrompt} onChange={(e) => onSetRewritePrompt(e.target.value)} placeholder="这次想怎么改写？" rows={4} />
-                  {/* 生成候选版本：根据当前章节和改写要求调用后端生成接口，只生成候选，不直接覆盖正文。 */}
-                  <button className="btn" onClick={handleRegenerate} disabled={regenerating || loading}>{regenerating ? '生成中...' : '生成候选版本'}</button>
+              {showOutline && (
+                <div className="desktop-inline-panels">
+                  <section className="settings-panel">
+                    <h3>章节大纲</h3>
+                    <p className="desktop-outline-hint">
+                      每章一条 JSON，字段：number（章节号）, goal（本章目标）, keyEvents（关键事件数组）, characterChanges（人物变化）, status（状态）。该大纲会在续写时自动注入生成上下文。
+                    </p>
+                    <textarea className="settings-input" value={outlineText} onChange={(e) => { onSetOutlineText(e.target.value); onSetOutlineError(''); }} rows={10} placeholder='[{"number":1,"goal":"本章目标","keyEvents":["事件1","事件2"],"characterChanges":"人物变化","status":"planned"}]' />
+                    {outlineError && <div className={outlineError === '已保存' || outlineError === '已生成' ? '' : 'error'}>{outlineError}</div>}
+                    <div className="form-actions">
+                      <button className="btn" onClick={onSaveOutline} disabled={outlineSaving}>{outlineSaving ? '保存中...' : '保存大纲'}</button>
+                      <button className="btn btn-secondary" onClick={onGenerateOutline} disabled={outlineSaving}>生成大纲</button>
+                      <button className="btn btn-secondary" onClick={() => { onSetShowOutline(false); onSetOutlineError(''); }}>关闭</button>
+                    </div>
+                  </section>
                 </div>
               )}
 
-              <GenerationProgress visible={genProgress.visible} mode={genProgress.mode} status={genProgress.status} errorMessage={genProgress.errorMessage} onComplete={handleGenProgressDone} />
-              {error && <div className="error">{error}</div>}
-
-              <footer className="desktop-editor-status">
-                <span>自动保存已开启</span>
-                <span>第 {desktopChapterNumber} 章 · {desktopChapterWords.toLocaleString()} 字</span>
-                <span>目标 4,000 字</span>
-                <div><i style={{ width: `${desktopProgressPercent}%` }}></i></div>
-                <strong>{desktopProgressPercent}%</strong>
-              </footer>
+              {desktopEditorTab === 'versions' && (
+                <div className="desktop-versions-panel">
+                  <h3>版本记录</h3>
+                  {variants.length > 0 ? (
+                    variants.map((v, index) => (
+                      <div key={v.id} className="version-item">
+                        <strong>候选版本 {index + 1}</strong>
+                        <p>{(v.content || '').slice(0, 120)}...</p>
+                      </div>
+                    ))
+                  ) : (
+                    <p>暂无版本记录。生成候选版本后会在这里展示。</p>
+                  )}
+                </div>
+              )}
             </section>
           ) : (
             <section className="desktop-card desktop-empty-main">
@@ -548,16 +541,12 @@ export default function ProjectWorkspacePage({
           <section className="desktop-card desktop-ai-card">
             <div className="desktop-card-head">
               <h2>AI 写作控制台</h2>
-              {/* 收起 AI 控制台：当前仅提示开发中，不会改变生成状态或保存内容。 */}
-              <button type="button" onClick={() => notifyDevFeature('收起 AI 控制台')}>收起</button>
             </div>
             <label>创作模式</label>
             <div className="desktop-mode-grid">
               {[
                 ['continue', '续写'],
                 ['rewrite', '改写'],
-                ['polish', '润色'],
-                ['expand', '扩写'],
               ].map(([mode, label]) => (
                 /* 创作模式：只切换本地 AI 模式/预置改写要求，不会立即调用生成接口。 */
                 <button
@@ -570,14 +559,25 @@ export default function ProjectWorkspacePage({
                 </button>
               ))}
             </div>
+            <label>模型选择</label>
+            <div className="desktop-model-grid">
+              {[
+                { value: 'deepseek-v4-flash', title: '快速模式', sub: '适合日常续写' },
+                { value: 'deepseek-v4-pro', title: '深度模式', sub: '适合复杂伏笔' },
+              ].map((item) => (
+                <button
+                  key={item.value}
+                  className={model === item.value ? 'active' : ''}
+                  type="button"
+                  onClick={() => onSetModel(item.value)}
+                >
+                  <strong>{item.title}</strong>
+                  <small>{item.sub}</small>
+                </button>
+              ))}
+            </div>
             <label>写作参数</label>
             <div className="desktop-param-list">
-              <select value={writingPrefs.style} onChange={(e) => onSetWritingPrefs({ ...writingPrefs, style: e.target.value })}>
-                <option value="">文风：默认</option>
-                <option value="玄幻 · 古典">玄幻 · 古典</option>
-                <option value="冷静克制">冷静克制</option>
-                <option value="轻小说">轻小说</option>
-              </select>
               <select value={writingPrefs.characterConsistency} onChange={(e) => onSetWritingPrefs({ ...writingPrefs, characterConsistency: e.target.value })}>
                 <option value="strict">视角：人物一致</option>
                 <option value="natural">视角：自然推进</option>
@@ -592,18 +592,28 @@ export default function ProjectWorkspacePage({
                 <option value="normal">节奏：正常</option>
                 <option value="fast">节奏：快一点</option>
               </select>
-              <div className="desktop-range-row"><span>温度</span><input type="range" min="0" max="1" step="0.1" defaultValue="0.7" disabled title="高级参数开发中" /><strong>0.7</strong></div>
             </div>
-            <label>本轮要求</label>
-            <textarea className="prompt-input" value={showRewriteInput ? rewritePrompt : userPrompt} onChange={(e) => showRewriteInput ? onSetRewritePrompt(e.target.value) : onSetUserPrompt(e.target.value)} placeholder="保持克制暧昧的气氛，推进人物试探，不要过快摊牌。" rows={5} />
+            <label>{desktopAiMode === 'continue' ? '本轮要求' : '改写要求'}</label>
+            <textarea
+              className="prompt-input"
+              value={desktopAiMode === 'continue' ? userPrompt : rewritePrompt}
+              onChange={(e) => desktopAiMode === 'continue' ? onSetUserPrompt(e.target.value) : onSetRewritePrompt(e.target.value)}
+              placeholder={
+                desktopAiMode === 'continue' ? '保持克制暧昧的气氛，推进人物试探，不要过快摊牌。'
+                : '说明你想怎么改写当前正文，例如：压低文风、增强心理描写、减少直白对白、保留剧情但换表达。'
+              }
+              rows={5}
+            />
             <label>关联设定</label>
             <div className="desktop-linked-settings">
-              {/* 关联设定入口：打开项目设定面板，只切换编辑状态，不立即保存。 */}
-              <button type="button" onClick={handleOpenSettings}>世界观：{projectDetails?.world ? '已挂载' : '待补充'}</button>
-              {/* 关联设定入口：打开项目设定面板，只切换编辑状态，不立即保存。 */}
-              <button type="button" onClick={handleOpenSettings}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
-              {/* 关联设定入口：打开项目设定面板，只切换编辑状态，不立即保存。 */}
-              <button type="button" onClick={handleOpenSettings}>关系：编辑记忆</button>
+              {/* 关联设定入口：切换到设定页签编辑项目设定。 */}
+              <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>世界观：{projectDetails?.world ? '已挂载' : '待补充'}</button>
+              {/* 关联设定入口：切换到设定页签编辑项目设定。 */}
+              <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
+              {/* 关联设定入口：切换到设定页签编辑项目设定。 */}
+              <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>关系：编辑记忆</button>
+              {/* 章节大纲入口：切换到大纲编辑面板。 */}
+              <button type="button" onClick={() => { onSetShowOutline(true); onLoadOutline(); }}>章节大纲：{outline.length > 0 ? '已挂载' : '未填写'}</button>
             </div>
             {/* 生成候选：按当前 AI 模式调用生成/改写流程；候选模式不会直接覆盖正文。 */}
             <button className="desktop-generate-btn" type="button" onClick={onDesktopGenerateByMode} disabled={loading || regenerating || !currentProject}>
@@ -617,9 +627,7 @@ export default function ProjectWorkspacePage({
 
           <section className="desktop-card desktop-candidates">
             <div className="desktop-card-head">
-              <h2>候选续写（{variants.length}）</h2>
-              {/* 对比模式：当前仅触发开发中提示，不会应用候选或修改正文。 */}
-              <button type="button" onClick={() => notifyDevFeature('对比模式')}>对比模式</button>
+              <h2>{desktopAiMode === 'continue' ? '候选续写' : '候选改写'}（{variants.length}）</h2>
             </div>
             <div className="desktop-candidate-list">
               {variants.length > 0 ? variants.slice(0, 6).map((v, index) => (
@@ -629,8 +637,8 @@ export default function ProjectWorkspacePage({
                   <div>
                     {/* 采用候选：把指定候选版本应用为当前章节主线内容，会改变正文版本。 */}
                     <button type="button" onClick={() => handleDesktopApplyVariant(v.id)} disabled={applyingVariant}>采用</button>
-                    {/* 对比候选：只预览候选并提示对比模式开发中，不会应用到正文。 */}
-                    <button type="button" onClick={() => { handlePreviewVariant(v); notifyDevFeature('对比模式'); }}>对比</button>
+                    {/* 预览候选：在正文编辑区预览候选版本，不覆盖正文。 */}
+                    <button type="button" onClick={() => handlePreviewVariant(v)}>预览</button>
                     {/* 再来一版：再次调用重写/生成候选接口，只新增候选，不直接覆盖正文。 */}
                     <button type="button" onClick={handleRegenerate} disabled={regenerating || loading}>再来一版</button>
                   </div>

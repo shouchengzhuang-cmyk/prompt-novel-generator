@@ -168,6 +168,7 @@ function App() {
 
   // Desktop workbench state
   const [desktopView, setDesktopView] = useState('workbench');
+  const [desktopEditorTab, setDesktopEditorTab] = useState('writing');
   const [desktopChapterQuery, setDesktopChapterQuery] = useState('');
   const [desktopAiMode, setDesktopAiMode] = useState('continue');
   const [desktopEditorContent, setDesktopEditorContent] = useState('');
@@ -880,10 +881,11 @@ function App() {
     setError('');
     try {
       await ProjectsApi.deleteProject(name);
-      // If deleting the current project, clear all state
+      // If deleting the current project, clear all state and go back to project library
       if (currentProject === name) {
         setCurrentProject(null);
         setProjectDetails(null);
+        if (!isMobile) setDesktopView('projects');
         setDisplayContent('');
         setReadingChapter(null);
         setReadingContent('');
@@ -909,6 +911,40 @@ function App() {
       return true;
     } catch (err) {
       setError(err.message);
+      return false;
+    }
+  };
+
+  // ---- 重命名项目 ----
+  const handleRenameProject = async (name, newName) => {
+    if (!name || !newName || !newName.trim()) {
+      setNotification({ title: '重命名失败', message: '新项目名不能为空。' });
+      return false;
+    }
+    const trimmed = newName.trim();
+    if (/[/\\:*?"<>|]/.test(trimmed)) {
+      setNotification({ title: '重命名失败', message: '项目名包含非法字符（/ \\ : * ? " < > |）。' });
+      return false;
+    }
+    // Check for duplicate names in the loaded project list
+    if (projects.some((p) => p.name === trimmed && p.name !== name)) {
+      setNotification({ title: '重命名失败', message: `项目「${trimmed}」已存在。` });
+      return false;
+    }
+    try {
+      const data = await ProjectsApi.renameProject(name, trimmed);
+      // Update local state
+      const isCurrent = currentProject === name;
+      if (isCurrent) {
+        setCurrentProject(trimmed);
+      }
+      // Refresh project list
+      await fetchProjects();
+      setNotification({ title: '重命名成功', message: `「${name}」→「${trimmed}」` });
+      return data;
+    } catch (err) {
+      setError(err.message);
+      setNotification({ title: '重命名失败', message: err.message });
       return false;
     }
   };
@@ -981,6 +1017,7 @@ function App() {
   };
 
   const handleOpenSettings = () => {
+    setDesktopEditorTab('settings');
     openSettingsEditor(projectDetails, currentProject);
   };
 
@@ -1059,6 +1096,29 @@ function App() {
       setOutline(data.outline);
       setOutlineText(JSON.stringify(data.outline, null, 2));
       setOutlineError('已保存');
+      setTimeout(() => setOutlineError(''), 3000);
+    } catch (err) {
+      setOutlineError(err.message);
+    } finally {
+      setOutlineSaving(false);
+    }
+  };
+
+  // ---- 生成章节大纲 ----
+  /** 调用 AI 根据当前项目设定和已有章节生成章节大纲 */
+  const handleGenerateOutline = async () => {
+    if (!currentProject) return;
+    setOutlineSaving(true);
+    setOutlineError('');
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/outline/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+      });
+      setOutline(data.outline);
+      setOutlineText(JSON.stringify(data.outline, null, 2));
+      setOutlineError('已生成');
       setTimeout(() => setOutlineError(''), 3000);
     } catch (err) {
       setOutlineError(err.message);
@@ -1451,8 +1511,6 @@ function App() {
   // Build enhanced prompt by appending writing preferences
   function buildEnhancedPrompt(basePrompt, prefs) {
     const lines = [];
-    if (prefs.style?.trim()) lines.push(`- 文风：${prefs.style.trim()}`);
-
     const paragraphMap = { short: '短段，加快叙事节奏', normal: '自然段', long: '长段，展开细节描写' };
     lines.push(`- 段落：${paragraphMap[prefs.paragraph] || paragraphMap.normal}`);
 
@@ -2040,6 +2098,7 @@ function App() {
   const handleDesktopNav = async (label) => {
     if (label === '工作台' || label === '章节') {
       setDesktopView('workbench');
+      setDesktopEditorTab('writing');
       setShowSettings(false);
       setShowOutline(false);
       return;
@@ -2055,7 +2114,9 @@ function App() {
         setNotification({ title: '请先选择项目', message: '需要打开一个项目后才能编辑设定。' });
         return;
       }
-      setDesktopView(label === '世界观' ? 'world' : label === '人物' ? 'characters' : 'settings');
+      const view = label === '世界观' ? 'world' : label === '人物' ? 'characters' : 'settings';
+      setDesktopView(view);
+      setDesktopEditorTab('settings');
       openSettingsEditor(projectDetails, currentProject, label === '世界观' ? 'world' : label === '人物' ? 'characters' : '');
       setShowOutline(false);
       return;
@@ -2066,6 +2127,7 @@ function App() {
         return;
       }
       setDesktopView('outline');
+      setDesktopEditorTab('writing');
       setShowSettings(false);
       setShowOutline(true);
       await handleLoadOutline();
@@ -2102,7 +2164,7 @@ function App() {
       ? desktopEditorContent.slice(editor.selectionStart, editor.selectionEnd).trim()
       : '';
     const selected = textareaSelection || (typeof window !== 'undefined' ? String(window.getSelection?.() || '').trim() : '');
-    if (!selected && ['rewrite', 'polish', 'expand'].includes(desktopAiMode)) {
+    if (!selected && desktopAiMode === 'rewrite') {
       setNotification({ title: `请先选中文本`, message: `请先选中要${modeLabel}的段落。当前后端只支持整章候选生成，局部处理会作为后续能力接入。` });
       return false;
     }
@@ -2116,14 +2178,12 @@ function App() {
       return;
     }
     if (!readingChapter || readingChapter === '_streaming') {
-      setNotification({ title: '请先打开章节', message: '改写、润色和扩写需要先选择一个已有章节。' });
+      setNotification({ title: '请先打开章节', message: '改写需要先选择一个已有章节。' });
       return;
     }
     handleLoadRewritePrompt();
     const prompts = {
       rewrite: '改写选中段落，保持剧情事实不变，优化动作与情绪递进。',
-      polish: '润色选中段落，保留原剧情，提升语言质感和节奏。',
-      expand: '扩写选中段落，增加细节、动作和心理描写。',
     };
     setRewritePrompt((prev) => prev || prompts[mode] || '继续写');
   };
@@ -2133,7 +2193,7 @@ function App() {
       await handleGenerate();
       return;
     }
-    const label = desktopAiMode === 'polish' ? '润色' : desktopAiMode === 'expand' ? '扩写' : '改写';
+    const label = '改写';
     if (!ensureDesktopSelectionForRewrite(label)) return;
     await handleRegenerate();
   };
@@ -2159,7 +2219,6 @@ function App() {
   const desktopChapterWords = (variantPreview ? variantPreview.content : readingContent || '').replace(/\s/g, '').length;
   const desktopProjectWords = desktopChapters.reduce((sum, ch) => sum + (Number(ch.wordCount) || Number(ch.words) || 0), 0);
   const desktopTotalWords = Number(projectDetails?.totalWords) || Number(projectDetails?.wordCount) || desktopProjectWords || desktopChapterWords;
-  const desktopRecentProjects = (sortedProjectsByRecent.length ? sortedProjectsByRecent : sortedProjects).slice(0, 3);
   const desktopProgressPercent = Math.min(100, Math.round((desktopChapterWords / 4000) * 100)) || 0;
   const desktopLastSaved = readingChapter === '_streaming'
     ? '正在生成'
@@ -2225,6 +2284,7 @@ function App() {
       {!isMobile && (
         <ProjectWorkspacePage
           desktopView={desktopView}
+          desktopEditorTab={desktopEditorTab}
           showCreateForm={showCreateForm}
           currentProject={currentProject}
           projectDetails={projectDetails}
@@ -2278,7 +2338,6 @@ function App() {
           desktopChapterNumber={desktopChapterNumber}
           desktopChapterWords={desktopChapterWords}
           desktopTotalWords={desktopTotalWords}
-          desktopRecentProjects={desktopRecentProjects}
           desktopProgressPercent={desktopProgressPercent}
           desktopLastSaved={desktopLastSaved}
           sortedProjects={sortedProjects}
@@ -2312,12 +2371,12 @@ function App() {
           onGenProgressDone={handleGenProgressDone}
           onCopyChapter={handleCopyChapter}
           onCopyFull={handleCopyFull}
-          onNotifyDevFeature={notifyDevFeature}
           onSetRewritePrompt={setRewritePrompt}
           onSetShowRewriteInput={setShowRewriteInput}
           onSetShowCreateForm={setShowCreateForm}
           onSetCreateError={setCreateError}
           onSetDesktopView={setDesktopView}
+          onSetDesktopEditorTab={setDesktopEditorTab}
           onCreateProject={handleCreateProject}
           onLoadOutline={handleLoadOutline}
           onSaveOutline={handleSaveOutline}
@@ -2345,6 +2404,9 @@ function App() {
           onHandleLogout={handleLogout}
           onHandleSelectProject={handleSelectProject}
           onHandleGenerate={handleGenerate}
+          onRenameProject={handleRenameProject}
+          onDeleteProject={handleDeleteProject}
+          onGenerateOutline={handleGenerateOutline}
           formatProjectUpdatedAt={formatProjectUpdatedAt}
           getProjectChapterCount={getProjectChapterCount}
         />
