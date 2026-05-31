@@ -10,25 +10,51 @@ const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
 
 const app = express();
-const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 // Trust proxy for correct IP and protocol behind Nginx/reverse proxy
 app.set('trust proxy', 1);
 
-if (CORS_ORIGIN === '*') {
-  // Reflect the request origin so credentialed requests work
-  app.use(cors({ origin: true, credentials: true }));
-} else {
-  app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+// ---- CORS ----
+
+const CORS_ORIGIN = process.env.CORS_ORIGIN;
+
+if (!CORS_ORIGIN) {
+  if (IS_PRODUCTION) {
+    console.error('❌ 生产环境必须设置 CORS_ORIGIN');
+    console.error('   例如: CORS_ORIGIN=https://xiaomoxia.yourdomain.com');
+    process.exit(1);
+  }
+  console.warn('⚠️  未设置 CORS_ORIGIN，开发环境仅允许 http://localhost:5173');
 }
+
+// Production: use the explicit origin only. Development: allow localhost origins.
+const corsOrigin = CORS_ORIGIN || [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3001',
+];
+
+app.use(cors({ origin: corsOrigin, credentials: true }));
 
 app.use(express.json({ limit: '1mb' }));
 
 // ---- Session ----
 
+const SESSION_SECRET = process.env.SESSION_SECRET;
+
+if (!SESSION_SECRET) {
+  if (IS_PRODUCTION) {
+    console.error('❌ 生产环境必须设置 SESSION_SECRET');
+    console.error('   请用 openssl rand -hex 32 生成一个随机字符串');
+    process.exit(1);
+  }
+  console.warn('⚠️  未设置 SESSION_SECRET，开发环境使用固定密钥');
+}
+
 const session = require('express-session');
 app.use(session({
-  secret: process.env.SESSION_SECRET || process.env.XIAOMOXIA_PIN || 'xiaomoxia-default-secret',
+  secret: SESSION_SECRET || 'xiaomoxia-dev-secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
