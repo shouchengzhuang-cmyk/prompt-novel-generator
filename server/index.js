@@ -7,6 +7,7 @@ const { ZipArchive } = require('archiver');
 
 const vaultRoutes = require('./routes/vault');
 const { buildPrompt } = require('./services/promptBuilder');
+const storage = require('./services/storage');
 
 const app = express();
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
@@ -245,7 +246,7 @@ async function ensureEditorialMemory(projectName) {
     await fs.access(filePath);
   } catch {
     await ensureDir(path.dirname(filePath));
-    await fs.writeFile(filePath, DEFAULT_EDITORIAL_MEMORY, 'utf-8');
+    await storage.writeText(filePath, DEFAULT_EDITORIAL_MEMORY);
   }
   return filePath;
 }
@@ -263,7 +264,7 @@ async function readEditorialMemory(projectName) {
 async function writeEditorialMemory(projectName, content) {
   const filePath = getEditorialMemoryPath(projectName);
   await ensureDir(path.dirname(filePath));
-  await fs.writeFile(filePath, content, 'utf-8');
+  await storage.writeText(filePath, content);
 }
 
 // ---- Outline (chapter planning) ----
@@ -288,7 +289,7 @@ async function writeOutline(projectName, outline) {
   }
   const filePath = getOutlinePath(projectName);
   await ensureDir(path.dirname(filePath));
-  await fs.writeFile(filePath, JSON.stringify(outline, null, 2), 'utf-8');
+  await storage.writeJson(filePath, outline);
 }
 
 /**
@@ -456,11 +457,7 @@ async function readChapterIndex(chaptersDir) {
 }
 
 async function writeChapterIndex(chaptersDir, entries) {
-  await fs.writeFile(
-    path.join(chaptersDir, INDEX_FILE),
-    JSON.stringify(entries, null, 2),
-    'utf-8'
-  );
+  await storage.writeJson(path.join(chaptersDir, INDEX_FILE), entries);
 }
 
 async function ensureChapterIndexEntry(chaptersDir, fileName) {
@@ -718,10 +715,10 @@ app.post('/api/projects', async (req, res) => {
 
     const chaptersDir = path.join(projectDir, 'chapters');
     await ensureDir(chaptersDir);
-    await fs.writeFile(path.join(projectDir, 'world.md'), world || '', 'utf-8');
-    await fs.writeFile(path.join(projectDir, 'characters.md'), characters || '', 'utf-8');
-    await fs.writeFile(path.join(projectDir, 'summary.md'), typeof summary === 'string' ? summary : '', 'utf-8');
-    await fs.writeFile(path.join(projectDir, 'style.md'), style || '', 'utf-8');
+    await storage.writeText(path.join(projectDir, 'world.md'), world || '');
+    await storage.writeText(path.join(projectDir, 'characters.md'), characters || '');
+    await storage.writeText(path.join(projectDir, 'summary.md'), typeof summary === 'string' ? summary : '');
+    await storage.writeText(path.join(projectDir, 'style.md'), style || '');
     res.json({ success: true, projectName: name });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1043,7 +1040,7 @@ app.put('/api/projects/:projectName/chapters/:fileName/content', async (req, res
     }
 
     // 2. Write new content
-    await fs.writeFile(chapterPath, content, 'utf-8');
+    await storage.writeText(chapterPath, content);
 
     // 3. Update word count in index
     const count = countChars(content);
@@ -1173,13 +1170,13 @@ app.put('/api/projects/:projectName', async (req, res) => {
     };
 
     const writes = [
-      fs.writeFile(path.join(projectDir, 'world.md'), project.world, 'utf-8'),
-      fs.writeFile(path.join(projectDir, 'characters.md'), project.characters, 'utf-8'),
-      fs.writeFile(path.join(projectDir, 'style.md'), project.style, 'utf-8'),
-      fs.writeFile(path.join(projectDir, 'summary.md'), project.summary, 'utf-8'),
+      storage.writeText(path.join(projectDir, 'world.md'), project.world),
+      storage.writeText(path.join(projectDir, 'characters.md'), project.characters),
+      storage.writeText(path.join(projectDir, 'style.md'), project.style),
+      storage.writeText(path.join(projectDir, 'summary.md'), project.summary),
     ];
     if (project.editorialMemory !== undefined) {
-      writes.push(fs.writeFile(path.join(projectDir, 'editorial-memory.md'), project.editorialMemory, 'utf-8'));
+      writes.push(storage.writeText(path.join(projectDir, 'editorial-memory.md'), project.editorialMemory));
     }
     await Promise.all(writes);
     res.json({ ok: true, message: '设定已保存', project });
@@ -1386,7 +1383,7 @@ app.post('/api/generate', async (req, res) => {
     }
 
     const filename = String(nextNum).padStart(3, '0') + '.txt';
-    await fs.writeFile(path.join(chaptersDir, filename), content, 'utf-8');
+    await storage.writeText(path.join(chaptersDir, filename), content);
 
     // 6a. Extract title and update index.json
     const title = extractTitleFromContent(content, nextNum);
@@ -1439,7 +1436,7 @@ app.post('/api/generate', async (req, res) => {
           },
         ];
         const updatedSummary = await callDeepSeek('deepseek-v4-flash', summaryMessages);
-        await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
+        await storage.writeText(path.join(projectDir, 'summary.md'), updatedSummary.trim());
         console.log(`[摘要] 后台已更新项目=${projectName} 章节=${filename}`);
       } catch (summaryErr) {
         console.warn(`[摘要] 后台更新失败（不影响主流程）: ${summaryErr.message}`);
@@ -1576,7 +1573,7 @@ app.post('/api/generate-stream', async (req, res) => {
     }
 
     const filename = String(nextNum).padStart(3, '0') + '.txt';
-    await fs.writeFile(path.join(chaptersDir, filename), fullContent, 'utf-8');
+    await storage.writeText(path.join(chaptersDir, filename), fullContent);
 
     // 提取标题并更新 index.json
     const title = extractTitleFromContent(fullContent, nextNum);
@@ -1631,7 +1628,7 @@ app.post('/api/generate-stream', async (req, res) => {
           },
         ];
         const updatedSummary = await callDeepSeek('deepseek-v4-flash', summaryMessages);
-        await fs.writeFile(path.join(projectDir, 'summary.md'), updatedSummary.trim(), 'utf-8');
+        await storage.writeText(path.join(projectDir, 'summary.md'), updatedSummary.trim());
         console.log(`[流式生成] 后台已更新摘要 项目=${projectName} 章节=${filename}`);
       } catch (summaryErr) {
         console.warn(`[流式生成] 后台摘要更新失败: ${summaryErr.message}`);
@@ -1971,7 +1968,7 @@ async function writeVariants(chaptersDir, fileName, variants) {
   if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('无效的文件名');
   }
-  await fs.writeFile(vFile, JSON.stringify({ fileName, variants }, null, 2), 'utf-8');
+  await storage.writeJson(vFile, { fileName, variants });
 }
 
 // ---- POST /api/projects/:projectName/chapters/:fileName/regenerate ----
@@ -2501,7 +2498,7 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
     }
 
     // Write content to the main .txt file
-    await fs.writeFile(chapterPath, variant.content, 'utf-8');
+    await storage.writeText(chapterPath, variant.content);
 
     // Update word count in index
     await updateChapterWordCount(chaptersDir, fileName);
@@ -2650,7 +2647,7 @@ app.post('/api/projects/:projectName/summary/rebuild', async (req, res) => {
     const trimmed = newSummary.trim();
 
     // 5. Write to summary.md (only reached if DeepSeek succeeded)
-    await fs.writeFile(path.join(projectDir, 'summary.md'), trimmed, 'utf-8');
+    await storage.writeText(path.join(projectDir, 'summary.md'), trimmed);
 
     res.json({ ok: true, message: '摘要已重建', summary: trimmed });
   } catch (err) {

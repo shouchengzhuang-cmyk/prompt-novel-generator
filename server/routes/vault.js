@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs/promises');
+const storage = require('../services/storage');
 const express = require('express');
 const router = express.Router();
 
@@ -34,7 +35,7 @@ async function readTemplates() {
 
 async function writeTemplates(templates) {
   await ensureDir(VAULT_DIR);
-  await fs.writeFile(VAULT_FILE, JSON.stringify(templates, null, 2), 'utf-8');
+  await storage.writeJson(VAULT_FILE, templates);
 }
 
 function generateId(title) {
