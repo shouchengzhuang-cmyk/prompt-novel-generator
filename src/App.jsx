@@ -2803,6 +2803,7 @@ function App() {
           showMobileEdit={showMobileEdit}
           setMobileEditTitle={setMobileEditTitle}
           setMobileEditContent={setMobileEditContent}
+          setShowMobileEdit={setShowMobileEdit}
           mobileEditTitle={mobileEditTitle}
           mobileEditContent={mobileEditContent}
           handleMobileSaveEdit={handleMobileSaveEdit}
