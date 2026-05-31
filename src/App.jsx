@@ -335,7 +335,6 @@ function App() {
       setShowRewriteInput(false);
       setRewritePrompt('');
       setDebugPromptInfo(null);
-      resetEditorRoom();
       setMobileView('project');
       return 'view';
     }
@@ -397,36 +396,11 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Editor Note
-  const [editorNoteLoading, setEditorNoteLoading] = useState(false);
-  const [editorNoteError, setEditorNoteError] = useState('');
-  const [editorNoteResult, setEditorNoteResult] = useState('');
-  const editorNoteReqId = useRef(0);
   const generatingRef = useRef(false);
   const [streamingChapterNum, setStreamingChapterNum] = useState('');
-
-  // Editor room
-  const [editorRoomTab, setEditorRoomTab] = useState('notes');
-  const [editorNotes, setEditorNotes] = useState([]);
-  const [editorChats, setEditorChats] = useState([]);
-  const [editorChatInput, setEditorChatInput] = useState('');
-  const [editorChatSending, setEditorChatSending] = useState(false);
-  const [editorChatError, setEditorChatError] = useState('');
-  const [editorChatContextMode, setEditorChatContextMode] = useState('light');
-  const [savingEditorNoteId, setSavingEditorNoteId] = useState('');
-  const editorChatListRef = useRef(null);
   const readingSectionRef = useRef(null);
   const readingContentRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
-
-  useEffect(() => {
-    requestAnimationFrame(() => {
-      editorChatListRef.current?.scrollTo({
-        top: editorChatListRef.current.scrollHeight,
-        behavior: 'smooth',
-      });
-    });
-  }, [editorChats, editorChatSending]);
 
   // 章节内容区域滚动监听（桌面端使用 content div 的 onScroll，移动端使用 window scroll）
   const handleReadingContentScroll = () => {
@@ -485,19 +459,6 @@ function App() {
     }
   }, [authenticated]);
 
-  const resetEditorRoom = () => {
-    setEditorRoomTab('notes');
-    setEditorNotes([]);
-    setEditorChats([]);
-    setEditorChatInput('');
-    setEditorChatError('');
-    setSavingEditorNoteId('');
-    setEditorNoteResult('');
-    setEditorNoteError('');
-    setEditorNoteLoading(false);
-    editorNoteReqId.current++;
-  };
-
   // ---- 进入项目（加载详情和章节列表） ----
   /** 选中并加载一个项目，请求后端获取章节列表和最近内容 */
   const handleSelectProject = async (name) => {
@@ -524,7 +485,6 @@ function App() {
     setOutlineText('');
     setOutlineError('');
     setDebugPromptInfo(null);
-    resetEditorRoom();
     if (isMobile) navigateTo('project');
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
@@ -808,7 +768,6 @@ function App() {
     setMobileWritingOutput(content || '');
     setUserPrompt('');
     setDebugPromptInfo(debugInfo || null);
-    resetEditorRoom();
     // 从临时章节转为正式章节
     setReadingChapter(fileName);
     setReadingChapterTitle(title || '');
@@ -836,13 +795,12 @@ function App() {
   };
 
   // ---- 阅读章节 ----
-  /** 读取指定章节内容，同时加载该章节的候选版本和编辑室数据 */
+  /** 读取指定章节内容，同时加载该章节的候选版本 */
   const handleReadChapter = async (filename, projectName = currentProject) => {
     if (!projectName) return null;
     rememberLastProject(projectName);
     setError('');
     setDebugPromptInfo(null);
-    resetEditorRoom();
     // Clear previous chapter state before loading new one
     setVariantPreview(null);
     setVariants([]);
@@ -859,8 +817,6 @@ function App() {
       setReadingChapterTitle(data.title || '');
       setReadingContent(data.content === '' ? '章节为空' : data.content);
       setMobileWritingOutput('');
-      setEditorNotes(Array.isArray(data.editorNotes) ? data.editorNotes : []);
-      setEditorChats(Array.isArray(data.editorChats) ? data.editorChats : []);
       setProjectDetails((prev) => {
         if (!prev?.chapters) return prev;
         const chapters = prev.chapters.map((ch) =>
@@ -909,8 +865,7 @@ function App() {
         setShowRewriteInput(false);
         setRewritePrompt('');
         setDebugPromptInfo(null);
-        resetEditorRoom();
-      }
+          }
       setError('章节已删除');
       setTimeout(() => setError(''), 3000);
     } catch (err) {
@@ -948,8 +903,7 @@ function App() {
         setEditStyle('');
         setEditSummary('');
         setEditEditorialMemory('');
-        resetEditorRoom();
-      }
+          }
       await fetchProjects();
       setError('项目已删除');
       setTimeout(() => setError(''), 3000);
@@ -1273,8 +1227,7 @@ function App() {
       if (readingChapter && !data.chapters.find((ch) => ch.fileName === readingChapter)) {
         setReadingChapter(null);
         setReadingContent('');
-        resetEditorRoom();
-      }
+          }
       setError('索引已重建');
       setTimeout(() => setError(''), 3000);
     } catch (err) {
@@ -2019,139 +1972,6 @@ function App() {
     setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
   }, []);
 
-  // ---- Editor Note ----
-  const syncCurrentChapterEditorData = (notes, chats) => {
-    setProjectDetails((prev) => {
-      if (!prev || !readingChapter) return prev;
-      const chapters = prev.chapters?.map((ch) =>
-        (ch.fileName || ch.filename) === readingChapter
-          ? {
-              ...ch,
-              editorNotes: notes ?? ch.editorNotes ?? [],
-              editorChats: chats ?? ch.editorChats ?? [],
-            }
-          : ch
-      );
-      return { ...prev, chapters };
-    });
-  };
-
-  const handleEditorNote = async () => {
-    if (!currentProject || !readingChapter) {
-      setEditorNoteError('请先选择项目并阅读章节');
-      return;
-    }
-
-    setEditorRoomTab('notes');
-    const reqId = ++editorNoteReqId.current;
-    setEditorNoteLoading(true);
-    setEditorNoteError('');
-    setEditorNoteResult('');
-
-    try {
-      const url = `/api/editor/note?projectName=${encodeURIComponent(currentProject)}&chapterFileName=${encodeURIComponent(readingChapter)}`;
-      const data = await safeJsonFetch(url);
-      if (reqId !== editorNoteReqId.current) return;
-      setEditorNoteResult(data.note || '（无备注内容）');
-    } catch (err) {
-      if (reqId !== editorNoteReqId.current) return;
-      setEditorNoteError(err.message);
-    } finally {
-      if (reqId === editorNoteReqId.current) {
-        setEditorNoteLoading(false);
-      }
-    }
-  };
-
-  const handleEditorChatKeyDown = (event) => {
-    if (event.nativeEvent?.isComposing || event.isComposing) return;
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      if (!editorChatInput.trim() || editorChatSending) return;
-      handleSendEditorChat();
-    }
-  };
-
-  const handleSendEditorChat = async () => {
-    if (editorChatSending || !currentProject || !readingChapter) return;
-    const trimmed = editorChatInput.trim();
-    if (!trimmed) {
-      setEditorChatError('');
-      return;
-    }
-
-    const userMsg = { id: `local-${Date.now()}-user`, role: 'user', content: trimmed, createdAt: Date.now() };
-    const chatsWithUser = [...editorChats, userMsg];
-
-    setEditorChats(chatsWithUser);
-    setEditorChatInput('');
-    setEditorChatSending(true);
-    setEditorChatError('');
-    try {
-      const data = await safeJsonFetch('/api/editor-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectName: currentProject,
-          chapterId: readingChapter,
-          fileName: readingChapter,
-          message: trimmed,
-          contextMode: editorChatContextMode,
-        }),
-      });
-      const finalChats = Array.isArray(data.editorChats)
-        ? data.editorChats
-        : [...chatsWithUser, { id: `local-${Date.now()}-editor`, role: 'editor', content: data.reply || '', createdAt: Date.now() }];
-      setEditorChats(finalChats);
-      syncCurrentChapterEditorData(editorNotes, finalChats);
-    } catch (err) {
-      setEditorChatError(err.message);
-    } finally {
-      setEditorChatSending(false);
-    }
-  };
-
-  const handleClearEditorChats = async () => {
-    if (!currentProject || !readingChapter || editorChatSending) return;
-    if (!confirm('确定清空当前章节的编辑对话吗？此操作不可恢复。')) return;
-
-    setEditorChatError('');
-    try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/editor-chats`, {
-        method: 'DELETE',
-      });
-      const nextChats = Array.isArray(data.editorChats) ? data.editorChats : [];
-      setEditorChats(nextChats);
-      syncCurrentChapterEditorData(editorNotes, nextChats);
-    } catch (err) {
-      setEditorChatError(err.message);
-    }
-  };
-
-  const handleSaveEditorNote = async (content, sourceId = 'generated-note') => {
-    if (!currentProject || !readingChapter || !content?.trim()) return;
-    setSavingEditorNoteId(sourceId);
-    setEditorNoteError('');
-    setEditorChatError('');
-    try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/editor-notes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content }),
-      });
-      const nextNotes = Array.isArray(data.editorNotes) ? data.editorNotes : [...editorNotes, data.note].filter(Boolean);
-      setEditorNotes(nextNotes);
-      syncCurrentChapterEditorData(nextNotes, editorChats);
-      setEditorRoomTab('notes');
-      setNotification({ title: '已保存为备注', message: '这条编辑建议已经追加到当前章节。' });
-    } catch (err) {
-      setEditorNoteError(err.message);
-      setEditorChatError(err.message);
-    } finally {
-      setSavingEditorNoteId('');
-    }
-  };
-
   const notifyDevFeature = useCallback((name = '该功能') => {
     setNotification({ title: '功能开发中', message: `功能开发中：当前版本暂未接入此功能。${name ? `（${name}）` : ''}` });
   }, []);
@@ -2689,25 +2509,6 @@ function App() {
           onReadChapter={handleReadChapter}
           onBackClick={onBackClick}
           readingChapterTitle={readingChapterTitle}
-          editorRoomTab={editorRoomTab}
-          setEditorRoomTab={setEditorRoomTab}
-          handleClearEditorChats={handleClearEditorChats}
-          editorChatSending={editorChatSending}
-          editorChats={editorChats}
-          editorNoteLoading={editorNoteLoading}
-          handleEditorNote={handleEditorNote}
-          editorNoteError={editorNoteError}
-          editorNoteResult={editorNoteResult}
-          savingEditorNoteId={savingEditorNoteId}
-          handleSaveEditorNote={handleSaveEditorNote}
-          editorChatListRef={editorChatListRef}
-          editorChatError={editorChatError}
-          editorChatContextMode={editorChatContextMode}
-          setEditorChatContextMode={setEditorChatContextMode}
-          editorChatInput={editorChatInput}
-          setEditorChatInput={setEditorChatInput}
-          handleEditorChatKeyDown={handleEditorChatKeyDown}
-          handleSendEditorChat={handleSendEditorChat}
           showCreateForm={showCreateForm}
           newProjectName={newProjectName}
           setNewProjectName={setNewProjectName}
@@ -2814,7 +2615,6 @@ function App() {
           handlePreviewVariant={handlePreviewVariant}
           handleApplyVariant={handleApplyVariant}
           applyingVariant={applyingVariant}
-          resetEditorRoom={resetEditorRoom}
         />
 
         {/* ===== Mobile: Shelf View ===== */}

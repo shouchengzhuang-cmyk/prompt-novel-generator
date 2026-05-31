@@ -68,7 +68,6 @@ const NOVELS_DIR = process.env.NOVELS_DIR
   ? path.resolve(process.env.NOVELS_DIR)
   : path.resolve(__dirname, '..', 'novels');
 const RECENT_CHAPTER_LIMIT = 10;
-const EDITOR_CHAT_FULL_CHAPTER_LIMIT = 80000;
 
 // ---- Helpers ----
 
@@ -98,18 +97,6 @@ function safeProjectDir(projectName) {
 
 function isValidChapterFileName(fileName) {
   return /^\d{3,}\.txt$/.test(fileName);
-}
-
-function formatEditorChatFullChapter(chapterContent) {
-  if (chapterContent.length <= EDITOR_CHAT_FULL_CHAPTER_LIMIT) {
-    return chapterContent;
-  }
-
-  const edgeLength = Math.floor(EDITOR_CHAT_FULL_CHAPTER_LIMIT / 2);
-  const head = chapterContent.slice(0, edgeLength);
-  const tail = chapterContent.slice(-edgeLength);
-  const omittedLength = chapterContent.length - head.length - tail.length;
-  return `${head}\n\n…（当前章节过长，中间约省略 ${omittedLength} 字；已保留章节开头和结尾）\n\n${tail}`;
 }
 
 async function callDeepSeek(model, messages) {
@@ -149,99 +136,6 @@ async function ensureDir(dir) {
 function countChars(text) {
   if (!text) return 0;
   return text.replace(/\s/g, '').length;
-}
-
-// ---- Editor Note ----
-
-async function buildEditorNote(projectName, chapterFileName) {
-  // 1. Validate chapterFileName
-  if (!isValidChapterFileName(chapterFileName)) {
-    const err = new Error('无效的章节文件名');
-    err.statusCode = 400;
-    err.code = 'INVALID_CHAPTER_FILENAME';
-    throw err;
-  }
-
-  const projectDir = safeProjectDir(projectName);
-
-  const [world, characters, summary, style] = await Promise.all([
-    fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
-    fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
-    fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
-    fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
-  ]);
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, chapterFileName);
-  const rp = path.relative(chaptersDir, chapterPath);
-  if (rp.startsWith('..') || path.isAbsolute(rp)) {
-    const err = new Error('无效的章节文件名');
-    err.statusCode = 400;
-    err.code = 'INVALID_CHAPTER_FILENAME';
-    throw err;
-  }
-
-  // 2. Current chapter — fail if not found (core input)
-  let chapterContent;
-  try {
-    chapterContent = await fs.readFile(chapterPath, 'utf-8');
-  } catch {
-    const err = new Error('章节不存在');
-    err.statusCode = 404;
-    err.code = 'CHAPTER_NOT_FOUND';
-    throw err;
-  }
-
-  // 3. History chapters — skip individual failures gracefully
-  const files = (await fs.readdir(chaptersDir))
-    .filter((f) => f.endsWith('.txt') && isValidChapterFileName(f))
-    .sort();
-  const idx = files.indexOf(chapterFileName);
-  let prevText = '';
-  if (idx > 0) {
-    const prevFiles = files.slice(Math.max(0, idx - 3), idx);
-    for (const f of prevFiles) {
-      try {
-        const c = await fs.readFile(path.join(chaptersDir, f), 'utf-8');
-        prevText += `${f}:\n${c.length > 2000 ? c.slice(0, 2000) + '\n…' : c}\n\n`;
-      } catch {
-        // Skip individual history chapter read failure
-      }
-    }
-  }
-
-  // Build context (truncated to keep prompt lean)
-  let contextText = '';
-  if (world) contextText += `世界观：${world.slice(0, 800)}\n\n`;
-  if (characters) contextText += `人物设定：${characters.slice(0, 800)}\n\n`;
-  if (style) contextText += `写作风格：${style.slice(0, 500)}\n\n`;
-  if (summary) contextText += `剧情摘要：${summary.slice(0, 800)}\n\n`;
-  if (prevText) contextText += `前文回顾：\n${prevText}`;
-  contextText += `当前章节 ${chapterFileName}：\n${chapterContent.slice(0, 4000)}${chapterContent.length > 4000 ? '\n…' : ''}\n\n`;
-
-  const messages = [
-    {
-      role: 'system',
-      content:
-        '你是章节编辑，只输出简短、可执行的写作批注，给后续写作用。\n' +
-        '禁止使用 Markdown：不要 **加粗**、### 标题、表格、> 引用、``` 代码块、--- 分隔线、复杂编号层级。\n' +
-        '使用纯文本，可以用简单中文小标题，例如：本章问题：修改建议：下章注意：。\n' +
-        '300 字以内，语气直接，不客套，不写“总体来说”“可以看出”“值得注意的是”。',
-    },
-    {
-      role: 'user',
-      content: contextText +
-        '请基于以上信息，输出 300 字以内的编辑备注。\n\n' +
-        '只保留对后续写作最有用的内容：人物行为是否合理、情绪是否连续、伏笔是否保留、下一章应该接什么、哪些内容不要重复、哪些冲突需要修正。\n\n' +
-        '格式要求：\n' +
-        '纯文本。可以使用“本章问题：”“修改建议：”“下章注意：”这类简单中文小标题。\n' +
-        '禁止 Markdown 特殊格式符号：不要 **加粗**，不要 ### 标题，不要表格，不要 > 引用，不要 ``` 代码块，不要 --- 分隔线，不要复杂编号层级。\n' +
-        '不要客套，不要总结式废话，不要询问用户，不要重写正文。直接输出批注内容。',
-    },
-  ];
-
-  const note = await callDeepSeek('deepseek-v4-flash', messages);
-  return sanitizeEditorText(note, 300);
 }
 
 // ---- Editorial Memory Helpers ----
@@ -552,37 +446,6 @@ function markChaptersStaleAfterRewrite(chapters, rewrittenFileName, staleAt = Da
   });
 }
 
-function formatLocalMinute(timestamp = Date.now()) {
-  const date = new Date(timestamp);
-  const pad = (n) => String(n).padStart(2, '0');
-  return [
-    date.getFullYear(),
-    '-',
-    pad(date.getMonth() + 1),
-    '-',
-    pad(date.getDate()),
-    ' ',
-    pad(date.getHours()),
-    ':',
-    pad(date.getMinutes()),
-  ].join('');
-}
-
-function sanitizeEditorText(text, maxLength = 500) {
-  if (typeof text !== 'string') return '';
-  return text
-    .replace(/^```[\w-]*\s*$/gm, '')
-    .replace(/^\s*#{1,6}\s*/gm, '')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/^\s*>\s?/gm, '')
-    .replace(/^\s*-{3,}\s*$/gm, '')
-    .replace(/^\s*\|.*\|\s*$/gm, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
-    .slice(0, maxLength)
-    .trim();
-}
-
 function extractTitleFromContent(content, chapterNumber) {
   // Scan first non-empty lines for a detectable title
   const lines = content.split('\n').filter((l) => l.trim());
@@ -797,8 +660,6 @@ app.get('/api/projects/:projectName', async (req, res) => {
         title: indexMap[f]?.title || extractTitleFromContent('', parseInt(f, 10)),
         userPrompt: indexMap[f]?.userPrompt || '',
         activeVersionId: indexMap[f]?.activeVersionId || 'v-original',
-        editorNotes: Array.isArray(indexMap[f]?.editorNotes) ? indexMap[f].editorNotes : [],
-        editorChats: Array.isArray(indexMap[f]?.editorChats) ? indexMap[f].editorChats : [],
       }));
 
       // Load content of last 10 chapters for display
@@ -858,8 +719,6 @@ app.get('/api/projects/:projectName/chapters/:fileName', async (req, res) => {
       fileName,
       title: entry?.title || null,
       content,
-      editorNotes: Array.isArray(entry?.editorNotes) ? entry.editorNotes : [],
-      editorChats: Array.isArray(entry?.editorChats) ? entry.editorChats : [],
       staleAfterRewrite: entry?.staleAfterRewrite === true,
       staleReason: entry?.staleReason || '',
       staleFromFileName: entry?.staleFromFileName || '',
@@ -1352,21 +1211,6 @@ async function prepareGenerationContext({ projectName, userPrompt, model }) {
     console.warn(`[章节规划] 注入失败（不影响主流程）: ${outlineErr.message}`);
   }
 
-  // 4. Generate editor note from latest chapter and append to messages
-  try {
-    if (recentChapters.length > 0) {
-      const lastCh = recentChapters[recentChapters.length - 1];
-      const note = await buildEditorNote(projectName, lastCh.filename);
-      if (note) {
-        const suffix = `\n\n【后台编辑给下一章生成模型的提醒】\n${note}\n\n以上是内部编辑提醒，只用于指导生成，不要出现在正文中。`;
-        messages[1] = { role: 'user', content: messages[1].content + suffix };
-        console.log(`[编辑备注] 已并入生成 prompt`);
-      }
-    }
-  } catch (noteErr) {
-    console.warn(`[编辑备注] 生成失败（不影响主流程）: ${noteErr.message}`);
-  }
-
   return { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo };
 }
 
@@ -1380,18 +1224,6 @@ app.post('/api/generate', async (req, res) => {
 
     // 4. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
-
-    // 4b. Leakage detection: reject if editor note phrases leaked into generated content
-    const LEAK_PHRASES = [
-      '后台编辑给下一章生成模型的提醒',
-      '内部编辑提醒',
-      '编辑备注',
-      '只用于指导生成',
-      '不要出现在正文中',
-    ];
-    if (LEAK_PHRASES.some((p) => content.includes(p))) {
-      throw new Error('生成内容包含编辑备注泄漏词，已拦截保存。请重试。');
-    }
 
     // 5. Determine next chapter number and save
     await ensureDir(chaptersDir);
@@ -1565,20 +1397,6 @@ app.post('/api/generate-stream', async (req, res) => {
 
     if (!fullContent) {
       sendEvent({ type: 'error', message: 'API 返回内容为空' });
-      res.end();
-      return;
-    }
-
-    // 泄漏检测
-    const LEAK_PHRASES = [
-      '后台编辑给下一章生成模型的提醒',
-      '内部编辑提醒',
-      '编辑备注',
-      '只用于指导生成',
-      '不要出现在正文中',
-    ];
-    if (LEAK_PHRASES.some((p) => fullContent.includes(p))) {
-      sendEvent({ type: 'error', message: '生成内容包含编辑备注泄漏词，已拦截保存。请重试。' });
       res.end();
       return;
     }
@@ -2331,20 +2149,6 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', asyn
       return;
     }
 
-    // 6. Leakage detection
-    const LEAK_PHRASES = [
-      '后台编辑给下一章生成模型的提醒',
-      '内部编辑提醒',
-      '编辑备注',
-      '只用于指导生成',
-      '不要出现在正文中',
-    ];
-    if (LEAK_PHRASES.some((p) => fullContent.includes(p))) {
-      sendEvent({ type: 'error', message: '生成内容包含编辑备注泄漏词，已拦截保存。请重试。' });
-      res.end();
-      return;
-    }
-
     // 7. Save as variant
     const chapterNumber = parseInt(fileName, 10);
     const variantTitle = extractTitleFromContent(fullContent, chapterNumber);
@@ -2930,297 +2734,6 @@ app.get('/api/projects/:projectName/prompt-preview', async (req, res) => {
     res.json({ taskType, templateId, templateTitle, usedFallback, systemContent, userContent });
   } catch (err) {
     res.status(500).json({ error: err.message || '预览生成失败' });
-  }
-});
-
-// ---- GET /api/editor/note ----
-
-app.get('/api/editor/note', async (req, res) => {
-  const { projectName, chapterFileName } = req.query;
-
-  if (!projectName) {
-    return res.status(400).json({ error: '缺少项目名' });
-  }
-
-  if (!chapterFileName) {
-    return res.status(400).json({ error: '缺少章节文件名' });
-  }
-
-  try {
-    const note = await buildEditorNote(projectName, chapterFileName);
-    console.log(`[编辑备注] 项目=${projectName} 章节=${chapterFileName}`);
-    res.json({ note, projectName, chapterFileName });
-  } catch (err) {
-    const status = err.statusCode || 500;
-    res.status(status).json({ error: err.message || '编辑备注生成失败' });
-  }
-});
-
-// 在不超过 maxLen 的前提下，在句尾标点处截断，避免截断到半句话
-function truncateAtSentence(text, maxLen) {
-  if (text.length <= maxLen) return text;
-  const cut = text.slice(0, maxLen);
-  for (const ch of ['。', '！', '？', '\n']) {
-    const idx = cut.lastIndexOf(ch);
-    if (idx >= maxLen * 0.4) return cut.slice(0, idx + 1).trim();
-  }
-  // 找不到合适断句点时，退回原始截断
-  return cut.trim();
-}
-
-// ---- POST /api/editor-chat ----
-
-app.post('/api/editor-chat', async (req, res) => {
-  const { projectName, chapterId, fileName, message, contextMode = 'light' } = req.body;
-  const effectiveMode = ['light', 'normal', 'full'].includes(contextMode) ? contextMode : 'light';
-  const trimmedMessage = typeof message === 'string' ? message.trim() : '';
-
-  if (!projectName) {
-    return res.status(400).json({ error: '缺少项目名' });
-  }
-  if (!trimmedMessage) {
-    return res.status(400).json({ error: '消息不能为空' });
-  }
-
-  // 优先用 fileName 定位章节，若没有则用 chapterId
-  const resolvedFileName = (typeof fileName === 'string' && fileName.trim())
-    ? fileName.trim()
-    : (typeof chapterId === 'string' && chapterId.trim())
-      ? chapterId.trim()
-      : '';
-
-  if (!resolvedFileName || !isValidChapterFileName(resolvedFileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, resolvedFileName);
-  const relativePath = path.relative(chaptersDir, chapterPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  // 读取章节正文，内容为空或读取失败则直接返回 404，不调用 AI
-  let chapterContent;
-  try {
-    chapterContent = await fs.readFile(chapterPath, 'utf-8');
-  } catch {
-    return res.status(404).json({ error: '当前章节正文读取失败，无法进行编辑分析' });
-  }
-  if (!chapterContent || chapterContent.trim().length === 0) {
-    return res.status(404).json({ error: '当前章节正文读取失败，无法进行编辑分析' });
-  }
-
-  // 读取项目设置文件
-  const [world, characters, summary, style] = await Promise.all([
-    fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
-    fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
-    fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
-    fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
-  ]);
-  const editorialMemoryForChat = await readEditorialMemory(projectName);
-
-  // 从 index.json 获取本章元数据
-  let chapterTitle = resolvedFileName;
-  let editorNotes = [];
-  let editorChats = [];
-  try {
-    const indexEntries = await readChapterIndex(chaptersDir);
-    const entry = indexEntries.find((item) => item.fileName === resolvedFileName);
-    if (entry) {
-      chapterTitle = entry.title || resolvedFileName;
-      editorNotes = Array.isArray(entry.editorNotes) ? entry.editorNotes : [];
-      editorChats = Array.isArray(entry.editorChats) ? entry.editorChats : [];
-    }
-  } catch {
-    // index.json 读取失败不影响主流程
-  }
-
-  // 根据 contextMode 构建不同粒度的上下文
-  const recentUserMessages = editorChats
-    .filter((chat) => chat.role === 'user')
-    .slice(-4)
-    .map((chat) => `用户：${chat.content}`)
-    .join('\n');
-
-  const allHistory = editorChats.slice(-6).map((chat) => {
-    const roleName = chat.role === 'user' ? '用户' : '随书编辑';
-    return `${roleName}：${chat.content}`;
-  }).join('\n');
-
-  let contextText = '';
-
-  if (effectiveMode === 'light') {
-    // 闲聊模式：只发送项目名、章节标题、章节摘要、最近用户消息、编辑记忆摘要
-    contextText += `## 当前章节\n项目：${projectName}\n章节：${chapterTitle}（${resolvedFileName}）\n\n`;
-    if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 600)}\n\n`;
-    if (editorialMemoryForChat) {
-      const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 800);
-      if (selectedMemory) {
-        contextText += `## 编辑记忆摘要\n${selectedMemory}\n\n`;
-      }
-    }
-    if (recentUserMessages) {
-      contextText += `## 对话历史（仅用户消息）\n${recentUserMessages.slice(0, 800)}\n\n`;
-    }
-  } else if (effectiveMode === 'normal') {
-    // 分析模式：发送章节全文、必要设定、最近完整对话
-    if (world) contextText += `## 世界观设定\n${world.slice(0, 800)}\n\n`;
-    if (characters) contextText += `## 人物设定\n${characters.slice(0, 800)}\n\n`;
-    if (allHistory) {
-      contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
-    }
-    contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${formatEditorChatFullChapter(chapterContent)}\n\n`;
-  } else if (effectiveMode === 'full') {
-    // 全文模式：发送章节全文、世界观、人物、写作规则、剧情摘要、编辑记忆
-    if (world) contextText += `## 世界观设定\n${world.slice(0, 2000)}\n\n`;
-    if (characters) contextText += `## 人物设定\n${characters.slice(0, 2000)}\n\n`;
-    if (style) contextText += `## 写作规则\n${style.slice(0, 1200)}\n\n`;
-    if (summary) contextText += `## 剧情摘要\n${summary.slice(0, 1200)}\n\n`;
-    if (editorialMemoryForChat) {
-      const selectedMemory = selectEditorialMemoryForPrompt(editorialMemoryForChat, 2000);
-      if (selectedMemory) {
-        contextText += `## 项目编辑记忆\n${selectedMemory}\n\n`;
-      }
-    }
-    if (allHistory) {
-      contextText += `## 最近编辑对话\n${allHistory.slice(0, 1500)}\n\n`;
-    }
-    contextText += `## 当前章节 ${chapterTitle}（${resolvedFileName}）\n${formatEditorChatFullChapter(chapterContent)}\n\n`;
-  }
-
-  contextText += `## 用户本次问题\n${trimmedMessage}`;
-
-  const reply = sanitizeEditorText(truncateAtSentence(await callDeepSeek('deepseek-v4-flash', [
-    {
-      role: 'system',
-      content:
-        '你是”小墨匣”写作工具的随书编辑。你和作者的关系像私聊，不是审稿人。\n\n' +
-        '一、核心定位\n' +
-        '你不需要审稿。章节内容和项目设定只是背景资料，不是你的分析任务。\n' +
-        '用户最后发送的消息是你唯一需要直接回应的问题。\n' +
-        '每次只回答用户正在说的这句话，不要提前展开全面分析。\n\n' +
-        '二、默认回复规则\n' +
-        '1. 回复必须像私聊，1～3 句话。\n' +
-        '2. 不使用小标题，不编号，不列点。\n' +
-        '3. 不输出”本章问题””人物判断””节奏判断””修改建议””下章注意”等审稿式结构。\n' +
-        '4. 用户吐槽、感叹、玩梗、随口问时，自然接话就行，不要主动扩展成章节评审。\n' +
-        '5. 用户问感受时，直接说阅读感受加一点理由，不展开成报告。\n' +
-        '6. 用户问后续写法时，直接讨论后续方向，不要先回头审稿。\n' +
-        '7. 不要以”用户说……”开头。不要复述你的任务，不要解释你将怎么分析。直接回话。\n' +
-        '8. 闲聊回复 80～180 字，一般问题不超过 250 字。\n\n' +
-        '三、分析回复规则（仅以下情况允许打破默认回复规则）\n' +
-        '当用户明确要求分析、审稿、列问题、给修改建议、逐段评审、判断节奏或人物动机时，\n' +
-        '才可以使用小标题、列点、结构化分析。即使如此，也要先给简短判断再展开。\n' +
-        '当前对话的上下文模式由用户在前端选择——你收到的背景信息可能较少（闲聊模式）或完整（全量模式），\n' +
-        '但你的回复风格始终由用户消息的内容决定，而非上下文多寡。',
-    },
-    {
-      role: 'user',
-      content: contextText,
-    },
-  ]), 300));
-
-  const now = Date.now();
-  const userChat = {
-    id: `chat-${now}-user`,
-    role: 'user',
-    content: trimmedMessage,
-    createdAt: now,
-  };
-  const editorChat = {
-    id: `chat-${now}-editor`,
-    role: 'editor',
-    content: reply,
-    createdAt: Date.now(),
-  };
-  editorChats = [...editorChats, userChat, editorChat];
-
-  // 写回 index.json
-  try {
-    const { entries, entry: idxEntry } = await ensureChapterIndexEntry(chaptersDir, resolvedFileName);
-    idxEntry.editorChats = editorChats;
-    idxEntry.editorNotes = editorNotes;
-    await writeChapterIndex(chaptersDir, entries);
-  } catch {
-    // index.json 写入失败不影响回复
-  }
-
-  res.json({ reply, editorChats });
-});
-
-// ---- POST /api/projects/:projectName/chapters/:fileName/editor-notes ----
-
-app.post('/api/projects/:projectName/chapters/:fileName/editor-notes', async (req, res) => {
-  const { projectName, fileName } = req.params;
-  const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-  if (!content) {
-    return res.status(400).json({ error: '备注内容不能为空' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  try {
-    const chaptersDir = path.join(projectDir, 'chapters');
-    await fs.access(path.join(chaptersDir, fileName));
-    const { entries, entry } = await ensureChapterIndexEntry(chaptersDir, fileName);
-    const editorNotes = Array.isArray(entry.editorNotes) ? entry.editorNotes : [];
-    const cleanContent = sanitizeEditorText(content, 300);
-    if (!cleanContent) {
-      return res.status(400).json({ error: '备注内容不能为空' });
-    }
-    const note = `编辑建议 ${formatLocalMinute()}\n${cleanContent}`;
-    entry.editorNotes = [...editorNotes, note];
-    await writeChapterIndex(chaptersDir, entries);
-    res.json({ ok: true, note, editorNotes: entry.editorNotes });
-  } catch (err) {
-    const status = err.code === 'ENOENT' ? 404 : 500;
-    res.status(status).json({ error: err.message || '保存编辑备注失败' });
-  }
-});
-
-// ---- DELETE /api/projects/:projectName/chapters/:fileName/editor-chats ----
-
-app.delete('/api/projects/:projectName/chapters/:fileName/editor-chats', async (req, res) => {
-  const { projectName, fileName } = req.params;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  try {
-    const chaptersDir = path.join(projectDir, 'chapters');
-    await fs.access(path.join(chaptersDir, fileName));
-    const { entries, entry } = await ensureChapterIndexEntry(chaptersDir, fileName);
-    entry.editorChats = [];
-    await writeChapterIndex(chaptersDir, entries);
-    res.json({ ok: true, editorChats: [] });
-  } catch (err) {
-    const status = err.code === 'ENOENT' ? 404 : 500;
-    res.status(status).json({ error: err.message || '清空编辑对话失败' });
   }
 });
 
