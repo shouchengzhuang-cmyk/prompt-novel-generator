@@ -90,4 +90,23 @@ async function sendFeishuMessage(text) {
   }
 }
 
-module.exports = { sendFeishuMessage, checkConfig };
+/**
+ * Build a structured report message with the standard XMX_REPORT prefix.
+ *
+ * @param {string} content - The report body text
+ * @param {string} [type='收尾报告'] - Report type label
+ * @returns {string} Formatted message ready to send
+ */
+function formatReportMessage(content, type) {
+  type = type || '收尾报告';
+  return [
+    'XMX_REPORT',
+    '项目：小墨匣',
+    '助手：莉莉丝',
+    `类型：${type}`,
+    '内容：',
+    content,
+  ].join('\n');
+}
+
+module.exports = { sendFeishuMessage, checkConfig, formatReportMessage };

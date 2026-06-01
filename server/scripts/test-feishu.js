@@ -10,7 +10,7 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const { sendFeishuMessage, checkConfig } = require('../services/feishuNotifier');
+const { sendFeishuMessage, checkConfig, formatReportMessage } = require('../services/feishuNotifier');
 
 async function main() {
   const config = checkConfig();
@@ -22,16 +22,13 @@ async function main() {
     process.exit(1);
   }
 
-  const message = [
-    'LILITH_REPORT',
-    '小墨匣主理人莉莉丝已接入远程指挥台。',
-  ].join('\n');
+  const message = formatReportMessage('小墨匣主理人莉莉丝已接入远程指挥台。', '接入测试');
 
-  console.log('发送测试消息到飞书...');
+  console.error('发送测试消息到飞书...');
   const result = await sendFeishuMessage(message);
 
   if (result.ok) {
-    console.log('✓ 飞书测试消息发送成功');
+    console.error('✓ 飞书测试消息发送成功');
     process.exit(0);
   } else {
     console.error('✗ 发送失败:', result.error);
