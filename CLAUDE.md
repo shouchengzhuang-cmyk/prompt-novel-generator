@@ -79,6 +79,7 @@
 
 - 普通改代码、修 bug、排错、重构：`skills/cc-coding-discipline.md`
 - 自动 Git 提交、push、SCP 上传、服务器构建重启：`skills/xiaomoxia-auto-git-scp-deploy.md`
+- 飞书回报、收尾报告推送：`skills/xiaomoxia-feishu-report.md`
 
 ## 5. Default Report Format
 
