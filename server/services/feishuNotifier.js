@@ -67,6 +67,9 @@ async function sendFeishuMessage(text) {
 
     const body = await response.text();
 
+    // 通知 undici 释放连接，避免 Windows 上 libuv 断言
+    try { await response.body?.cancel(); } catch {}
+
     if (!response.ok) {
       // Redact sensitive parts: only expose HTTP status and response body (which
       // comes from Feishu, not from our config)

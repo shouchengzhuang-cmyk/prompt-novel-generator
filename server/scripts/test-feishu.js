@@ -29,10 +29,10 @@ async function main() {
 
   if (result.ok) {
     console.error('✓ 飞书测试消息发送成功');
-    process.exit(0);
+    process.exitCode = 0;
   } else {
     console.error('✗ 发送失败:', result.error);
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
