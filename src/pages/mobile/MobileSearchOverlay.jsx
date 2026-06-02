@@ -39,7 +39,7 @@ export default function MobileSearchOverlay({
                     {group.map((item, index) => (
                       /* 搜索结果：根据结果类型加载项目/章节或定位设定，会改变当前移动端视图。 */
                       <button
-                        key={`${item.type}-${item.projectName}-${item.fileName || item.field || index}`}
+                        key={`${item.type}-${item.projectName}-${item.fileName || item.settingKey || index}`}
                         className="mobile-search-result"
                         type="button"
                         onClick={() => onResultClick(item)}

@@ -124,6 +124,13 @@ function App() {
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   const [mobileSearchIndex, setMobileSearchIndex] = useState([]);
   const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
+
+  // Desktop global search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [showDesktopSearch, setShowDesktopSearch] = useState(false);
+  const searchInputRef = useRef(null);
   const [lastProjectName, setLastProjectName] = useState(() => localStorage.getItem('xiaomoxia-last-project') || '');
   const [mobileWritingTarget, setMobileWritingTarget] = useState(null);
   const [mobileWritingPrompt, setMobileWritingPrompt] = useState('');
@@ -1917,33 +1924,43 @@ function App() {
     return index;
   };
 
-  const openMobileSearch = async () => {
+  const openMobileSearch = () => {
     setShowMobileSearch(true);
     setMobileSearchQuery('');
+    setMobileSearchIndex([]);
+    setMobileSearchLoading(false);
     requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
-    if (mobileSearchLoading) return;
-    setMobileSearchLoading(true);
-    try {
-      const index = await buildMobileSearchIndex();
-      setMobileSearchIndex(index);
-    } finally {
-      setMobileSearchLoading(false);
-      requestAnimationFrame(() => mobileSearchInputRef.current?.focus());
-    }
   };
 
   const closeMobileSearch = () => {
     setShowMobileSearch(false);
     setMobileSearchQuery('');
+    setMobileSearchIndex([]);
   };
 
+  // 移动端搜索：输入变化后延迟调 API
+  useEffect(() => {
+    if (!mobileSearchQuery.trim()) {
+      setMobileSearchIndex([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setMobileSearchLoading(true);
+      try {
+        const data = await ProjectsApi.searchProjects(mobileSearchQuery.trim(), 30);
+        setMobileSearchIndex(data.results || []);
+      } catch {
+        setMobileSearchIndex([]);
+      } finally {
+        setMobileSearchLoading(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [mobileSearchQuery]);
+
   const mobileSearchResults = useMemo(() => {
-    const q = mobileSearchQuery.trim().toLowerCase();
-    if (!q) return [];
-    return mobileSearchIndex
-      .filter((item) => item.text.toLowerCase().includes(q))
-      .slice(0, 30);
-  }, [mobileSearchIndex, mobileSearchQuery]);
+    return mobileSearchIndex;
+  }, [mobileSearchIndex]);
 
   const handleMobileSearchResultClick = async (result) => {
     if (!result?.projectName) return;
@@ -1956,16 +1973,83 @@ function App() {
       return;
     }
     if (result.type === 'setting') {
-      const focusTarget = result.field === 'characters'
+      const focusTarget = result.settingKey === 'characters'
         ? 'characters'
-        : result.field === 'summary'
+        : result.settingKey === 'summary'
           ? 'summary'
-          : 'world';
+          : result.settingKey === 'outline'
+            ? ''
+            : 'world';
       openSettingsEditor(details, result.projectName, focusTarget);
       navigateTo('project');
       return;
     }
     navigateTo('project');
+  };
+
+  // ---- 全局搜索（桌面 + 移动端共用 API） ----
+
+  // 桌面搜索 debounce
+  const searchTimerRef = useRef(null);
+
+  const handleSearch = async (q) => {
+    if (!q || !q.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    setSearchLoading(true);
+    try {
+      const data = await ProjectsApi.searchProjects(q.trim(), 50);
+      setSearchResults(data.results || []);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  const handleSearchQueryChange = (value) => {
+    setSearchQuery(value);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    if (!value.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    searchTimerRef.current = setTimeout(() => handleSearch(value), 300);
+  };
+
+  const handleSearchResultClick = async (result) => {
+    if (!result?.projectName) return;
+    setShowDesktopSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    await handleSelectProject(result.projectName);
+    if (result.type === 'chapter' && result.fileName) {
+      await handleReadChapter(result.fileName, result.projectName);
+      if (isMobile) navigateTo('chapter');
+    } else if (result.type === 'setting') {
+      const focusTarget = result.settingKey === 'characters'
+        ? 'characters'
+        : result.settingKey === 'summary'
+          ? 'summary'
+          : 'world';
+      openSettingsEditor(projectDetails, result.projectName, focusTarget);
+      if (isMobile) navigateTo('project');
+    }
+    if (!isMobile) setDesktopView('workbench');
+  };
+
+  const openDesktopSearch = () => {
+    setShowDesktopSearch(true);
+    setSearchQuery('');
+    setSearchResults([]);
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
+  const closeDesktopSearch = () => {
+    setShowDesktopSearch(false);
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
   const handleGenProgressDone = useCallback(() => {
@@ -2335,6 +2419,15 @@ function App() {
           onGenerateOutline={handleGenerateOutline}
           formatProjectUpdatedAt={formatProjectUpdatedAt}
           getProjectChapterCount={getProjectChapterCount}
+          searchQuery={searchQuery}
+          onSearchQueryChange={handleSearchQueryChange}
+          searchResults={searchResults}
+          searchLoading={searchLoading}
+          showDesktopSearch={showDesktopSearch}
+          onOpenDesktopSearch={openDesktopSearch}
+          onCloseDesktopSearch={closeDesktopSearch}
+          onSearchResultClick={handleSearchResultClick}
+          searchInputRef={searchInputRef}
         />
       )}
       {isMobile && showMobileSearch && (

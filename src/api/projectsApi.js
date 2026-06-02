@@ -188,3 +188,13 @@ export function rebuildChapterIndex(projectName) {
     method: 'POST',
   });
 }
+
+// ========== 全局搜索 ==========
+
+/** 全局搜索关键词 */
+export function searchProjects(query, limit) {
+  const params = new URLSearchParams();
+  params.set('q', query);
+  if (limit) params.set('limit', limit);
+  return safeJsonFetch(`/api/search?${params.toString()}`);
+}
