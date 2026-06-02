@@ -1,0 +1,103 @@
+{
+  "description": "Permission requests matching these rules will show the confirmation popup. Non-matching requests are auto-allowed without popup.",
+  "rules": [
+    {
+      "name": "git-write-operations",
+      "description": "Git commits, pushes, resets, and other write/history-modifying operations",
+      "tool_names": ["Bash"],
+      "match_type": "command_contains",
+      "patterns": [
+        "git add",
+        "git commit",
+        "git push",
+        "git reset",
+        "git clean",
+        "git checkout",
+        "git switch",
+        "git rebase",
+        "git merge",
+        "git tag"
+      ]
+    },
+    {
+      "name": "deploy-and-remote-operations",
+      "description": "SSH, SCP, rsync, pm2, nginx, systemctl, and other remote/deploy operations",
+      "tool_names": ["Bash"],
+      "match_type": "command_contains",
+      "patterns": [
+        "ssh ",
+        "scp ",
+        "rsync ",
+        "pm2 ",
+        "nginx ",
+        "systemctl ",
+        "service ",
+        "certbot ",
+        "bash <(curl",
+        "bash <(wget",
+        "| bash"
+      ]
+    },
+    {
+      "name": "destructive-file-operations",
+      "description": "Delete, remove, overwrite, and move operations",
+      "tool_names": ["Bash"],
+      "match_type": "command_contains",
+      "patterns": [
+        "rm ",
+        "rmdir",
+        "del ",
+        "erase",
+        "Remove-Item ",
+        "mv ",
+        "Move-Item ",
+        "cp ",
+        "Copy-Item "
+      ]
+    },
+    {
+      "name": "sensitive-file-modification",
+      "description": "Editing sensitive project configuration and documentation files",
+      "tool_names": ["Edit", "Write", "MultiEdit"],
+      "match_type": "file_path_glob",
+      "patterns": [
+        "**/CLAUDE.md",
+        "**/AGENT.md",
+        "skills/*.md",
+        ".env",
+        ".env.*",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "ecosystem*.cjs",
+        "ecosystem*.js",
+        "**/nginx/**",
+        "server/data/**",
+        "data/**",
+        "docs/PRD.md",
+        "docs/NEXT_STEPS.md",
+        "README.md"
+      ]
+    },
+    {
+      "name": "permission-environment-system-operations",
+      "description": "Permission changes, environment variables, and system package management",
+      "tool_names": ["Bash"],
+      "match_type": "command_contains",
+      "patterns": [
+        "chmod",
+        "chown",
+        "setx",
+        "export ",
+        "$env:",
+        "npm install",
+        "npm uninstall",
+        "pip install",
+        "winget",
+        "choco",
+        "scoop"
+      ]
+    }
+  ]
+}

@@ -1,4 +1,152 @@
 $LogFile = "D:\Projects\prompt-novel-generator\notify-confirm-hook.log"
+$ConfigFile = "D:\Projects\prompt-novel-generator\ask-before-allow-list.json"
+$PermissionLogFile = "D:\Projects\prompt-novel-generator\permission-hook.log"
+
+function Write-PermissionLog {
+    param([string]$Message)
+    try {
+        $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+        Add-Content -Path $PermissionLogFile -Encoding UTF8 -Value "$ts | $Message"
+    } catch {
+        # Silently ignore log errors
+    }
+}
+
+function Load-AskBeforeAllowConfig {
+    param([string]$ConfigPath)
+
+    if (-not (Test-Path $ConfigPath)) {
+        Write-PermissionLog "config_not_found | $ConfigPath"
+        return $null
+    }
+
+    try {
+        $config = Get-Content -Path $ConfigPath -Encoding UTF8 -Raw | ConvertFrom-Json
+        return $config
+    } catch {
+        Write-PermissionLog "config_load_failed | $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Test-CommandMatch {
+    param([string]$Command, [array]$Patterns)
+
+    foreach ($pattern in $Patterns) {
+        if ($Command -like "*$pattern*") {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Test-FilePathMatch {
+    param([string]$FilePath, [array]$Patterns)
+
+    $normalized = $FilePath.Replace('\', '/')
+    $projectRoot = "D:/Projects/prompt-novel-generator"
+
+    # Make relative to project root if possible
+    $relative = $normalized
+    if ($relative.StartsWith($projectRoot, [StringComparison]::OrdinalIgnoreCase)) {
+        $relative = $relative.Substring($projectRoot.Length).TrimStart('/')
+    }
+
+    $fileName = $relative.Split('/')[-1]
+
+    foreach ($pattern in $Patterns) {
+        $p = $pattern.Replace('\', '/')
+
+        # Pattern with **/ prefix — match filename/suffix anywhere in tree
+        if ($p.StartsWith('**/')) {
+            $rest = $p.Substring(3)
+            if ($relative -eq $rest -or $relative.EndsWith('/' + $rest)) {
+                return $true
+            }
+            if (-not $rest.Contains('/') -and $fileName -like $rest) {
+                return $true
+            }
+            continue
+        }
+
+        # Pattern with ** in middle or end — prefix/suffix match
+        if ($p.Contains('**')) {
+            $parts = $p -split '\*\*', 2
+            $prefix = $parts[0]
+            $suffix = $parts[1]
+            if ($relative.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+                if ([string]::IsNullOrEmpty($suffix) -or $relative.EndsWith($suffix, [StringComparison]::OrdinalIgnoreCase)) {
+                    return $true
+                }
+            }
+            continue
+        }
+
+        # Simple wildcard pattern (no **)
+        if ($relative -like $p) {
+            return $true
+        }
+
+        # For patterns without directory separators, also match against filename
+        if (-not $p.Contains('/')) {
+            if ($relative.EndsWith('/' + $p)) {
+                return $true
+            }
+            if ($fileName -like $p) {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Test-ShouldAskBeforeAllow {
+    param(
+        [string]$ToolName,
+        [string]$Command,
+        [string]$FilePath
+    )
+
+    $config = Load-AskBeforeAllowConfig -ConfigPath $ConfigFile
+    if (-not $config) {
+        # Config missing or broken — fail-safe: ask
+        return $true
+    }
+
+    foreach ($rule in $config.rules) {
+        $toolNames = @($rule.tool_names)
+        $matchType = $rule.match_type
+        $patterns = @($rule.patterns)
+        $ruleName = $rule.name
+
+        if ($ToolName -notin $toolNames) {
+            continue
+        }
+
+        $matched = $false
+        switch ($matchType) {
+            "command_contains" {
+                if ($Command -and (Test-CommandMatch -Command $Command -Patterns $patterns)) {
+                    $matched = $true
+                }
+            }
+            "file_path_glob" {
+                if ($FilePath -and (Test-FilePathMatch -FilePath $FilePath -Patterns $patterns)) {
+                    $matched = $true
+                }
+            }
+        }
+
+        if ($matched) {
+            $logTarget = if ([string]::IsNullOrEmpty($Command)) { $FilePath } else { $Command }
+            Write-PermissionLog "popup_required | $ToolName | $logTarget | rule=$ruleName"
+            return $true
+        }
+    }
+
+    return $false
+}
 
 try {
     $Time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -27,10 +175,38 @@ try {
         $ToolInputText = $InputText
     }
 
-    Add-Content -Path $LogFile -Value "=============================="
-    Add-Content -Path $LogFile -Value "Hook fired at: $Time"
-    Add-Content -Path $LogFile -Value "Tool: $ToolName"
-    Add-Content -Path $LogFile -Value "Input: $ToolInputText"
+    # === Auto-allow pre-check ===
+    # If the request doesn't match the ask-before-allow list, auto-allow without popup
+    $shouldAsk = $true
+    if ($Payload) {
+        $cmd = ""
+        $fpath = ""
+        if ($Payload.tool_input) {
+            if ($Payload.tool_input.command) { $cmd = [string]$Payload.tool_input.command }
+            if ($Payload.tool_input.file_path) { $fpath = [string]$Payload.tool_input.file_path }
+        }
+        $shouldAsk = Test-ShouldAskBeforeAllow -ToolName $ToolName -Command $cmd -FilePath $fpath
+    }
+
+    if (-not $shouldAsk) {
+        $logTarget = if ([string]::IsNullOrEmpty($cmd)) { $fpath } else { $cmd }
+        Write-PermissionLog "auto_allow | $ToolName | $logTarget | rule=none"
+        $Response = @{
+            hookSpecificOutput = @{
+                hookEventName = "PermissionRequest"
+                decision = @{
+                    behavior = "allow"
+                }
+            }
+        }
+        $Response | ConvertTo-Json -Depth 20 -Compress
+        exit 0
+    }
+
+    Add-Content -Path $LogFile -Encoding UTF8 -Value "=============================="
+    Add-Content -Path $LogFile -Encoding UTF8 -Value "Hook fired at: $Time"
+    Add-Content -Path $LogFile -Encoding UTF8 -Value "Tool: $ToolName"
+    Add-Content -Path $LogFile -Encoding UTF8 -Value "Input: $ToolInputText"
 
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
@@ -128,7 +304,7 @@ try {
     $form.Dispose()
 
     if ($Result -eq [System.Windows.Forms.DialogResult]::Yes) {
-        Add-Content -Path $LogFile -Value "User decision: allow"
+        Add-Content -Path $LogFile -Encoding UTF8 -Value "User decision: allow"
 
         $Response = @{
             hookSpecificOutput = @{
@@ -144,7 +320,7 @@ try {
     }
 
     if ($Result -eq [System.Windows.Forms.DialogResult]::OK) {
-        Add-Content -Path $LogFile -Value "User decision: always_allow"
+        Add-Content -Path $LogFile -Encoding UTF8 -Value "User decision: always_allow"
 
         $Response = @{
             hookSpecificOutput = @{
@@ -166,7 +342,7 @@ try {
     }
 
     if ($Result -eq [System.Windows.Forms.DialogResult]::No) {
-        Add-Content -Path $LogFile -Value "User decision: deny"
+        Add-Content -Path $LogFile -Encoding UTF8 -Value "User decision: deny"
 
         $alternative = ""
         try {
@@ -188,7 +364,7 @@ try {
 
         if ($alternative) {
             $denyMessage = "User denied this action from the popup. Instead: $alternative"
-            Add-Content -Path $LogFile -Value "Alternative: $alternative"
+            Add-Content -Path $LogFile -Encoding UTF8 -Value "Alternative: $alternative"
 
             $Response = @{
                 hookSpecificOutput = @{
@@ -215,8 +391,8 @@ try {
     }
 }
 catch {
-    Add-Content -Path $LogFile -Value "ERROR:"
-    Add-Content -Path $LogFile -Value $_.Exception.Message
+    Add-Content -Path $LogFile -Encoding UTF8 -Value "ERROR:"
+    Add-Content -Path $LogFile -Encoding UTF8 -Value $_.Exception.Message
 
     $Response = @{
         hookSpecificOutput = @{
