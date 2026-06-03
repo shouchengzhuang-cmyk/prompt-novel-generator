@@ -3026,8 +3026,19 @@ async function computeEventCardUsage(projectDir) {
 }
 
 function extractTitleFromMarkdown(content) {
-  const match = content.match(/^#\s+(.+)/m);
-  return match ? match[1].trim() : null;
+  // Priority 1: ## 事件标题 followed by content on the next line (灵格工坊格式)
+  const eventTitleMatch = content.match(/^##\s*事件标题\s*\n\s*([^\n]+)/m);
+  if (eventTitleMatch) {
+    const title = eventTitleMatch[1].trim();
+    if (title) return title;
+  }
+  // Priority 2: # heading
+  const h1Match = content.match(/^#\s+(.+)/m);
+  if (h1Match) {
+    const title = h1Match[1].trim();
+    if (title) return title;
+  }
+  return null;
 }
 
 const EVENT_CARD_TEMPLATE = `# 对话事件卡
@@ -3148,8 +3159,16 @@ app.post('/api/projects/:projectName/materials/event-cards', async (req, res) =>
   const { projectName } = req.params;
   const { title, cardName, content } = req.body;
 
-  if (!title && !cardName) {
+  const hasContent = content !== undefined && content !== null && content.trim() !== '';
+
+  if (!hasContent && !title && !cardName) {
+    // No content, no title, no cardName → nothing to work with
     return res.status(400).json({ error: '标题或文件名至少提供一个' });
+  }
+
+  // Explicitly empty content is rejected
+  if (content !== undefined && content !== null && content.trim() === '') {
+    return res.status(400).json({ error: '内容不能为空' });
   }
 
   let projectDir;
@@ -3167,6 +3186,9 @@ app.post('/api/projects/:projectName/materials/event-cards', async (req, res) =>
   const cardsDir = getEventCardsDir(projectDir);
   await ensureDir(cardsDir);
 
+  // For auto-generated filename, extract title from content when no title provided
+  const effectiveTitle = title || (hasContent ? extractTitleFromMarkdown(content) : title);
+
   let fileName;
   if (cardName && cardName.trim()) {
     try {
@@ -3175,7 +3197,7 @@ app.post('/api/projects/:projectName/materials/event-cards', async (req, res) =>
       return res.status(400).json({ error: err.message });
     }
   } else {
-    fileName = generateSafeFileName(title);
+    fileName = generateSafeFileName(effectiveTitle);
   }
 
   const filePath = path.join(cardsDir, fileName);

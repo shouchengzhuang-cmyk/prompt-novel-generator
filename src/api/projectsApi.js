@@ -210,6 +210,15 @@ export function createEventCard(projectName, { title, cardName, content }) {
   });
 }
 
+/** 导入 Markdown 事件卡（含内容） */
+export function importEventCard(projectName, { content, cardName }) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/materials/event-cards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, cardName }),
+  });
+}
+
 /** 更新事件卡内容 */
 export function updateEventCard(projectName, cardName, content) {
   return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/materials/event-cards/${encodeURIComponent(cardName)}`, {

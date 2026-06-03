@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import * as ProjectsApi from '../../api/projectsApi';
 
 /**
  * 剧情素材面板 — 事件卡管理
- * 自包含组件：列表 / 编辑器 / 新建表单
+ * 自包含组件：列表 / 编辑器 / 新建表单 / 导入
  */
 export default function MaterialPanel({ currentProject, onNotify, onNavigateToChapter }) {
-  const [view, setView] = useState('list');    // list | editor | create
+  const [view, setView] = useState('list');    // list | editor | create | importing
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,6 +19,12 @@ export default function MaterialPanel({ currentProject, onNotify, onNavigateToCh
   // Create form
   const [newTitle, setNewTitle] = useState('');
   const [newCardName, setNewCardName] = useState('');
+
+  // Import
+  const [importMode, setImportMode] = useState('paste'); // paste | file
+  const [importContent, setImportContent] = useState('');
+  const [importFileName, setImportFileName] = useState('');
+  const fileInputRef = useRef(null);
 
   const loadCards = useCallback(async () => {
     if (!currentProject) return;
@@ -104,11 +110,53 @@ export default function MaterialPanel({ currentProject, onNotify, onNavigateToCh
     }
   }, [currentProject, newTitle, newCardName, onNotify, loadCards]);
 
+  const handleImportCard = useCallback(async () => {
+    if (!importContent.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const data = await ProjectsApi.importEventCard(currentProject, {
+        content: importContent.trim(),
+        cardName: importFileName.trim() || undefined,
+      });
+      onNotify?.({ title: '导入成功', message: `事件卡「${data.title}」已导入` });
+      setImportContent('');
+      setImportFileName('');
+      setView('list');
+      loadCards();
+    } catch (err) {
+      setError(err.message || '导入失败');
+    } finally {
+      setSaving(false);
+    }
+  }, [currentProject, importContent, importFileName, onNotify, loadCards]);
+
+  const handleFileSelected = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.md')) {
+      setError('只支持 .md 文件');
+      e.target.value = '';
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setImportContent(ev.target?.result || '');
+      if (!importFileName.trim()) {
+        setImportFileName(file.name);
+      }
+    };
+    reader.readAsText(file);
+  }, [importFileName]);
+
   const handleBackToList = useCallback(() => {
     setView('list');
     setCurrentCard(null);
     setEditContent('');
     setError('');
+    setImportContent('');
+    setImportFileName('');
+    setImportMode('paste');
   }, []);
 
   // ===== List View =====
@@ -119,6 +167,9 @@ export default function MaterialPanel({ currentProject, onNotify, onNavigateToCh
           <h2>剧情素材</h2>
           <button className="btn" onClick={() => setView('create')} disabled={!currentProject}>
             ＋ 新建事件卡
+          </button>
+          <button className="btn btn-secondary" onClick={() => { setError(''); setView('importing'); setImportContent(''); setImportFileName(''); }} disabled={!currentProject}>
+            ↑ 导入 Markdown
           </button>
         </div>
         {error && <div className="error">{error}</div>}
@@ -207,6 +258,97 @@ export default function MaterialPanel({ currentProject, onNotify, onNavigateToCh
           <button className="btn" onClick={handleCreateCard} disabled={saving || !newTitle.trim()}>
             {saving ? '创建中...' : '创建事件卡'}
           </button>
+        </div>
+      </section>
+    );
+  }
+
+  // ===== Import View =====
+  if (view === 'importing') {
+    return (
+      <section className="material-panel">
+        <div className="material-panel-head">
+          <h2>导入事件卡</h2>
+          <button className="btn btn-secondary" onClick={handleBackToList}>
+            ← 返回列表
+          </button>
+        </div>
+        {error && <div className="error">{error}</div>}
+
+        <div className="material-import-tabs">
+          <button
+            className={`tab-btn ${importMode === 'paste' ? 'active' : ''}`}
+            onClick={() => setImportMode('paste')}
+          >
+            粘贴导入
+          </button>
+          <button
+            className={`tab-btn ${importMode === 'file' ? 'active' : ''}`}
+            onClick={() => setImportMode('file')}
+          >
+            文件导入
+          </button>
+        </div>
+
+        <div className="material-import-form">
+          {importMode === 'paste' ? (
+            <div className="material-import-paste">
+              <label>粘贴 Markdown 内容 *</label>
+              <textarea
+                className="material-editor-textarea material-import-textarea"
+                value={importContent}
+                onChange={(e) => setImportContent(e.target.value)}
+                placeholder={`# 对话事件卡\n\n## 事件标题\n战败的女战士\n\n## 事件摘要\n...`}
+                autoFocus
+              />
+            </div>
+          ) : (
+            <div className="material-import-file">
+              <label>选择 .md 文件</label>
+              <div className="file-input-area">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".md,text/markdown"
+                  onChange={handleFileSelected}
+                  className="file-input-hidden"
+                />
+                <button
+                  className="btn"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  选择文件
+                </button>
+                <span className="file-name-hint">
+                  {importContent ? `已选择文件（${importContent.length} 字符）` : '未选择文件'}
+                </span>
+              </div>
+              {importContent && (
+                <div className="material-import-preview">
+                  <label>内容预览</label>
+                  <pre className="import-preview-text">{importContent.slice(0, 500)}{importContent.length > 500 ? '...' : ''}</pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          <label>文件名（可选）</label>
+          <input
+            value={importFileName}
+            onChange={(e) => setImportFileName(e.target.value)}
+            placeholder="留空则根据标题自动生成，如：2026-06-03-xxx.md"
+          />
+          <p className="hint">文件名以 .md 结尾，只允许字母、数字、中文和连字符</p>
+
+          <div className="material-import-actions">
+            <button
+              className="btn"
+              onClick={handleImportCard}
+              disabled={saving || !importContent.trim()}
+            >
+              {saving ? '导入中...' : '导入事件卡'}
+            </button>
+          </div>
         </div>
       </section>
     );
