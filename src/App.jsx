@@ -170,6 +170,10 @@ function App() {
   const [mobileEditContent, setMobileEditContent] = useState('');
   const [mobileEditSaving, setMobileEditSaving] = useState(false);
 
+  // Event card selection for generation
+  const [selectedEventCards, setSelectedEventCards] = useState([]);
+  const [eventCardsList, setEventCardsList] = useState([]);
+
   // Bottom-right notification card
   const [notification, setNotification] = useState(null);
 
@@ -492,6 +496,8 @@ function App() {
     setOutlineText('');
     setOutlineError('');
     setDebugPromptInfo(null);
+    setSelectedEventCards([]);
+    setEventCardsList([]);
     if (isMobile) navigateTo('project');
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
     setEditWorld('');
@@ -506,6 +512,10 @@ function App() {
       setProjectDetails(data);
       setProjectChapterCounts(prev => ({ ...prev, [name]: data.chapters ? data.chapters.length : 0 }));
       setDisplayContent(data.recentContent || '');
+      // Load event card list for selection
+      ProjectsApi.fetchEventCards(name).then((data) => {
+        setEventCardsList(data.cards || []);
+      }).catch(() => {});
       return data;
     } catch (err) {
       setError(err.message);
@@ -640,6 +650,7 @@ function App() {
           projectName: currentProject,
           userPrompt: enhancedPrompt,
           model,
+          selectedEventCards,
         }),
       });
 
@@ -723,6 +734,7 @@ function App() {
           projectName: currentProject,
           userPrompt: enhancedPrompt,
           model,
+          selectedEventCards,
         });
         fileName = data.fileName || data.filename;
         content = data.content;
@@ -1329,7 +1341,7 @@ function App() {
       const response = await apiFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(origChapter)}/regenerate-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, userPrompt: enhancedRewritePrompt }),
+        body: JSON.stringify({ model, userPrompt: enhancedRewritePrompt, selectedEventCards }),
       });
 
       if (!response.ok) {
@@ -2439,6 +2451,9 @@ function App() {
           onSearchResultClick={handleSearchResultClick}
           searchInputRef={searchInputRef}
           onNotify={setNotification}
+          selectedEventCards={selectedEventCards}
+          onSetSelectedEventCards={setSelectedEventCards}
+          eventCardsList={eventCardsList}
         />
       )}
       {isMobile && showMobileSearch && (

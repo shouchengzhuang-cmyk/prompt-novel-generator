@@ -1072,7 +1072,7 @@ app.put('/api/projects/:projectName', async (req, res) => {
 
 // ---- 生成上下文准备（供 /api/generate 和 /api/generate-stream 共用）----
 
-async function prepareGenerationContext({ projectName, userPrompt, model }) {
+async function prepareGenerationContext({ projectName, userPrompt, model, selectedEventCards }) {
   if (!projectName || !projectName.trim()) {
     const err = new Error('缺少项目名');
     err.statusCode = 400;
@@ -1211,16 +1211,52 @@ async function prepareGenerationContext({ projectName, userPrompt, model }) {
     console.warn(`[章节规划] 注入失败（不影响主流程）: ${outlineErr.message}`);
   }
 
-  return { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo };
+  // 3d. Inject selected event cards as reference material
+  if (Array.isArray(selectedEventCards) && selectedEventCards.length > 0) {
+    const cardsDir = path.join(projectDir, 'materials', 'event-cards');
+    const cardContents = [];
+    let hasWarning = false;
+
+    for (const cardName of selectedEventCards) {
+      let safeName;
+      try {
+        safeName = safeCardName(cardName);
+      } catch {
+        console.warn(`[事件卡] 跳过非法文件名: ${cardName}`);
+        hasWarning = true;
+        continue;
+      }
+      const cardPath = path.join(cardsDir, safeName);
+      try {
+        const raw = await fs.readFile(cardPath, 'utf-8');
+        const title = extractTitleFromMarkdown(raw) || safeName.replace(/\.md$/, '');
+        cardContents.push(`### ${title}\n\n${raw.trim()}`);
+        console.log(`[事件卡] 已载入: ${safeName}`);
+      } catch {
+        console.warn(`[事件卡] 未找到，跳过: ${safeName}`);
+        hasWarning = true;
+      }
+    }
+
+    if (cardContents.length > 0) {
+      const eventCardSection = `\n\n## 本章参考素材\n\n以下是本章参考事件卡。它们是剧情素材，不是正文。\n请将事件卡小说化，而不是机械复述聊天记录。\n你可以补充环境、动作、心理、节奏和过渡。\n必须保持当前世界观、人物设定、文风和主线连续性。\n不能推翻已发生剧情。\n不能把事件卡里的标题、字段名、说明文字直接写进正文。\n不要输出 Markdown 标题，直接输出小说正文。\n\n${cardContents.join('\n\n')}\n\n`;
+      let currentContent = messages[1].content;
+      currentContent = currentContent.replace('## 本次续写要求', eventCardSection + '## 本次续写要求');
+      messages[1] = { role: 'user', content: currentContent };
+      console.log(`[事件卡] 已注入 ${cardContents.length} 张事件卡到生成 prompt`);
+    }
+  }
+
+  return { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo, selectedEventCards: Array.isArray(selectedEventCards) ? selectedEventCards : [] };
 }
 
 // ---- POST /api/generate ----
 
 app.post('/api/generate', async (req, res) => {
-  const { projectName, userPrompt, model } = req.body;
+  const { projectName, userPrompt, model, selectedEventCards } = req.body;
 
   try {
-    const { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo } = await prepareGenerationContext({ projectName, userPrompt, model });
+    const { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo } = await prepareGenerationContext({ projectName, userPrompt, model, selectedEventCards });
 
     // 4. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
@@ -1247,7 +1283,7 @@ app.post('/api/generate', async (req, res) => {
     const title = extractTitleFromContent(content, nextNum);
     const indexEntries = await readChapterIndex(chaptersDir);
     const now = new Date().toISOString();
-    indexEntries.push({
+    const chapterEntry = {
       fileName: filename,
       title,
       createdAt: now,
@@ -1262,7 +1298,11 @@ app.post('/api/generate', async (req, res) => {
           createdAt: now,
         },
       ],
-    });
+    };
+    if (Array.isArray(selectedEventCards) && selectedEventCards.length > 0) {
+      chapterEntry.usedEventCards = selectedEventCards.filter((c) => typeof c === 'string');
+    }
+    indexEntries.push(chapterEntry);
     await writeChapterIndex(chaptersDir, indexEntries);
 
     // 6. 立即返回成功响应，摘要和编辑记忆改为后台异步更新
@@ -1316,7 +1356,7 @@ app.post('/api/generate', async (req, res) => {
 // ---- POST /api/generate-stream (流式生成) ----
 
 app.post('/api/generate-stream', async (req, res) => {
-  const { projectName, userPrompt, model } = req.body;
+  const { projectName, userPrompt, model, selectedEventCards } = req.body;
 
   // 设置 SSE 响应头
   res.writeHead(200, {
@@ -1332,7 +1372,7 @@ app.post('/api/generate-stream', async (req, res) => {
 
   let projectDir, chaptersDir, fullContent;
   try {
-    const ctx = await prepareGenerationContext({ projectName, userPrompt, model });
+    const ctx = await prepareGenerationContext({ projectName, userPrompt, model, selectedEventCards });
     projectDir = ctx.projectDir;
     chaptersDir = ctx.chaptersDir;
 
@@ -1423,7 +1463,7 @@ app.post('/api/generate-stream', async (req, res) => {
     const title = extractTitleFromContent(fullContent, nextNum);
     const indexEntries = await readChapterIndex(chaptersDir);
     const now = new Date().toISOString();
-    indexEntries.push({
+    const chapterEntry = {
       fileName: filename,
       title,
       createdAt: now,
@@ -1438,13 +1478,17 @@ app.post('/api/generate-stream', async (req, res) => {
           createdAt: now,
         },
       ],
-    });
+    };
+    if (Array.isArray(selectedEventCards) && selectedEventCards.length > 0) {
+      chapterEntry.usedEventCards = selectedEventCards.filter((c) => typeof c === 'string');
+    }
+    indexEntries.push(chapterEntry);
     await writeChapterIndex(chaptersDir, indexEntries);
 
     console.log(`[流式生成] 已保存章节 ${filename}`);
 
     // 发送完成事件（包含完整内容和元数据）
-    sendEvent({ type: 'done', fileName: filename, title, content: fullContent, debugPromptInfo: ctx.debugPromptInfo, wordCount: countChars(fullContent) });
+    sendEvent({ type: 'done', fileName: filename, title, content: fullContent, debugPromptInfo: ctx.debugPromptInfo, wordCount: countChars(fullContent), usedEventCards: chapterEntry.usedEventCards });
 
     // 后台异步更新
     setImmediate(async () => {
@@ -1815,11 +1859,52 @@ async function writeVariants(chaptersDir, fileName, variants) {
   await storage.writeJson(vFile, { fileName, variants });
 }
 
+/**
+ * Read and validate event cards for prompt injection.
+ * Returns { cardTexts: string[], resolvedNames: string[] }.
+ * Skips non-existent or invalid cards with a warning.
+ */
+async function loadEventCards(projectDir, selectedEventCards) {
+  if (!Array.isArray(selectedEventCards) || selectedEventCards.length === 0) {
+    return { cardTexts: [], resolvedNames: [] };
+  }
+  const cardsDir = path.join(projectDir, 'materials', 'event-cards');
+  const cardTexts = [];
+  const resolvedNames = [];
+
+  for (const cardName of selectedEventCards) {
+    let safeName;
+    try {
+      safeName = safeCardName(cardName);
+    } catch {
+      console.warn(`[事件卡] 跳过非法文件名: ${cardName}`);
+      continue;
+    }
+    const cardPath = path.join(cardsDir, safeName);
+    try {
+      const raw = await fs.readFile(cardPath, 'utf-8');
+      const title = extractTitleFromMarkdown(raw) || safeName.replace(/\.md$/, '');
+      cardTexts.push(`### ${title}\n\n${raw.trim()}`);
+      resolvedNames.push(safeName);
+      console.log(`[事件卡] 已载入: ${safeName}`);
+    } catch {
+      console.warn(`[事件卡] 未找到，跳过: ${safeName}`);
+    }
+  }
+
+  return { cardTexts, resolvedNames };
+}
+
+function buildEventCardPromptSection(cardTexts) {
+  if (cardTexts.length === 0) return '';
+  return `\n\n## 本章参考素材\n\n以下是本章参考事件卡。它们是剧情素材，不是正文。\n请将事件卡小说化，而不是机械复述聊天记录。\n你可以补充环境、动作、心理、节奏和过渡。\n必须保持当前世界观、人物设定、文风和主线连续性。\n不能推翻已发生剧情。\n不能把事件卡里的标题、字段名、说明文字直接写进正文。\n不要输出 Markdown 标题，直接输出小说正文。\n\n${cardTexts.join('\n\n')}\n\n`;
+}
+
 // ---- POST /api/projects/:projectName/chapters/:fileName/regenerate ----
 
 app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req, res) => {
   const { projectName, fileName } = req.params;
-  const { model, userPrompt } = req.body;
+  const { model, userPrompt, selectedEventCards } = req.body;
 
   if (!isValidChapterFileName(fileName)) {
     return res.status(400).json({ error: '无效的章节文件名' });
@@ -1913,6 +1998,16 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
       { role: 'user', content: userContent },
     ];
 
+    // 4b. Inject selected event cards into rewrite prompt
+    const { cardTexts, resolvedNames: usedCards } = await loadEventCards(projectDir, selectedEventCards);
+    if (cardTexts.length > 0) {
+      const section = buildEventCardPromptSection(cardTexts);
+      let currentContent = messages[1].content;
+      currentContent = currentContent.replace('## 本次改写要求', section + '## 本次改写要求');
+      messages[1] = { role: 'user', content: currentContent };
+      console.log(`[事件卡] 已注入 ${cardTexts.length} 张事件卡到重写 prompt`);
+    }
+
     // 5. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
 
@@ -1927,6 +2022,9 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
       title: variantTitle,
       content,
     };
+    if (usedCards.length > 0) {
+      variant.usedEventCards = usedCards;
+    }
 
     const indexEntries = await readChapterIndex(chaptersDir);
     const indexEntry = indexEntries.find((e) => e.fileName === fileName);
@@ -1977,7 +2075,7 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
 
 app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', async (req, res) => {
   const { projectName, fileName } = req.params;
-  const { model, userPrompt } = req.body;
+  const { model, userPrompt, selectedEventCards } = req.body;
 
   if (!isValidChapterFileName(fileName)) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -2084,6 +2182,16 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', asyn
       { role: 'user', content: userContent },
     ];
 
+    // 4b. Inject selected event cards into rewrite prompt
+    const { cardTexts, resolvedNames: usedCards } = await loadEventCards(projectDir, selectedEventCards);
+    if (cardTexts.length > 0) {
+      const section = buildEventCardPromptSection(cardTexts);
+      let currentContent = messages[1].content;
+      currentContent = currentContent.replace('## 本次改写要求', section + '## 本次改写要求');
+      messages[1] = { role: 'user', content: currentContent };
+      console.log(`[事件卡] 已注入 ${cardTexts.length} 张事件卡到流式重写 prompt`);
+    }
+
     // 5. Call DeepSeek with streaming
     const dsResponse = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
@@ -2160,6 +2268,9 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', asyn
       title: variantTitle,
       content: fullContent,
     };
+    if (usedCards.length > 0) {
+      variant.usedEventCards = usedCards;
+    }
 
     const indexEntries = await readChapterIndex(chaptersDir);
     const indexEntry = indexEntries.find((e) => e.fileName === fileName);
@@ -2341,6 +2452,10 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
       // Update chapter title if variant has a meaningful title
       if (variant.title) {
         indexEntry.title = variant.title;
+      }
+      // Propagate usedEventCards from variant to index entry
+      if (variant.usedEventCards && Array.isArray(variant.usedEventCards) && variant.usedEventCards.length > 0) {
+        indexEntry.usedEventCards = variant.usedEventCards;
       }
       // Ensure versions array exists with v-original as first entry
       if (!indexEntry.versions) {

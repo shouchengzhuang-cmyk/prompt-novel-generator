@@ -904,6 +904,35 @@ body {
   padding: 0 10px;
 }
 
+.desktop-event-cards-empty {
+  font-size: 12px;
+  color: var(--desk-muted, #8892b0);
+  padding: 4px 0;
+}
+
+.desktop-event-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.desktop-event-card-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 0;
+  color: var(--desk-text, #dce4fb);
+}
+
+.desktop-event-card-checkbox input[type="checkbox"] {
+  accent-color: #7c8ddb;
+  cursor: pointer;
+}
+
 .desktop-generate-btn,
 .desktop-apply-btn {
   width: calc(100% - 20px);
