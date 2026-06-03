@@ -161,6 +161,13 @@ export default function ProjectWorkspacePage({
     return details?.summary || details?.world || details?.style || '';
   };
 
+  const handleNavigateToChapter = (chapterFileName) => {
+    onSetDesktopView('workbench');
+    if (chapterFileName && onReadChapter) {
+      onReadChapter(chapterFileName);
+    }
+  };
+
   return (
     <div className="desktop-workbench">
       <header className="desktop-topbar">
@@ -400,7 +407,7 @@ export default function ProjectWorkspacePage({
             </section>
           ) : desktopView === 'materials' && currentProject ? (
             <section className="desktop-card material-card-wrap">
-              <MaterialPanel currentProject={currentProject} onNotify={onNotify} />
+              <MaterialPanel currentProject={currentProject} onNotify={onNotify} onNavigateToChapter={handleNavigateToChapter} />
             </section>
           ) : currentProject ? (
             <section className="desktop-card desktop-editor-shell">
@@ -668,6 +675,11 @@ export default function ProjectWorkspacePage({
                         }}
                       />
                       <span>{card.title}</span>
+                      {card.usage && (card.usage.status === 'used' ? (
+                        <span className="event-card-usage-badge used">{card.usage.count}章</span>
+                      ) : (
+                        <span className="event-card-usage-badge unused">未用</span>
+                      ))}
                     </label>
                   ))}
                 </div>

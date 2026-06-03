@@ -5,7 +5,7 @@ import * as ProjectsApi from '../../api/projectsApi';
  * 剧情素材面板 — 事件卡管理
  * 自包含组件：列表 / 编辑器 / 新建表单
  */
-export default function MaterialPanel({ currentProject, onNotify }) {
+export default function MaterialPanel({ currentProject, onNotify, onNavigateToChapter }) {
   const [view, setView] = useState('list');    // list | editor | create
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -140,6 +140,28 @@ export default function MaterialPanel({ currentProject, onNotify }) {
                   <span className="material-card-meta">
                     {card.cardName} · {new Date(card.updatedAt).toLocaleString('zh-CN')} · {(card.size / 1024).toFixed(1)} KB
                   </span>
+                  {card.usage && card.usage.status === 'used' ? (
+                    <span className="material-card-usage used">
+                      已用于 {card.usage.chapters.length} 个章节
+                      <span className="material-card-chapters">
+                        {card.usage.chapters.map((ch) => (
+                          <span
+                            key={ch.chapter}
+                            className="material-card-chapter-link"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onNavigateToChapter?.(ch.chapter, ch.title);
+                            }}
+                            title={`跳转到「${ch.title}」`}
+                          >
+                            {ch.chapter.replace('.txt', '')}
+                          </span>
+                        ))}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="material-card-usage unused">未使用</span>
+                  )}
                 </button>
                 <button
                   className="delete-btn"

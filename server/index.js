@@ -2994,6 +2994,37 @@ function getEventCardTrashDir(projectDir) {
   return path.join(projectDir, 'materials', '.trash', 'event-cards');
 }
 
+/**
+ * Scan chapters/index.json for usedEventCards and build a usage map per card.
+ * Only considers index.json (main story), not variants (candidates).
+ * Returns { cardName: { count, chapters: [{chapter, title, usedAt}] } }
+ */
+async function computeEventCardUsage(projectDir) {
+  const indexPath = path.join(projectDir, 'chapters', 'index.json');
+  const usageMap = {};
+  try {
+    const raw = await fs.readFile(indexPath, 'utf-8');
+    const entries = JSON.parse(raw);
+    if (!Array.isArray(entries)) return usageMap;
+    for (const entry of entries) {
+      const usedCards = entry.usedEventCards;
+      if (!Array.isArray(usedCards) || usedCards.length === 0) continue;
+      const chapterFileName = entry.fileName || '';
+      const chapterTitle = entry.title || chapterFileName.replace(/\.txt$/, '');
+      const usedAt = entry.updatedAt || entry.createdAt || null;
+      for (const cardName of usedCards) {
+        if (typeof cardName !== 'string') continue;
+        if (!usageMap[cardName]) usageMap[cardName] = { count: 0, chapters: [] };
+        usageMap[cardName].count++;
+        usageMap[cardName].chapters.push({ chapter: chapterFileName, title: chapterTitle, usedAt });
+      }
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') console.warn('[事件卡使用统计] 读取 index.json 失败:', err.message);
+  }
+  return usageMap;
+}
+
 function extractTitleFromMarkdown(content) {
   const match = content.match(/^#\s+(.+)/m);
   return match ? match[1].trim() : null;
@@ -3053,6 +3084,7 @@ app.get('/api/projects/:projectName/materials/event-cards', async (req, res) => 
   try {
     const files = await fs.readdir(cardsDir);
     const mdFiles = files.filter((f) => f.endsWith('.md'));
+    const usageMap = await computeEventCardUsage(projectDir);
     const cards = await Promise.all(mdFiles.map(async (f) => {
       const filePath = path.join(cardsDir, f);
       try {
@@ -3061,7 +3093,16 @@ app.get('/api/projects/:projectName/materials/event-cards', async (req, res) => 
           fs.stat(filePath),
         ]);
         const title = extractTitleFromMarkdown(content) || f.replace(/\.md$/, '');
-        return { cardName: f, title, updatedAt: stats.mtime.toISOString(), size: stats.size };
+        const cardUsage = usageMap[f];
+        return {
+          cardName: f,
+          title,
+          updatedAt: stats.mtime.toISOString(),
+          size: stats.size,
+          usage: cardUsage
+            ? { status: 'used', count: cardUsage.count, chapters: cardUsage.chapters }
+            : { status: 'unused', count: 0, chapters: [] },
+        };
       } catch {
         return null;
       }
