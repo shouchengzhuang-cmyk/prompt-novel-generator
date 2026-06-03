@@ -1,4 +1,5 @@
 import GenerationProgress from '../components/GenerationProgress';
+import MaterialPanel from '../components/material/MaterialPanel';
 
 export default function ProjectWorkspacePage({
   desktopView,
@@ -129,6 +130,7 @@ export default function ProjectWorkspacePage({
   onCloseDesktopSearch,
   onSearchResultClick,
   searchInputRef,
+  onNotify,
 }) {
   const handleDesktopNav = onDesktopNav;
   const handleSelectProject = onSelectProject;
@@ -219,6 +221,7 @@ export default function ProjectWorkspacePage({
             ['◎', '世界观'],
             ['♙', '人物'],
             ['☷', '章节'],
+            ['◇', '素材'],
             ['☰', '大纲'],
             ['⚙', '设置'],
           ].map(([icon, label]) => {
@@ -228,6 +231,7 @@ export default function ProjectWorkspacePage({
               (label === '世界观' && desktopView === 'world') ||
               (label === '人物' && desktopView === 'characters') ||
               (label === '章节' && desktopView === 'workbench') ||
+              (label === '素材' && desktopView === 'materials') ||
               (label === '大纲' && desktopView === 'outline') ||
               (label === '设置' && desktopView === 'settings');
             return (
@@ -390,6 +394,10 @@ export default function ProjectWorkspacePage({
                   <p className="desktop-empty">暂无项目，请先创建一个小说项目。</p>
                 )}
               </div>
+            </section>
+          ) : desktopView === 'materials' && currentProject ? (
+            <section className="desktop-card material-card-wrap">
+              <MaterialPanel currentProject={currentProject} onNotify={onNotify} />
             </section>
           ) : currentProject ? (
             <section className="desktop-card desktop-editor-shell">

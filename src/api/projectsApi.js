@@ -189,6 +189,43 @@ export function rebuildChapterIndex(projectName) {
   });
 }
 
+// ========== 事件卡 ==========
+
+/** 获取事件卡列表 */
+export function fetchEventCards(projectName) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/materials/event-cards`);
+}
+
+/** 获取单张事件卡 */
+export function fetchEventCard(projectName, cardName) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/materials/event-cards/${encodeURIComponent(cardName)}`);
+}
+
+/** 新建事件卡 */
+export function createEventCard(projectName, { title, cardName, content }) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/materials/event-cards`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, cardName, content }),
+  });
+}
+
+/** 更新事件卡内容 */
+export function updateEventCard(projectName, cardName, content) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/materials/event-cards/${encodeURIComponent(cardName)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+}
+
+/** 删除事件卡（移至回收站） */
+export function deleteEventCard(projectName, cardName) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/materials/event-cards/${encodeURIComponent(cardName)}`, {
+    method: 'DELETE',
+  });
+}
+
 // ========== 全局搜索 ==========
 
 /** 全局搜索关键词 */

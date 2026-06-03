@@ -2856,6 +2856,279 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
+// ---- Event Cards (剧情素材池) ----
+
+/**
+ * Validate an event card file name:
+ * - No path separators or traversal
+ * - Must end in .md
+ */
+function safeCardName(cardName) {
+  const name = String(cardName || '').trim();
+  if (!name || name === '.' || name === '..') throw new Error('非法的文件名');
+  if (/[/\\]/.test(name)) throw new Error('文件名包含非法字符');
+  if (!name.endsWith('.md')) throw new Error('只允许 .md 文件');
+  return name;
+}
+
+function getEventCardsDir(projectDir) {
+  return path.join(projectDir, 'materials', 'event-cards');
+}
+
+function getEventCardTrashDir(projectDir) {
+  return path.join(projectDir, 'materials', '.trash', 'event-cards');
+}
+
+function extractTitleFromMarkdown(content) {
+  const match = content.match(/^#\s+(.+)/m);
+  return match ? match[1].trim() : null;
+}
+
+const EVENT_CARD_TEMPLATE = `# 对话事件卡
+
+## 事件标题
+
+## 参与角色
+
+## 事件摘要
+
+## 关键对白
+
+## 情绪变化
+
+## 关系变化
+
+## 新增事实
+
+## 可小说化方向
+
+## 给小墨匣的写作提示词
+`;
+
+function generateSafeFileName(title) {
+  const slug = String(title || '')
+    .toLowerCase()
+    .replace(/[^\w一-鿿]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+  const now = new Date().toISOString().slice(0, 10);
+  return `${now}-${slug || 'event-card'}.md`;
+}
+
+// GET /api/projects/:projectName/materials/event-cards
+app.get('/api/projects/:projectName/materials/event-cards', async (req, res) => {
+  const { projectName } = req.params;
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const cardsDir = getEventCardsDir(projectDir);
+  try {
+    await ensureDir(cardsDir);
+  } catch { /* best-effort */ }
+
+  try {
+    const files = await fs.readdir(cardsDir);
+    const mdFiles = files.filter((f) => f.endsWith('.md'));
+    const cards = await Promise.all(mdFiles.map(async (f) => {
+      const filePath = path.join(cardsDir, f);
+      try {
+        const [content, stats] = await Promise.all([
+          fs.readFile(filePath, 'utf-8'),
+          fs.stat(filePath),
+        ]);
+        const title = extractTitleFromMarkdown(content) || f.replace(/\.md$/, '');
+        return { cardName: f, title, updatedAt: stats.mtime.toISOString(), size: stats.size };
+      } catch {
+        return null;
+      }
+    }));
+    res.json({ cards: cards.filter(Boolean) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/projects/:projectName/materials/event-cards/:cardName
+app.get('/api/projects/:projectName/materials/event-cards/:cardName', async (req, res) => {
+  const { projectName, cardName } = req.params;
+  let projectDir, safeName;
+  try {
+    projectDir = safeProjectDir(projectName);
+    safeName = safeCardName(cardName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const filePath = path.join(getEventCardsDir(projectDir), safeName);
+  try {
+    const [content, stats] = await Promise.all([
+      fs.readFile(filePath, 'utf-8'),
+      fs.stat(filePath),
+    ]);
+    const title = extractTitleFromMarkdown(content) || safeName.replace(/\.md$/, '');
+    res.json({ cardName: safeName, title, content, updatedAt: stats.mtime.toISOString() });
+  } catch (err) {
+    if (err.code === 'ENOENT') return res.status(404).json({ error: '事件卡不存在' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/projects/:projectName/materials/event-cards
+app.post('/api/projects/:projectName/materials/event-cards', async (req, res) => {
+  const { projectName } = req.params;
+  const { title, cardName, content } = req.body;
+
+  if (!title && !cardName) {
+    return res.status(400).json({ error: '标题或文件名至少提供一个' });
+  }
+
+  let projectDir;
+  try {
+    projectDir = safeProjectDir(projectName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const cardsDir = getEventCardsDir(projectDir);
+  await ensureDir(cardsDir);
+
+  let fileName;
+  if (cardName && cardName.trim()) {
+    try {
+      fileName = safeCardName(cardName.trim());
+    } catch (err) {
+      return res.status(400).json({ error: err.message });
+    }
+  } else {
+    fileName = generateSafeFileName(title);
+  }
+
+  const filePath = path.join(cardsDir, fileName);
+
+  try {
+    await fs.access(filePath);
+    return res.status(409).json({ error: `事件卡「${fileName}」已存在` });
+  } catch { /* good — doesn't exist yet */ }
+
+  const finalContent = content !== undefined && content !== null ? content : EVENT_CARD_TEMPLATE;
+
+  try {
+    await storage.writeText(filePath, finalContent);
+    const stats = await fs.stat(filePath);
+    const cardTitle = extractTitleFromMarkdown(finalContent) || fileName.replace(/\.md$/, '');
+    res.status(201).json({ cardName: fileName, title: cardTitle, content: finalContent, updatedAt: stats.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/projects/:projectName/materials/event-cards/:cardName
+app.put('/api/projects/:projectName/materials/event-cards/:cardName', async (req, res) => {
+  const { projectName, cardName } = req.params;
+  const { content } = req.body;
+
+  if (content === undefined || content === null) {
+    return res.status(400).json({ error: '内容不能为空' });
+  }
+
+  let projectDir, safeName;
+  try {
+    projectDir = safeProjectDir(projectName);
+    safeName = safeCardName(cardName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const filePath = path.join(getEventCardsDir(projectDir), safeName);
+
+  try {
+    await fs.access(filePath);
+  } catch {
+    return res.status(404).json({ error: '事件卡不存在' });
+  }
+
+  try {
+    await storage.writeText(filePath, content);
+    const stats = await fs.stat(filePath);
+    const title = extractTitleFromMarkdown(content) || safeName.replace(/\.md$/, '');
+    res.json({ cardName: safeName, title, content, updatedAt: stats.mtime.toISOString() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/projects/:projectName/materials/event-cards/:cardName
+app.delete('/api/projects/:projectName/materials/event-cards/:cardName', async (req, res) => {
+  const { projectName, cardName } = req.params;
+  let projectDir, safeName;
+  try {
+    projectDir = safeProjectDir(projectName);
+    safeName = safeCardName(cardName);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+  try {
+    await fs.access(projectDir);
+  } catch {
+    return res.status(404).json({ error: '项目不存在' });
+  }
+
+  const sourcePath = path.join(getEventCardsDir(projectDir), safeName);
+  try {
+    await fs.access(sourcePath);
+  } catch {
+    return res.status(404).json({ error: '事件卡不存在' });
+  }
+
+  // Move to .trash instead of physical deletion
+  const trashDir = getEventCardTrashDir(projectDir);
+  await ensureDir(trashDir);
+  let trashPath = path.join(trashDir, safeName);
+  // Avoid name collision in trash
+  let counter = 0;
+  while (true) {
+    try {
+      await fs.access(trashPath);
+      counter++;
+      const base = safeName.replace(/\.md$/, '');
+      trashPath = path.join(trashDir, `${base}-${counter}.md`);
+    } catch {
+      break;
+    }
+  }
+
+  try {
+    await fs.rename(sourcePath, trashPath);
+    res.json({ ok: true, cardName: safeName, message: '事件卡已移至回收站' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---- Vault routes ----
 
 app.use('/api/vault/templates', vaultRoutes);

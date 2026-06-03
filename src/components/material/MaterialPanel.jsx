@@ -1,0 +1,227 @@
+import { useState, useEffect, useCallback } from 'react';
+import * as ProjectsApi from '../../api/projectsApi';
+
+/**
+ * 剧情素材面板 — 事件卡管理
+ * 自包含组件：列表 / 编辑器 / 新建表单
+ */
+export default function MaterialPanel({ currentProject, onNotify }) {
+  const [view, setView] = useState('list');    // list | editor | create
+  const [cards, setCards] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Editor
+  const [currentCard, setCurrentCard] = useState(null);
+  const [editContent, setEditContent] = useState('');
+
+  // Create form
+  const [newTitle, setNewTitle] = useState('');
+  const [newCardName, setNewCardName] = useState('');
+
+  const loadCards = useCallback(async () => {
+    if (!currentProject) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await ProjectsApi.fetchEventCards(currentProject);
+      setCards(data.cards || []);
+    } catch (err) {
+      setError(err.message || '加载事件卡失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentProject]);
+
+  // Auto-load when entering list view
+  useEffect(() => {
+    if (view === 'list') loadCards();
+  }, [view, loadCards]);
+
+  const handleOpenCard = useCallback(async (cardName) => {
+    setError('');
+    try {
+      const data = await ProjectsApi.fetchEventCard(currentProject, cardName);
+      setCurrentCard(data);
+      setEditContent(data.content);
+      setView('editor');
+    } catch (err) {
+      setError(err.message || '读取事件卡失败');
+    }
+  }, [currentProject]);
+
+  const handleSaveCard = useCallback(async () => {
+    if (!currentCard) return;
+    setSaving(true);
+    setError('');
+    try {
+      const data = await ProjectsApi.updateEventCard(currentProject, currentCard.cardName, editContent);
+      setCurrentCard(data);
+      onNotify?.({ title: '保存成功', message: `事件卡「${data.title}」已保存` });
+    } catch (err) {
+      setError(err.message || '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  }, [currentCard, currentProject, editContent, onNotify]);
+
+  const handleDeleteCard = useCallback(async (cardName) => {
+    if (!window.confirm('确定要删除这张事件卡吗？它将移至回收站。')) return;
+    setError('');
+    try {
+      await ProjectsApi.deleteEventCard(currentProject, cardName);
+      onNotify?.({ title: '已删除', message: '事件卡已移至回收站' });
+      setCards((prev) => prev.filter((c) => c.cardName !== cardName));
+      if (currentCard?.cardName === cardName) {
+        setView('list');
+        setCurrentCard(null);
+        setEditContent('');
+      }
+    } catch (err) {
+      setError(err.message || '删除失败');
+    }
+  }, [currentProject, currentCard, onNotify]);
+
+  const handleCreateCard = useCallback(async () => {
+    if (!newTitle.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      const data = await ProjectsApi.createEventCard(currentProject, {
+        title: newTitle.trim(),
+        cardName: newCardName.trim() || undefined,
+      });
+      onNotify?.({ title: '创建成功', message: `事件卡「${data.title}」已创建` });
+      setNewTitle('');
+      setNewCardName('');
+      setView('list');
+      loadCards();
+    } catch (err) {
+      setError(err.message || '创建失败');
+    } finally {
+      setSaving(false);
+    }
+  }, [currentProject, newTitle, newCardName, onNotify, loadCards]);
+
+  const handleBackToList = useCallback(() => {
+    setView('list');
+    setCurrentCard(null);
+    setEditContent('');
+    setError('');
+  }, []);
+
+  // ===== List View =====
+  if (view === 'list') {
+    return (
+      <section className="material-panel">
+        <div className="material-panel-head">
+          <h2>剧情素材</h2>
+          <button className="btn" onClick={() => setView('create')} disabled={!currentProject}>
+            ＋ 新建事件卡
+          </button>
+        </div>
+        {error && <div className="error">{error}</div>}
+        {loading ? (
+          <p className="hint">加载中...</p>
+        ) : cards.length === 0 ? (
+          <div className="material-empty">
+            <p>还没有剧情素材。你可以先新建一张事件卡。</p>
+          </div>
+        ) : (
+          <div className="material-card-list">
+            {cards.map((card) => (
+              <div key={card.cardName} className="material-card-item">
+                <button
+                  className="material-card-item-main"
+                  onClick={() => handleOpenCard(card.cardName)}
+                >
+                  <strong>{card.title}</strong>
+                  <span className="material-card-meta">
+                    {card.cardName} · {new Date(card.updatedAt).toLocaleString('zh-CN')} · {(card.size / 1024).toFixed(1)} KB
+                  </span>
+                </button>
+                <button
+                  className="delete-btn"
+                  onClick={() => handleDeleteCard(card.cardName)}
+                  title="删除事件卡"
+                >
+                  删除
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  // ===== Create View =====
+  if (view === 'create') {
+    return (
+      <section className="material-panel">
+        <div className="material-panel-head">
+          <h2>新建事件卡</h2>
+          <button className="btn btn-secondary" onClick={handleBackToList}>
+            ← 返回列表
+          </button>
+        </div>
+        {error && <div className="error">{error}</div>}
+        <div className="material-create-form">
+          <label>事件标题 *</label>
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            placeholder="输入事件标题"
+            autoFocus
+          />
+          <label>文件名（可选）</label>
+          <input
+            value={newCardName}
+            onChange={(e) => setNewCardName(e.target.value)}
+            placeholder="留空则根据标题自动生成，如：2026-06-03-xxx.md"
+          />
+          <p className="hint">文件名以 .md 结尾，只允许字母、数字、中文和连字符</p>
+          <button className="btn" onClick={handleCreateCard} disabled={saving || !newTitle.trim()}>
+            {saving ? '创建中...' : '创建事件卡'}
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  // ===== Editor View =====
+  return (
+    <section className="material-panel">
+      <div className="material-panel-head">
+        <div className="material-editor-head-left">
+          <button className="btn btn-secondary" onClick={handleBackToList}>
+            ← 返回列表
+          </button>
+          <h2>{currentCard?.title || '编辑事件卡'}</h2>
+        </div>
+        <div className="material-editor-head-actions">
+          <button className="btn" onClick={handleSaveCard} disabled={saving}>
+            {saving ? '保存中...' : '保存'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => handleDeleteCard(currentCard?.cardName)}
+            disabled={!currentCard}
+          >
+            删除
+          </button>
+        </div>
+      </div>
+      {error && <div className="error">{error}</div>}
+      <div className="material-editor-body">
+        <textarea
+          className="material-editor-textarea"
+          value={editContent}
+          onChange={(e) => setEditContent(e.target.value)}
+          placeholder="在此编辑事件卡 Markdown 内容..."
+        />
+      </div>
+    </section>
+  );
+}

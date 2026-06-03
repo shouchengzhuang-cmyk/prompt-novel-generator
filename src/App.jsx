@@ -2086,6 +2086,16 @@ function App() {
       setShowOutline(false);
       return;
     }
+    if (label === '素材') {
+      if (!currentProject) {
+        setNotification({ title: '请先选择项目', message: '需要打开一个项目后才能查看剧情素材。' });
+        return;
+      }
+      setDesktopView('materials');
+      setShowSettings(false);
+      setShowOutline(false);
+      return;
+    }
     if (label === '大纲') {
       if (!currentProject) {
         setNotification({ title: '请先选择项目', message: '需要打开一个项目后才能编辑大纲。' });
@@ -2428,6 +2438,7 @@ function App() {
           onCloseDesktopSearch={closeDesktopSearch}
           onSearchResultClick={handleSearchResultClick}
           searchInputRef={searchInputRef}
+          onNotify={setNotification}
         />
       )}
       {isMobile && showMobileSearch && (
