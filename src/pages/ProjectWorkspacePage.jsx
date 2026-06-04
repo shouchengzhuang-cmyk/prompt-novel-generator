@@ -131,9 +131,6 @@ export default function ProjectWorkspacePage({
   onSearchResultClick,
   searchInputRef,
   onNotify,
-  selectedEventCards,
-  onSetSelectedEventCards,
-  eventCardsList,
 }) {
   const handleDesktopNav = onDesktopNav;
   const handleSelectProject = onSelectProject;
@@ -654,36 +651,6 @@ export default function ProjectWorkspacePage({
               <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>关系：编辑记忆</button>
               {/* 章节大纲入口：切换到大纲编辑面板。 */}
               <button type="button" onClick={() => { onSetShowOutline(true); onLoadOutline(); }}>章节大纲：{outline.length > 0 ? '已挂载' : '未填写'}</button>
-            </div>
-            <label>关联素材</label>
-            <div className="desktop-linked-settings">
-              {eventCardsList.length === 0 ? (
-                <span className="desktop-event-cards-empty">暂无事件卡，请先在素材面板中创建</span>
-              ) : (
-                <div className="desktop-event-cards-list">
-                  {eventCardsList.map((card) => (
-                    <label key={card.cardName} className="desktop-event-card-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={selectedEventCards.includes(card.cardName)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            onSetSelectedEventCards([...selectedEventCards, card.cardName]);
-                          } else {
-                            onSetSelectedEventCards(selectedEventCards.filter((n) => n !== card.cardName));
-                          }
-                        }}
-                      />
-                      <span>{card.title}</span>
-                      {card.usage && (card.usage.status === 'used' ? (
-                        <span className="event-card-usage-badge used">{card.usage.count}章</span>
-                      ) : (
-                        <span className="event-card-usage-badge unused">未用</span>
-                      ))}
-                    </label>
-                  ))}
-                </div>
-              )}
             </div>
             {/* 生成候选：按当前 AI 模式调用生成/改写流程；候选模式不会直接覆盖正文。 */}
             <button className="desktop-generate-btn" type="button" onClick={onDesktopGenerateByMode} disabled={loading || regenerating || !currentProject}>
