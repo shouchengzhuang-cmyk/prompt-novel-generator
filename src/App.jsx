@@ -805,8 +805,20 @@ function App() {
     setGenProgress(prev => ({ ...prev, status: 'success' }));
     if (refreshFailed) {
       setNotification({ title: '这一章写好了', message: `章节已保存（${fileName}），但列表刷新失败，请手动刷新。` });
-    } else {
+    } else if (!isMobile) {
       setNotification({ title: '这一章写好了', message: `新章节已保存（${fileName}）` });
+    }
+
+    // Mobile: auto-navigate to reading page after successful generation
+    if (isMobile && fileName) {
+      setMobileView('chapter');
+      setMobileGenerateOpen(false);
+      setMobileVariantsOpen(false);
+      setNotification({ title: '新章节已保存', message: `${fileName} 已保存，正在打开阅读页` });
+      requestAnimationFrame(() => {
+        readingSectionRef.current?.scrollIntoView({ block: 'start' });
+        readingContentRef.current?.scrollTo?.(0, 0);
+      });
     }
 
     setLoading(false);
