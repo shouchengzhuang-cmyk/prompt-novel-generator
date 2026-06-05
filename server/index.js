@@ -1817,46 +1817,7 @@ async function writeVariants(chaptersDir, fileName, variants) {
   await storage.writeJson(vFile, { fileName, variants });
 }
 
-/**
- * Read and validate event cards for prompt injection.
- * Returns { cardTexts: string[], resolvedNames: string[] }.
- * Skips non-existent or invalid cards with a warning.
- */
-async function loadEventCards(projectDir, selectedEventCards) {
-  if (!Array.isArray(selectedEventCards) || selectedEventCards.length === 0) {
-    return { cardTexts: [], resolvedNames: [] };
-  }
-  const cardsDir = path.join(projectDir, 'materials', 'event-cards');
-  const cardTexts = [];
-  const resolvedNames = [];
-
-  for (const cardName of selectedEventCards) {
-    let safeName;
-    try {
-      safeName = safeCardName(cardName);
-    } catch {
-      console.warn(`[事件卡] 跳过非法文件名: ${cardName}`);
-      continue;
-    }
-    const cardPath = path.join(cardsDir, safeName);
-    try {
-      const raw = await fs.readFile(cardPath, 'utf-8');
-      const title = extractTitleFromMarkdown(raw) || safeName.replace(/\.md$/, '');
-      cardTexts.push(`### ${title}\n\n${raw.trim()}`);
-      resolvedNames.push(safeName);
-      console.log(`[事件卡] 已载入: ${safeName}`);
-    } catch {
-      console.warn(`[事件卡] 未找到，跳过: ${safeName}`);
-    }
-  }
-
-  return { cardTexts, resolvedNames };
-}
-
-function buildEventCardPromptSection(cardTexts) {
-  if (cardTexts.length === 0) return '';
-  return `\n\n## 本章参考素材\n\n以下是本章参考事件卡。它们是剧情素材，不是正文。\n请将事件卡小说化，而不是机械复述聊天记录。\n你可以补充环境、动作、心理、节奏和过渡。\n必须保持当前世界观、人物设定、文风和主线连续性。\n不能推翻已发生剧情。\n不能把事件卡里的标题、字段名、说明文字直接写进正文。\n不要输出 Markdown 标题，直接输出小说正文。\n\n${cardTexts.join('\n\n')}\n\n`;
-}
+// [P-X2 预留] 事件卡注入生成 — 被 466dfbc 禁用，如需恢复在此处接入 loadEventCards / buildEventCardPromptSection
 
 // ---- POST /api/projects/:projectName/chapters/:fileName/regenerate ----
 
