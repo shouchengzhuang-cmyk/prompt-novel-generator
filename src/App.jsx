@@ -644,7 +644,10 @@ function App() {
         }),
       });
 
-      if (!response.ok) throw new Error('流式接口返回错误状态');
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || '流式接口返回错误状态');
+      }
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
