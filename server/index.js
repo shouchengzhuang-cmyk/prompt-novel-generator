@@ -8,6 +8,7 @@ const { ZipArchive } = require('archiver');
 const vaultRoutes = require('./routes/vault');
 const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
+const { withProjectLock, ProjectLockError } = require('./services/projectLocks');
 
 const app = express();
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -793,15 +794,18 @@ app.delete('/api/projects/:projectName/chapters/:fileName', async (req, res) => 
   }
 
   try {
-    await fs.rm(chapterPath);
-    // Remove entry from index.json
-    const indexEntries = await readChapterIndex(chaptersDir);
-    const filtered = indexEntries.filter((e) => e.fileName !== fileName);
-    if (filtered.length !== indexEntries.length) {
-      await writeChapterIndex(chaptersDir, filtered);
-    }
-    res.json({ ok: true, message: '章节已删除', fileName });
+    await withProjectLock(projectName, 'delete-chapter', async () => {
+      await fs.rm(chapterPath);
+      // Remove entry from index.json
+      const indexEntries = await readChapterIndex(chaptersDir);
+      const filtered = indexEntries.filter((e) => e.fileName !== fileName);
+      if (filtered.length !== indexEntries.length) {
+        await writeChapterIndex(chaptersDir, filtered);
+      }
+      res.json({ ok: true, message: '章节已删除', fileName });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -846,31 +850,34 @@ app.put('/api/projects/:projectName/chapters/:fileName/title', async (req, res) 
   }
 
   try {
-    let indexEntries = await readChapterIndex(chaptersDir);
+    await withProjectLock(projectName, 'save-title', async () => {
+      let indexEntries = await readChapterIndex(chaptersDir);
 
-    // Rebuild index.json if missing or empty
-    if (indexEntries.length === 0) {
-      const files = await fs.readdir(chaptersDir);
-      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
-      indexEntries = txtFiles.map((f) => ({
-        fileName: f,
-        title: f.replace('.txt', ''),
-        createdAt: new Date().toISOString(),
-      }));
-    }
+      // Rebuild index.json if missing or empty
+      if (indexEntries.length === 0) {
+        const files = await fs.readdir(chaptersDir);
+        const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+        indexEntries = txtFiles.map((f) => ({
+          fileName: f,
+          title: f.replace('.txt', ''),
+          createdAt: new Date().toISOString(),
+        }));
+      }
 
-    // Find or create entry
-    let entry = indexEntries.find((e) => e.fileName === fileName);
-    if (entry) {
-      entry.title = title;
-    } else {
-      entry = { fileName, title, createdAt: new Date().toISOString() };
-      indexEntries.push(entry);
-    }
+      // Find or create entry
+      let entry = indexEntries.find((e) => e.fileName === fileName);
+      if (entry) {
+        entry.title = title;
+      } else {
+        entry = { fileName, title, createdAt: new Date().toISOString() };
+        indexEntries.push(entry);
+      }
 
-    await writeChapterIndex(chaptersDir, indexEntries);
-    res.json({ ok: true, chapter: { fileName: entry.fileName, title: entry.title, createdAt: entry.createdAt } });
+      await writeChapterIndex(chaptersDir, indexEntries);
+      res.json({ ok: true, chapter: { fileName: entry.fileName, title: entry.title, createdAt: entry.createdAt } });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -910,39 +917,42 @@ app.put('/api/projects/:projectName/chapters/:fileName/content', async (req, res
   }
 
   try {
-    // 1. Preserve original content as v-original variant if not already saved
-    const originalContent = await fs.readFile(chapterPath, 'utf-8');
-    const existingVariants = await readVariants(chaptersDir, fileName);
-    if (!existingVariants.find((v) => v.id === 'v-original')) {
-      existingVariants.unshift({
-        id: 'v-original',
-        createdAt: new Date().toISOString(),
-        model: 'original',
-        userPrompt: '',
-        content: originalContent,
-      });
-      await writeVariants(chaptersDir, fileName, existingVariants);
-    }
-
-    // 2. Write new content
-    await storage.writeText(chapterPath, content);
-
-    // 3. Update word count in index
-    const count = countChars(content);
-    const idxEntries = await readChapterIndex(chaptersDir);
-    const idxEntry = idxEntries.find((e) => e.fileName === fileName);
-    if (idxEntry) {
-      idxEntry.wordCount = count;
-      // Update title in index if provided
-      if (typeof title === 'string' && title.trim()) {
-        idxEntry.title = title.trim();
+    await withProjectLock(projectName, 'save-content', async () => {
+      // 1. Preserve original content as v-original variant if not already saved
+      const originalContent = await fs.readFile(chapterPath, 'utf-8');
+      const existingVariants = await readVariants(chaptersDir, fileName);
+      if (!existingVariants.find((v) => v.id === 'v-original')) {
+        existingVariants.unshift({
+          id: 'v-original',
+          createdAt: new Date().toISOString(),
+          model: 'original',
+          userPrompt: '',
+          content: originalContent,
+        });
+        await writeVariants(chaptersDir, fileName, existingVariants);
       }
-      await writeChapterIndex(chaptersDir, idxEntries);
-    }
 
-    console.log(`[编辑正文] 已保存 项目=${projectName} 章节=${fileName}`);
-    res.json({ ok: true });
+      // 2. Write new content
+      await storage.writeText(chapterPath, content);
+
+      // 3. Update word count in index
+      const count = countChars(content);
+      const idxEntries = await readChapterIndex(chaptersDir);
+      const idxEntry = idxEntries.find((e) => e.fileName === fileName);
+      if (idxEntry) {
+        idxEntry.wordCount = count;
+        // Update title in index if provided
+        if (typeof title === 'string' && title.trim()) {
+          idxEntry.title = title.trim();
+        }
+        await writeChapterIndex(chaptersDir, idxEntries);
+      }
+
+      console.log(`[编辑正文] 已保存 项目=${projectName} 章节=${fileName}`);
+      res.json({ ok: true });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message || '保存失败' });
   }
 });
@@ -1019,9 +1029,12 @@ app.post('/api/projects/:projectName/rename', async (req, res) => {
   }
 
   try {
-    await fs.rename(oldDir, newDir);
-    res.json({ ok: true, projectName: trimmed, oldName: projectName });
+    await withProjectLock(projectName, 'rename-project', async () => {
+      await fs.rename(oldDir, newDir);
+      res.json({ ok: true, projectName: trimmed, oldName: projectName });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -1046,26 +1059,29 @@ app.put('/api/projects/:projectName', async (req, res) => {
   }
 
   try {
-    const project = {
-      world: typeof world === 'string' ? world : '',
-      characters: typeof characters === 'string' ? characters : '',
-      style: typeof style === 'string' ? style : '',
-      summary: typeof summary === 'string' ? summary : '',
-      editorialMemory: typeof editorialMemory === 'string' ? editorialMemory : undefined,
-    };
+    await withProjectLock(projectName, 'save-settings', async () => {
+      const project = {
+        world: typeof world === 'string' ? world : '',
+        characters: typeof characters === 'string' ? characters : '',
+        style: typeof style === 'string' ? style : '',
+        summary: typeof summary === 'string' ? summary : '',
+        editorialMemory: typeof editorialMemory === 'string' ? editorialMemory : undefined,
+      };
 
-    const writes = [
-      storage.writeText(path.join(projectDir, 'world.md'), project.world),
-      storage.writeText(path.join(projectDir, 'characters.md'), project.characters),
-      storage.writeText(path.join(projectDir, 'style.md'), project.style),
-      storage.writeText(path.join(projectDir, 'summary.md'), project.summary),
-    ];
-    if (project.editorialMemory !== undefined) {
-      writes.push(storage.writeText(path.join(projectDir, 'editorial-memory.md'), project.editorialMemory));
-    }
-    await Promise.all(writes);
-    res.json({ ok: true, message: '设定已保存', project });
+      const writes = [
+        storage.writeText(path.join(projectDir, 'world.md'), project.world),
+        storage.writeText(path.join(projectDir, 'characters.md'), project.characters),
+        storage.writeText(path.join(projectDir, 'style.md'), project.style),
+        storage.writeText(path.join(projectDir, 'summary.md'), project.summary),
+      ];
+      if (project.editorialMemory !== undefined) {
+        writes.push(storage.writeText(path.join(projectDir, 'editorial-memory.md'), project.editorialMemory));
+      }
+      await Promise.all(writes);
+      res.json({ ok: true, message: '设定已保存', project });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -1219,8 +1235,13 @@ async function prepareGenerationContext({ projectName, userPrompt, model }) {
 app.post('/api/generate', async (req, res) => {
   const { projectName, userPrompt, model } = req.body;
 
+  if (!projectName || !projectName.trim()) {
+    return res.status(400).json({ error: '缺少项目名' });
+  }
+
   try {
-    const { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo } = await prepareGenerationContext({ projectName, userPrompt, model });
+    await withProjectLock(projectName.trim(), 'generate', async () => {
+    const { projectDir, chaptersDir, messages, effectiveModel, debugPromptInfo } = await prepareGenerationContext({ projectName: projectName.trim(), userPrompt, model });
 
     // 4. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
@@ -1308,8 +1329,12 @@ app.post('/api/generate', async (req, res) => {
       } catch (memErr) {
         console.warn(`[编辑记忆] 后台更新失败（不影响主流程）: ${memErr.message}`);
       }
-    });
+    });  // closes setImmediate
+    });  // closes withProjectLock
   } catch (err) {
+    if (err instanceof ProjectLockError) {
+      return res.status(409).json({ error: err.message });
+    }
     res.status(500).json({ error: err.message || '服务器内部错误' });
   }
 });
@@ -1318,6 +1343,16 @@ app.post('/api/generate', async (req, res) => {
 
 app.post('/api/generate-stream', async (req, res) => {
   const { projectName, userPrompt, model } = req.body;
+
+  if (!projectName || !projectName.trim()) {
+    return res.status(400).json({ error: '缺少项目名' });
+  }
+
+  const trimmedProjectName = projectName.trim();
+
+  if (!acquireProjectLock(trimmedProjectName, 'generate-stream')) {
+    return res.status(409).json({ error: '当前项目正在生成或保存，请稍后再试' });
+  }
 
   // 设置 SSE 响应头
   res.writeHead(200, {
@@ -1495,6 +1530,8 @@ app.post('/api/generate-stream', async (req, res) => {
       sendEvent({ type: 'error', message: err.message || '服务器内部错误' });
       res.end();
     }
+  } finally {
+    releaseProjectLock(trimmedProjectName);
   }
 });
 
@@ -1736,49 +1773,52 @@ app.post('/api/projects/:projectName/chapters/rebuild-index', async (req, res) =
   }
 
   try {
-    // Scan all .txt files sorted
-    const files = await fs.readdir(chaptersDir);
-    const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
+    await withProjectLock(projectName, 'rebuild-index', async () => {
+      // Scan all .txt files sorted
+      const files = await fs.readdir(chaptersDir);
+      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
 
-    if (txtFiles.length === 0) {
-      return res.status(404).json({ error: '该项目暂无章节' });
-    }
-
-    // Read old index, keyed by fileName
-    const oldEntries = await readChapterIndex(chaptersDir);
-    const oldMap = {};
-    for (const entry of oldEntries) {
-      oldMap[entry.fileName] = entry;
-    }
-
-    // Build new index
-    const newEntries = [];
-    for (const f of txtFiles) {
-      const old = oldMap[f];
-      let createdAt;
-      if (old && old.createdAt) {
-        createdAt = old.createdAt;
-      } else {
-        try {
-          const stat = await fs.stat(path.join(chaptersDir, f));
-          createdAt = stat.birthtime?.toISOString() || stat.mtime.toISOString();
-        } catch {
-          createdAt = new Date().toISOString();
-        }
+      if (txtFiles.length === 0) {
+        return res.status(404).json({ error: '该项目暂无章节' });
       }
-      newEntries.push({
-        ...(old || {}),
-        fileName: f,
-        title: old?.title || `第${parseInt(f, 10)}章`,
-        createdAt,
-        activeVersionId: old?.activeVersionId || 'v-original',
-        versions: old?.versions || [],
-      });
-    }
 
-    await writeChapterIndex(chaptersDir, newEntries);
-    res.json({ ok: true, chapters: newEntries });
+      // Read old index, keyed by fileName
+      const oldEntries = await readChapterIndex(chaptersDir);
+      const oldMap = {};
+      for (const entry of oldEntries) {
+        oldMap[entry.fileName] = entry;
+      }
+
+      // Build new index
+      const newEntries = [];
+      for (const f of txtFiles) {
+        const old = oldMap[f];
+        let createdAt;
+        if (old && old.createdAt) {
+          createdAt = old.createdAt;
+        } else {
+          try {
+            const stat = await fs.stat(path.join(chaptersDir, f));
+            createdAt = stat.birthtime?.toISOString() || stat.mtime.toISOString();
+          } catch {
+            createdAt = new Date().toISOString();
+          }
+        }
+        newEntries.push({
+          ...(old || {}),
+          fileName: f,
+          title: old?.title || `第${parseInt(f, 10)}章`,
+          createdAt,
+          activeVersionId: old?.activeVersionId || 'v-original',
+          versions: old?.versions || [],
+        });
+      }
+
+      await writeChapterIndex(chaptersDir, newEntries);
+      res.json({ ok: true, chapters: newEntries });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -1856,15 +1896,16 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
   const effectiveUserPrompt = trimmedUserPrompt || '继续写';
 
   try {
-    // 1. Read context files (skip summary to avoid old-chapter contamination)
-    const [world, characters, style] = await Promise.all([
-      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
-    ]);
+    await withProjectLock(projectName, 'regenerate', async () => {
+      // 1. Read context files (skip summary to avoid old-chapter contamination)
+      const [world, characters, style] = await Promise.all([
+        fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+        fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+        fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+      ]);
 
-    // 2. Read original chapter content (only for v-original preservation, not for prompt)
-    const originalContent = await fs.readFile(chapterPath, 'utf-8');
+      // 2. Read original chapter content (only for v-original preservation, not for prompt)
+      const originalContent = await fs.readFile(chapterPath, 'utf-8');
 
     // 3. Read previous chapters for context (skip the current one, respect activeVersionId)
     let recentChapters = [];
@@ -1971,7 +2012,9 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate', async (req,
     }
 
     res.json({ ok: true, variant, debugPromptInfo });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message || '服务器内部错误' });
   }
 });
@@ -2015,6 +2058,10 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', asyn
 
   const trimmedUserPrompt = typeof userPrompt === 'string' ? userPrompt.trim() : '';
   const effectiveUserPrompt = trimmedUserPrompt || '继续写';
+
+  if (!acquireProjectLock(projectName, 'regenerate-stream')) {
+    return res.status(409).json({ error: '当前项目正在生成或保存，请稍后再试' });
+  }
 
   // Set SSE headers
   res.writeHead(200, {
@@ -2213,6 +2260,8 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', asyn
       sendEvent({ type: 'error', message: err.message || '服务器内部错误' });
       res.end();
     }
+  } finally {
+    releaseProjectLock(projectName);
   }
 });
 
@@ -2304,77 +2353,80 @@ app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply
   }
 
   try {
-    let variants = await readVariants(chaptersDir, fileName);
-    let variant = variants.find((v) => v.id === variantId);
+    await withProjectLock(projectName, 'apply-variant', async () => {
+      let variants = await readVariants(chaptersDir, fileName);
+      let variant = variants.find((v) => v.id === variantId);
 
-    // If v-original requested but not yet in variants file, synthesize from .txt
-    if (!variant && variantId === 'v-original') {
-      const indexEntries = await readChapterIndex(chaptersDir);
-      const indexEntry = indexEntries.find((e) => e.fileName === fileName);
-      const originalContent = await fs.readFile(chapterPath, 'utf-8');
-      variant = {
-        id: 'v-original',
-        createdAt: indexEntry?.createdAt || new Date().toISOString(),
-        model: 'original',
-        userPrompt: indexEntry?.userPrompt || '',
-        content: originalContent,
-        title: indexEntry?.title || fileName.replace('.txt', ''),
-      };
-      // Persist so subsequent requests read from file
-      variants = [variant, ...variants];
-      await writeVariants(chaptersDir, fileName, variants);
-    }
-
-    if (!variant) {
-      return res.status(404).json({ error: '候选版本不存在' });
-    }
-
-    // Write content to the main .txt file
-    await storage.writeText(chapterPath, variant.content);
-
-    // Update word count in index
-    await updateChapterWordCount(chaptersDir, fileName);
-
-    // Update index.json: set activeVersionId and track the version
-    let indexEntries = await readChapterIndex(chaptersDir);
-    const indexEntry = indexEntries.find((e) => e.fileName === fileName);
-    if (indexEntry) {
-      indexEntry.activeVersionId = variantId;
-      // Update chapter title if variant has a meaningful title
-      if (variant.title) {
-        indexEntry.title = variant.title;
-      }
-      // Propagate usedEventCards from variant to index entry
-      if (variant.usedEventCards && Array.isArray(variant.usedEventCards) && variant.usedEventCards.length > 0) {
-        indexEntry.usedEventCards = variant.usedEventCards;
-      }
-      // Ensure versions array exists with v-original as first entry
-      if (!indexEntry.versions) {
-        indexEntry.versions = [];
-      }
-      if (!indexEntry.versions.find((v) => v.id === 'v-original')) {
-        indexEntry.versions.unshift({
+      // If v-original requested but not yet in variants file, synthesize from .txt
+      if (!variant && variantId === 'v-original') {
+        const indexEntries = await readChapterIndex(chaptersDir);
+        const indexEntry = indexEntries.find((e) => e.fileName === fileName);
+        const originalContent = await fs.readFile(chapterPath, 'utf-8');
+        variant = {
           id: 'v-original',
-          title: indexEntry.title || fileName.replace('.txt', ''),
-          userPrompt: indexEntry.userPrompt || '',
-          createdAt: indexEntry.createdAt || new Date().toISOString(),
-        });
+          createdAt: indexEntry?.createdAt || new Date().toISOString(),
+          model: 'original',
+          userPrompt: indexEntry?.userPrompt || '',
+          content: originalContent,
+          title: indexEntry?.title || fileName.replace('.txt', ''),
+        };
+        // Persist so subsequent requests read from file
+        variants = [variant, ...variants];
+        await writeVariants(chaptersDir, fileName, variants);
       }
-      // Add this variant to versions if not already tracked
-      if (!indexEntry.versions.find((v) => v.id === variantId)) {
-        indexEntry.versions.push({
-          id: variantId,
-          title: indexEntry.title || fileName.replace('.txt', ''),
-          userPrompt: variant.userPrompt || '',
-          createdAt: variant.createdAt,
-        });
-      }
-      indexEntries = markChaptersStaleAfterRewrite(indexEntries, fileName);
-      await writeChapterIndex(chaptersDir, indexEntries);
-    }
 
-    res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId, title: indexEntry?.title || variant.title, chapters: indexEntries });
+      if (!variant) {
+        return res.status(404).json({ error: '候选版本不存在' });
+      }
+
+      // Write content to the main .txt file
+      await storage.writeText(chapterPath, variant.content);
+
+      // Update word count in index
+      await updateChapterWordCount(chaptersDir, fileName);
+
+      // Update index.json: set activeVersionId and track the version
+      let indexEntries = await readChapterIndex(chaptersDir);
+      const indexEntry = indexEntries.find((e) => e.fileName === fileName);
+      if (indexEntry) {
+        indexEntry.activeVersionId = variantId;
+        // Update chapter title if variant has a meaningful title
+        if (variant.title) {
+          indexEntry.title = variant.title;
+        }
+        // Propagate usedEventCards from variant to index entry
+        if (variant.usedEventCards && Array.isArray(variant.usedEventCards) && variant.usedEventCards.length > 0) {
+          indexEntry.usedEventCards = variant.usedEventCards;
+        }
+        // Ensure versions array exists with v-original as first entry
+        if (!indexEntry.versions) {
+          indexEntry.versions = [];
+        }
+        if (!indexEntry.versions.find((v) => v.id === 'v-original')) {
+          indexEntry.versions.unshift({
+            id: 'v-original',
+            title: indexEntry.title || fileName.replace('.txt', ''),
+            userPrompt: indexEntry.userPrompt || '',
+            createdAt: indexEntry.createdAt || new Date().toISOString(),
+          });
+        }
+        // Add this variant to versions if not already tracked
+        if (!indexEntry.versions.find((v) => v.id === variantId)) {
+          indexEntry.versions.push({
+            id: variantId,
+            title: indexEntry.title || fileName.replace('.txt', ''),
+            userPrompt: variant.userPrompt || '',
+            createdAt: variant.createdAt,
+          });
+        }
+        indexEntries = markChaptersStaleAfterRewrite(indexEntries, fileName);
+        await writeChapterIndex(chaptersDir, indexEntries);
+      }
+
+      res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId, title: indexEntry?.title || variant.title, chapters: indexEntries });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -2528,9 +2580,12 @@ app.put('/api/projects/:projectName/outline', async (req, res) => {
   }
 
   try {
-    await writeOutline(projectName, outline);
-    res.json({ ok: true, outline });
+    await withProjectLock(projectName, 'save-outline', async () => {
+      await writeOutline(projectName, outline);
+      res.json({ ok: true, outline });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
@@ -2559,82 +2614,85 @@ app.post('/api/projects/:projectName/outline/generate', async (req, res) => {
   const chaptersDir = path.join(projectDir, 'chapters');
 
   try {
-    // 1. Read project settings
-    const [world, characters, summary, style] = await Promise.all([
-      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
-    ]);
+    await withProjectLock(projectName, 'generate-outline', async () => {
+      // 1. Read project settings
+      const [world, characters, summary, style] = await Promise.all([
+        fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
+        fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
+        fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
+        fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
+      ]);
 
-    // 2. Read chapter titles
-    const chaptersDirExists = await fs.stat(chaptersDir).then(() => true).catch(() => false);
-    let chapterTitles = [];
-    if (chaptersDirExists) {
-      const indexEntries = await readChapterIndex(chaptersDir);
-      chapterTitles = indexEntries.map((entry, i) => ({
-        number: i + 1,
-        title: entry.title || `第${i + 1}章`,
-        fileName: entry.fileName,
-      }));
-    }
+      // 2. Read chapter titles
+      const chaptersDirExists = await fs.stat(chaptersDir).then(() => true).catch(() => false);
+      let chapterTitles = [];
+      if (chaptersDirExists) {
+        const indexEntries = await readChapterIndex(chaptersDir);
+        chapterTitles = indexEntries.map((entry, i) => ({
+          number: i + 1,
+          title: entry.title || `第${i + 1}章`,
+          fileName: entry.fileName,
+        }));
+      }
 
-    // 3. Build the prompt
-    let contextSections = [];
-    if (world) contextSections.push(`【世界观设定】\n${world}`);
-    if (characters) contextSections.push(`【人物设定】\n${characters}`);
-    if (style) contextSections.push(`【写作规则】\n${style}`);
-    if (summary) contextSections.push(`【剧情摘要】\n${summary}`);
+      // 3. Build the prompt
+      let contextSections = [];
+      if (world) contextSections.push(`【世界观设定】\n${world}`);
+      if (characters) contextSections.push(`【人物设定】\n${characters}`);
+      if (style) contextSections.push(`【写作规则】\n${style}`);
+      if (summary) contextSections.push(`【剧情摘要】\n${summary}`);
 
-    let chapterListing = '暂无章节';
-    if (chapterTitles.length > 0) {
-      chapterListing = chapterTitles.map((ch) => `第${ch.number}章：${ch.title}`).join('\n');
-    }
+      let chapterListing = '暂无章节';
+      if (chapterTitles.length > 0) {
+        chapterListing = chapterTitles.map((ch) => `第${ch.number}章：${ch.title}`).join('\n');
+      }
 
-    const systemPrompt = '你是一个专业的小说章节大纲生成器。根据项目设定和已有章节，为接下来的章节生成结构化大纲。';
-    const userPrompt = `${contextSections.join('\n\n')}\n\n【已有章节】\n${chapterListing}\n\n请根据以上信息和小说创作规律，为尚未编写的章节生成大纲。\n\n要求：\n1. 返回 JSON 数组，每个元素包含字段：number（章节号）, goal（本章目标）, keyEvents（关键事件数组）, characterChanges（人物变化）, status（状态，用"planned"）。\n2. 如果已有章节，从下一章开始规划 5 章。\n3. 如果没有章节，从第 1 章开始规划 5 章。\n4. 只返回 JSON，不要额外文字。`;
+      const systemPrompt = '你是一个专业的小说章节大纲生成器。根据项目设定和已有章节，为接下来的章节生成结构化大纲。';
+      const userPrompt = `${contextSections.join('\n\n')}\n\n【已有章节】\n${chapterListing}\n\n请根据以上信息和小说创作规律，为尚未编写的章节生成大纲。\n\n要求：\n1. 返回 JSON 数组，每个元素包含字段：number（章节号）, goal（本章目标）, keyEvents（关键事件数组）, characterChanges（人物变化）, status（状态，用"planned"）。\n2. 如果已有章节，从下一章开始规划 5 章。\n3. 如果没有章节，从第 1 章开始规划 5 章。\n4. 只返回 JSON，不要额外文字。`;
 
-    const content = await callDeepSeek(model, [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt },
-    ]);
+      const content = await callDeepSeek(model, [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ]);
 
-    // Parse the returned JSON
-    let outline;
-    try {
-      // Try to extract JSON from code block if present
-      const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-      const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
-      outline = JSON.parse(jsonStr);
-      if (!Array.isArray(outline)) {
-        // Maybe it's wrapped in an object
-        if (outline.outline && Array.isArray(outline.outline)) {
-          outline = outline.outline;
+      // Parse the returned JSON
+      let outline;
+      try {
+        // Try to extract JSON from code block if present
+        const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+        const jsonStr = jsonMatch ? jsonMatch[1].trim() : content.trim();
+        outline = JSON.parse(jsonStr);
+        if (!Array.isArray(outline)) {
+          // Maybe it's wrapped in an object
+          if (outline.outline && Array.isArray(outline.outline)) {
+            outline = outline.outline;
+          } else {
+            throw new Error('返回数据不是数组');
+          }
+        }
+      } catch (parseErr) {
+        return res.status(500).json({ error: 'AI 返回格式异常，请重试', raw: content });
+      }
+
+      // Merge with existing outline: keep chapters that already have entries
+      const existing = await readOutline(projectName);
+      const merged = [...outline];
+      for (const item of existing) {
+        const idx = merged.findIndex((m) => m.number === item.number);
+        if (idx >= 0) {
+          // Keep existing status and details if they exist
+          merged[idx] = { ...merged[idx], ...item, number: item.number };
         } else {
-          throw new Error('返回数据不是数组');
+          merged.push(item);
         }
       }
-    } catch (parseErr) {
-      return res.status(500).json({ error: 'AI 返回格式异常，请重试', raw: content });
-    }
+      merged.sort((a, b) => a.number - b.number);
 
-    // Merge with existing outline: keep chapters that already have entries
-    const existing = await readOutline(projectName);
-    const merged = [...outline];
-    for (const item of existing) {
-      const idx = merged.findIndex((m) => m.number === item.number);
-      if (idx >= 0) {
-        // Keep existing status and details if they exist
-        merged[idx] = { ...merged[idx], ...item, number: item.number };
-      } else {
-        merged.push(item);
-      }
-    }
-    merged.sort((a, b) => a.number - b.number);
-
-    await writeOutline(projectName, merged);
-    res.json({ outline: merged });
+      await writeOutline(projectName, merged);
+      res.json({ outline: merged });
+    });
   } catch (err) {
+    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message });
   }
 });
