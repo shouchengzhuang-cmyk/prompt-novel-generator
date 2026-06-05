@@ -8,7 +8,7 @@ const { ZipArchive } = require('archiver');
 const vaultRoutes = require('./routes/vault');
 const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
-const { withProjectLock, ProjectLockError } = require('./services/projectLocks');
+const { acquireProjectLock, releaseProjectLock, withProjectLock, ProjectLockError } = require('./services/projectLocks');
 
 const app = express();
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -1361,6 +1361,7 @@ app.post('/api/generate-stream', async (req, res) => {
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
+  res.flushHeaders();
 
   const sendEvent = (data) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -2070,6 +2071,7 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', asyn
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no',
   });
+  res.flushHeaders();
 
   const sendEvent = (data) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
