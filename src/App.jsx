@@ -628,9 +628,11 @@ function App() {
     setReadingChapter('_streaming');
     setReadingChapterTitle('第 ' + nextNumStr + ' 章 生成中...');
     setReadingContent('');
+    setDesktopEditorContent('');
     setGenProgress({ visible: true, mode: 'generate', status: 'streaming', errorMessage: '' });
 
     let fileName, content, title, debugInfo;
+    let streamedContent = '';
 
     try {
       // 优先使用流式生成
@@ -652,7 +654,6 @@ function App() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let streamedContent = '';
 
       console.log('[生成] 请求 URL: /api/generate-stream');
 
@@ -671,7 +672,11 @@ function App() {
           try {
             const event = JSON.parse(trimmed.slice(6));
             if (event.type === 'chunk') {
-              streamedContent += event.content;
+              const chunk = event.content || '';
+              streamedContent += chunk;
+              setReadingContent((prev) => prev + chunk);
+              setDesktopEditorContent((prev) => prev + chunk);
+              setMobileWritingOutput((prev) => prev + chunk);
             } else if (event.type === 'done') {
               fileName = event.fileName;
               content = event.content;
@@ -688,6 +693,7 @@ function App() {
         // 每轮 read() 后更新阅读区正文，让 React 在 await 间隙渲染
         if (streamedContent) {
           setReadingContent(streamedContent);
+          setDesktopEditorContent(streamedContent);
           console.log('[生成] done 事件:', fileName ? `fileName=${fileName}` : '(未收到)');
         }
       }
@@ -717,6 +723,7 @@ function App() {
       setReadingChapter(null);
       setReadingChapterTitle('');
       setReadingContent('');
+      setDesktopEditorContent('');
       setMobileWritingOutput('');
       setStreamingChapterNum('');
 
@@ -770,6 +777,7 @@ function App() {
     }
 
     // 公共完成逻辑
+    content = content || streamedContent;
     setStreamingChapterNum('');
     setDisplayContent((prev) => {
       const sep = prev ? '\n\n' : '';
@@ -783,6 +791,7 @@ function App() {
     setReadingChapter(fileName);
     setReadingChapterTitle(title || '');
     setReadingContent(content);
+    setDesktopEditorContent(content || '');
     rememberLastProject(currentProject);
 
     let refreshFailed = false;
@@ -1339,6 +1348,7 @@ function App() {
     setReadingChapter('_streaming');
     setReadingChapterTitle('重写生成中...');
     setReadingContent('');
+    setDesktopEditorContent('');
     setGenProgress({ visible: true, mode: 'rewrite', status: 'streaming', errorMessage: '' });
 
     try {
@@ -1377,9 +1387,11 @@ function App() {
           try {
             const event = JSON.parse(trimmed.slice(6));
             if (event.type === 'chunk') {
-              streamedContent += event.content;
-              setReadingContent(streamedContent);
-              setMobileWritingOutput(streamedContent);
+              const chunk = event.content || '';
+              streamedContent += chunk;
+              setReadingContent((prev) => prev + chunk);
+              setDesktopEditorContent((prev) => prev + chunk);
+              setMobileWritingOutput((prev) => prev + chunk);
             } else if (event.type === 'done') {
               doneVariant = event.variant;
               doneDebugInfo = event.debugPromptInfo;
@@ -1415,6 +1427,8 @@ function App() {
       // Success: restore readingChapter, update title from variant, keep streamed content
       setReadingChapter(origChapter);
       setReadingChapterTitle(doneVariant.title || origTitle);
+      setReadingContent(doneVariant.content || streamedContent);
+      setDesktopEditorContent(doneVariant.content || streamedContent);
       setMobileWritingOutput(doneVariant.content || streamedContent);
       setVariants((prev) => [...prev, { ...doneVariant, _debugPromptInfo: doneDebugInfo }]);
       handleLoadVariants(origChapter);
