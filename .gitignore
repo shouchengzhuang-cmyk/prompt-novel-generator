@@ -12,3 +12,4 @@ docs/
 cookies.txt
 ecosystem.production.config.cjs
 ecosystem.config.cjs.bak-*
+_*.py
