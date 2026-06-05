@@ -1,12 +1,13 @@
-# Skill — Windows 环境下 SSH/SCP 自动部署方案
+# Skill — Windows 环境下 SSH/SCP 自动部署方案（参考）
 
 记录在 Windows 上对小墨匣服务器（Ubuntu）执行 SSH/SCP 自动部署时遇到的困难和已落地的解决方案。
+作为 `xiaomoxia-auto-git-scp-deploy.md` 的配套文档，仅用于辅助 SSH 连接和认证问题。
 
 ## 背景
 
 本地开发环境：Windows 11（PowerShell 5.1），无 WSL、无 Cygwin。
 目标服务器：Ubuntu，地址 `82.156.85.49`。
-认证方式：密码认证（未部署 SSH 密钥时）。
+认证方式：SSH 密钥（已部署）。
 
 ## 问题清单
 
@@ -14,7 +15,7 @@
 
 **现象：** `sshpass` 命令不存在。
 **原因：** `sshpass` 是 Linux 工具，不在 Windows OpenSSH 中。Chocolatey 无对应包，MSYS2/Git Bash 未预装，GitHub 下载受阻（网络不通）。
-**解决：** 用 SSH_ASKPASS + CREATE_NO_WINDOW 替代。
+**解决：** 已部署 SSH 密钥，不再依赖 sshpass。直接使用 `ssh -o StrictHostKeyChecking=no`。
 
 ### 2. PowerShell 的 `curl` 别名劫持
 
@@ -32,16 +33,15 @@
 
 **现象：** 即使设置了 `SSH_ASKPASS` 和 `SSH_ASKPASS_REQUIRE=force`，SSH 仍提示输入密码。
 **原因：** Windows OpenSSH 检测到进程关联了控制台（console），会忽略 SSH_ASKPASS，直接读取 `/dev/tty`。
-**解决：** 用 Python 的 `subprocess.Popen(creationflags=0x08000000)` 创建无窗口子进程，SSH 检测不到控制台后自动调用 SSH_ASKPASS。
+**解决：** 已部署 SSH 密钥，不再需要 SSH_ASKPASS。如果仍遇到密码提示，用 Python 的
+`subprocess.Popen(creationflags=0x08000000)` 创建无窗口子进程。
 
 ### 5. SSH 对 `-o` 参数值的 `=` 号处理
 
 **现象：** `ssh -o StrictHostKeyChecking=no` 工作正常。
 **结论：** 无问题，仅记录使用方式。
 
-## 已落地方案
-
-### SSH 密钥首次部署（密码 → 密钥）
+## SSH 密钥首次部署（密码 → 密钥）
 
 ```python
 import subprocess, os
@@ -67,37 +67,56 @@ proc.communicate(input=pubkey.encode())
 
 部署一次后，后续直接用密钥认证（无需密码）。
 
-### SCP 上传文件
+## 标准部署流程（幂等命令）
+
+以下命令按顺序执行，每步可独立重跑：
+
+### 1. 推送本地代码
 
 ```powershell
-# 上传单个文件
-scp -o StrictHostKeyChecking=no local/path user@host:/remote/path
-
-# 上传目录
-scp -r -o StrictHostKeyChecking=no local/dir/* user@host:/remote/dir/
+cd D:\Projects\prompt-novel-generator
+git add .
+git commit -m "message"
+git push
+git rev-parse --short HEAD
 ```
 
-### 服务器端验收
+### 2. 服务器同步源码
 
-```bash
-cd /opt/xiaomoxia/prompt-novel-generator
-pm2 restart xiaomoxia --update-env
-sleep 2
-curl -sI http://127.0.0.1:3001    # 验证 Express
-curl -sI http://82.156.85.49      # 验证 Nginx 反代
-pm2 list                          # 查看进程状态
+```powershell
+ssh -o StrictHostKeyChecking=no ubuntu@82.156.85.49 "`
+  cd /opt/xiaomoxia/prompt-novel-generator && `
+  git fetch origin && `
+  git reset --hard origin/master && `
+  git rev-parse --short HEAD`
+"
 ```
 
-### 部署流程（已有密钥时）
+### 3. 服务器构建 + 重启
 
-1. `npm run build`（本地）
-2. `scp -r dist/* user@host:/remote/dist/`
-3. `scp server/index.js user@host:/remote/server/index.js`
-4. SSH 执行 `pm2 restart` + curl 验证
-5. 如 `package.json` 变化，在服务器上额外执行 `npm install`
+```powershell
+ssh -o StrictHostKeyChecking=no ubuntu@82.156.85.49 "`
+  cd /opt/xiaomoxia/prompt-novel-generator && `
+  npm install && `
+  npm run build && `
+  pm2 restart xiaomoxia --update-env`
+"
+```
+
+### 4. 线上验收
+
+```powershell
+# 基础 HTTP
+curl.exe -sI http://82.156.85.49/
+curl.exe -sI http://127.0.0.1:3001/
+
+# 前端 asset MIME
+curl.exe -sI http://82.156.85.49/assets/index-DqFHGD7T.js
+curl.exe -sI http://82.156.85.49/assets/index-D3HC3pTK.css
+```
 
 ## 边界情况
 
-- 服务器 PIN 与本地不同：生产环境不应使用默认 `0000`，已在 `server/.env` 中配置。
-- `dist/` 只需在有前端变更时上传；仅改 `server/` 则只需上传对应文件。
-- 网络不通时无法下载工具：应优先使用系统已安装的工具（Python、Node.js、curl.exe），不依赖外部下载。
+- `dist/` 由服务器构建生成，本地不需要 `npm run build`。
+- 仅改 `server/` 时同样走完整流程（同步源码 → 构建 → 重启），不单独 SCP。
+- 网络不通时无法 SSH：先确认服务器可达，或联系运维排查。

@@ -78,9 +78,9 @@
 根据任务类型读取对应 skill：
 
 - 普通改代码、修 bug、排错、重构：`skills/cc-coding-discipline.md`
-- 自动 Git 提交、push、SCP 上传、服务器构建重启：`skills/xiaomoxia-auto-git-scp-deploy.md`
+- 自动 Git 提交、push、服务器部署（源码同步 → 构建 → 重启 → 验收）：`skills/xiaomoxia-auto-git-scp-deploy.md`
 - 飞书回报、收尾报告推送：`skills/xiaomoxia-feishu-report.md`
-- Windows SSH/SCP 部署（无 sshpass 环境）：`skills/xiaomoxia-windows-ssh-deploy.md`
+- Windows SSH 部署辅助（连接/认证问题集）：`skills/xiaomoxia-windows-ssh-deploy.md`
 
 ## 5. Default Report Format
 
