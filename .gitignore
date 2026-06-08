@@ -13,3 +13,12 @@ cookies.txt
 ecosystem.production.config.cjs
 ecosystem.config.cjs.bak-*
 _*.py
+_*.sh
+*_secret*
+*password*
+*.pem
+*.key
+deploy.local.*
+local.*
+*_diag.txt
+*.bak-*
