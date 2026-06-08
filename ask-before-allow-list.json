@@ -4,7 +4,7 @@
     {
       "name": "git-write-operations",
       "description": "Git commits, pushes, resets, and other write/history-modifying operations",
-      "tool_names": ["Bash"],
+      "tool_names": ["Bash", "PowerShell", "shell_command"],
       "match_type": "command_contains",
       "patterns": [
         "git add",
@@ -22,7 +22,7 @@
     {
       "name": "deploy-and-remote-operations",
       "description": "SSH, SCP, rsync, pm2, nginx, systemctl, and other remote/deploy operations",
-      "tool_names": ["Bash"],
+      "tool_names": ["Bash", "PowerShell", "shell_command"],
       "match_type": "command_contains",
       "patterns": [
         "ssh ",
@@ -41,7 +41,7 @@
     {
       "name": "destructive-file-operations",
       "description": "Delete, remove, overwrite, and move operations",
-      "tool_names": ["Bash"],
+      "tool_names": ["Bash", "PowerShell", "shell_command"],
       "match_type": "command_contains",
       "patterns": [
         "rm ",
@@ -63,6 +63,11 @@
       "patterns": [
         "**/CLAUDE.md",
         "**/AGENT.md",
+        "**/AGENTS.md",
+        "**/hooks.json",
+        "**/settings.json",
+        "**/notify-*.ps1",
+        "**/ask-before-allow-list.json",
         "skills/*.md",
         ".env",
         ".env.*",
@@ -83,7 +88,7 @@
     {
       "name": "permission-environment-system-operations",
       "description": "Permission changes, environment variables, and system package management",
-      "tool_names": ["Bash"],
+      "tool_names": ["Bash", "PowerShell", "shell_command"],
       "match_type": "command_contains",
       "patterns": [
         "chmod",

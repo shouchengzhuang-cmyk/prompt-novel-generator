@@ -12,6 +12,25 @@ function Write-PermissionLog {
     }
 }
 
+$PermissionModeFile = "D:\Projects\prompt-novel-generator\permission-mode.json"
+
+function Get-PermissionMode {
+    if (-not (Test-Path $PermissionModeFile)) {
+        return "balanced"
+    }
+
+    try {
+        $config = Get-Content -Path $PermissionModeFile -Encoding UTF8 -Raw | ConvertFrom-Json
+        $validModes = @("strict", "balanced", "open")
+        if ($config.mode -in $validModes) {
+            return $config.mode
+        }
+        return "balanced"
+    } catch {
+        return "balanced"
+    }
+}
+
 function Load-AskBeforeAllowConfig {
     param([string]$ConfigPath)
 
@@ -105,7 +124,8 @@ function Test-ShouldAskBeforeAllow {
     param(
         [string]$ToolName,
         [string]$Command,
-        [string]$FilePath
+        [string]$FilePath,
+        [string]$Mode
     )
 
     $config = Load-AskBeforeAllowConfig -ConfigPath $ConfigFile
@@ -140,12 +160,41 @@ function Test-ShouldAskBeforeAllow {
 
         if ($matched) {
             $logTarget = if ([string]::IsNullOrEmpty($Command)) { $FilePath } else { $Command }
-            Write-PermissionLog "popup_required | $ToolName | $logTarget | rule=$ruleName"
+            Write-PermissionLog "popup_required | mode=$Mode | $ToolName | $logTarget | rule=$ruleName"
             return $true
         }
     }
 
     return $false
+}
+
+function Get-RequesterName {
+    param($Payload)
+
+    $sourceText = ""
+    if ($Payload) {
+        $parts = @()
+        foreach ($name in @("source", "client", "client_name", "originator", "app", "application", "transcript_path", "session_path", "cwd")) {
+            try {
+                if ($Payload.PSObject.Properties.Name -contains $name -and $Payload.$name) {
+                    $parts += [string]$Payload.$name
+                }
+            } catch {
+                # Ignore missing or non-string fields
+            }
+        }
+        $sourceText = ($parts -join " ")
+    }
+
+    if ($sourceText -match '(?i)(\\|/)\.codex(\\|/)|(^|[^a-z])codex([^a-z]|$)') {
+        return "Codex"
+    }
+
+    if ($sourceText -match '(?i)(\\|/)\.claude(\\|/)|(^|[^a-z])claude([^a-z]|$)|claude-code') {
+        return "Claude Code"
+    }
+
+    return "AI Tool"
 }
 
 try {
@@ -176,21 +225,22 @@ try {
     }
 
     # === Auto-allow pre-check ===
-    # If the request doesn't match the ask-before-allow list, auto-allow without popup
-    $shouldAsk = $true
-    if ($Payload) {
-        $cmd = ""
-        $fpath = ""
-        if ($Payload.tool_input) {
-            if ($Payload.tool_input.command) { $cmd = [string]$Payload.tool_input.command }
-            if ($Payload.tool_input.file_path) { $fpath = [string]$Payload.tool_input.file_path }
-        }
-        $shouldAsk = Test-ShouldAskBeforeAllow -ToolName $ToolName -Command $cmd -FilePath $fpath
+    # Mode-based permission filtering BEFORE rule engine
+    $PermissionMode = Get-PermissionMode
+
+    # Parse command and file_path from tool_input (needed for both mode logging and rule check)
+    $cmd = ""
+    $fpath = ""
+    if ($Payload -and $Payload.tool_input) {
+        if ($Payload.tool_input.command) { $cmd = [string]$Payload.tool_input.command }
+        if ($Payload.tool_input.file_path) { $fpath = [string]$Payload.tool_input.file_path }
     }
 
-    if (-not $shouldAsk) {
-        $logTarget = if ([string]::IsNullOrEmpty($cmd)) { $fpath } else { $cmd }
-        Write-PermissionLog "auto_allow | $ToolName | $logTarget | rule=none"
+    $logTarget = if ([string]::IsNullOrEmpty($cmd)) { $fpath } else { $cmd }
+    $RequesterName = Get-RequesterName -Payload $Payload
+
+    if ($PermissionMode -eq "open") {
+        Write-PermissionLog "auto_allow | mode=$PermissionMode | $ToolName | $logTarget | rule=mode-open"
         $Response = @{
             hookSpecificOutput = @{
                 hookEventName = "PermissionRequest"
@@ -201,6 +251,32 @@ try {
         }
         $Response | ConvertTo-Json -Depth 20 -Compress
         exit 0
+    }
+
+    if ($PermissionMode -eq "strict") {
+        $shouldAsk = $true
+        Write-PermissionLog "popup_required | mode=$PermissionMode | $ToolName | $logTarget | rule=mode-strict"
+    }
+    else {
+        # Balanced mode: use existing rule engine
+        $shouldAsk = $true
+        if ($Payload) {
+            $shouldAsk = Test-ShouldAskBeforeAllow -ToolName $ToolName -Command $cmd -FilePath $fpath -Mode $PermissionMode
+        }
+
+        if (-not $shouldAsk) {
+            Write-PermissionLog "auto_allow | mode=$PermissionMode | $ToolName | $logTarget | rule=none"
+            $Response = @{
+                hookSpecificOutput = @{
+                    hookEventName = "PermissionRequest"
+                    decision = @{
+                        behavior = "allow"
+                    }
+                }
+            }
+            $Response | ConvertTo-Json -Depth 20 -Compress
+            exit 0
+        }
     }
 
     Add-Content -Path $LogFile -Encoding UTF8 -Value "=============================="
@@ -217,7 +293,7 @@ try {
     $HasAlwaysAllow = $PermissionSuggestions -and $PermissionSuggestions.Count -gt 0
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "Claude Code Permission Request"
+    $form.Text = "$RequesterName Permission Request"
     $form.TopMost = $true
     $form.StartPosition = "CenterScreen"
     $form.Size = New-Object System.Drawing.Size(440, 250)
@@ -231,7 +307,7 @@ try {
     $label.Location = New-Object System.Drawing.Point(28, 20)
     $label.Size = New-Object System.Drawing.Size(380, 95)
     $label.Font = New-Object System.Drawing.Font("Segoe UI", 9)
-    $label.Text = "Claude Code requests permission.`r`n`r`nTool: $ToolName`r`n`r`nAllow this action?"
+    $label.Text = "$RequesterName requests permission.`r`n`r`nTool: $ToolName`r`n`r`nAllow this action?"
     $form.Controls.Add($label)
 
     # Allow Once button
@@ -347,8 +423,8 @@ try {
         $alternative = ""
         try {
             $inputResult = [Microsoft.VisualBasic.Interaction]::InputBox(
-                "User denied the action. What should Claude Code do instead?`r`n`r`nEnter an alternative instruction, e.g.: don't edit this file, use a different approach.",
-                "Alternative for Claude Code",
+                "User denied the action. What should $RequesterName do instead?`r`n`r`nEnter an alternative instruction, e.g.: don't edit this file, use a different approach.",
+                "Alternative for $RequesterName",
                 ""
             )
             if ($inputResult) {

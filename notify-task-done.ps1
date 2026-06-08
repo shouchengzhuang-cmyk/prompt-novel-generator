@@ -1,3 +1,9 @@
+# Gate: only Claude Code Stop hook explicitly sets CLAUDE_CODE_NOTIFY=1
+# Any other entry (direct run, Codex hook, scheduled task, etc.) exits silently
+if ($env:CLAUDE_CODE_NOTIFY -ne "1") {
+    exit 0
+}
+
 Add-Type -AssemblyName System.Windows.Forms
 
 $form = New-Object System.Windows.Forms.Form
@@ -22,7 +28,6 @@ $result = [System.Windows.Forms.MessageBox]::Show(
 $form.Close()
 $form.Dispose()
 
-# 用户点击"确定"后，自动激活 CC 终端窗口
 if ($result -eq "OK") {
     Add-Type @"
 using System;
@@ -44,7 +49,6 @@ public class Win32 {
 }
 "@
 
-    # 方法一：按进程名 + MainWindowHandle 匹配（可靠，不依赖窗口标题）
     $target = $null
     $processPriority = @(
         @(Get-Process | Where-Object { $_.ProcessName -match '^claude' -and $_.MainWindowHandle -ne 0 }),
@@ -56,7 +60,6 @@ public class Win32 {
         if ($group.Count -gt 0) { $target = $group[0].MainWindowHandle; break }
     }
 
-    # 方法二：按窗口标题 EnumWindows 兜底
     if (-not $target) {
         $windows = [System.Collections.ArrayList]::new()
         $enumProc = [Win32+EnumWindowsProc]{
