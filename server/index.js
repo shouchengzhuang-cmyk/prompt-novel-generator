@@ -16,6 +16,7 @@ const { createProjectService } = require('./services/projectService');
 const { createChapterService } = require('./services/chapterService');
 const { createVariantService } = require('./services/variantService');
 const { createGenerationContextService } = require('./services/generationContextService');
+const { createGenerationPersistenceService } = require('./services/generationPersistenceService');
 const {
   resolveGenerationModel,
   getNextChapterNumber,
@@ -561,6 +562,18 @@ const generationContextService = createGenerationContextService({
 });
 const { prepareGenerationContext } = generationContextService;
 
+const generationPersistenceService = createGenerationPersistenceService({
+  ensureDir,
+  readChapterIndex,
+  writeChapterIndex,
+  extractTitleFromContent,
+  countChars,
+  getNextChapterNumber,
+  formatChapterFileName,
+  buildGeneratedChapterIndexEntry,
+});
+const { persistGeneratedChapter } = generationPersistenceService;
+
 // ---- POST /api/generate ----
 
 app.post('/api/generate', async (req, res) => {
@@ -577,49 +590,14 @@ app.post('/api/generate', async (req, res) => {
     // 4. Call DeepSeek
     const content = await callDeepSeek(effectiveModel, messages);
 
-    // 5. Determine next chapter number and save
-    await ensureDir(chaptersDir);
-    let nextNum = 1;
-    try {
-      const files = await fs.readdir(chaptersDir);
-      const nums = files
-        .filter((f) => /^\d+\.txt$/.test(f))
-        .map((f) => parseInt(f, 10));
-      if (nums.length > 0) {
-        nextNum = Math.max(...nums) + 1;
-      }
-    } catch {
-      // first chapter
-    }
-
-    const filename = String(nextNum).padStart(3, '0') + '.txt';
-    await storage.writeText(path.join(chaptersDir, filename), content);
-
-    // 6a. Extract title and update index.json
-    const title = extractTitleFromContent(content, nextNum);
-    const indexEntries = await readChapterIndex(chaptersDir);
-    const now = new Date().toISOString();
-    const chapterEntry = {
+    const {
       fileName: filename,
       title,
-      createdAt: now,
-      userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
-      activeVersionId: 'v-original',
-      wordCount: countChars(content),
-      versions: [
-        {
-          id: 'v-original',
-          title,
-          userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
-          createdAt: now,
-        },
-      ],
-    };
-    indexEntries.push(chapterEntry);
-    await writeChapterIndex(chaptersDir, indexEntries);
+      wordCount,
+    } = await persistGeneratedChapter({ chaptersDir, content, userPrompt });
 
     // 6. 立即返回成功响应，摘要和编辑记忆改为后台异步更新
-    res.json({ content, fileName: filename, title, debugPromptInfo, wordCount: countChars(content) });
+    res.json({ content, fileName: filename, title, debugPromptInfo, wordCount });
 
     // 6b. 后台异步更新 summary.md（不阻塞响应）
     setImmediate(async () => {
@@ -757,37 +735,16 @@ app.post('/api/generate-stream', async (req, res) => {
       return;
     }
 
-    // 保存章节
-    await ensureDir(chaptersDir);
-    let nextNum = 1;
-    try {
-      const files = await fs.readdir(chaptersDir);
-      nextNum = getNextChapterNumber(files);
-    } catch {
-      // first chapter
-    }
-
-    const filename = formatChapterFileName(nextNum);
-    await storage.writeText(path.join(chaptersDir, filename), fullContent);
-
-    // 提取标题并更新 index.json
-    const title = extractTitleFromContent(fullContent, nextNum);
-    const indexEntries = await readChapterIndex(chaptersDir);
-    const now = new Date().toISOString();
-    const chapterEntry = buildGeneratedChapterIndexEntry({
+    const {
       fileName: filename,
       title,
-      createdAt: now,
-      userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
-      wordCount: countChars(fullContent),
-    });
-    indexEntries.push(chapterEntry);
-    await writeChapterIndex(chaptersDir, indexEntries);
+      wordCount,
+    } = await persistGeneratedChapter({ chaptersDir, content: fullContent, userPrompt });
 
     console.log(`[流式生成] 已保存章节 ${filename}`);
 
     // 发送完成事件（包含完整内容和元数据）
-    sendEvent({ type: 'done', fileName: filename, title, content: fullContent, debugPromptInfo: ctx.debugPromptInfo, wordCount: countChars(fullContent) });
+    sendEvent({ type: 'done', fileName: filename, title, content: fullContent, debugPromptInfo: ctx.debugPromptInfo, wordCount });
 
     // 后台异步更新
     setImmediate(async () => {
