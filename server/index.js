@@ -9,10 +9,12 @@ const vaultRoutes = require('./routes/vault');
 const createMaterialsRouter = require('./routes/materials');
 const createProjectsRouter = require('./routes/projects');
 const createChaptersRouter = require('./routes/chapters');
+const createVariantsRouter = require('./routes/variants');
 const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
 const { createProjectService } = require('./services/projectService');
 const { createChapterService } = require('./services/chapterService');
+const { createVariantService } = require('./services/variantService');
 const { acquireProjectLock, releaseProjectLock, withProjectLock, ProjectLockError } = require('./services/projectLocks');
 
 const app = express();
@@ -1715,171 +1717,23 @@ app.post('/api/projects/:projectName/chapters/:fileName/regenerate-stream', asyn
   }
 });
 
-// ---- GET /api/projects/:projectName/chapters/:fileName/variants ----
+// ---- Variant routes ----
 
-app.get('/api/projects/:projectName/chapters/:fileName/variants', async (req, res) => {
-  const { projectName, fileName } = req.params;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, fileName);
-  const relativePath = path.relative(chaptersDir, chapterPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  try {
-    await fs.access(chapterPath);
-  } catch {
-    return res.status(404).json({ error: '章节不存在' });
-  }
-
-  try {
-    const indexEntries = await readChapterIndex(chaptersDir);
-    const indexEntry = indexEntries.find((e) => e.fileName === fileName);
-    const originalUserPrompt = indexEntry?.userPrompt || '继续写';
-    let variants = (await readVariants(chaptersDir, fileName)).map((variant) =>
-      variant.id === 'v-original' && !variant.userPrompt
-        ? { ...variant, userPrompt: originalUserPrompt }
-        : variant
-    );
-
-    // Always include v-original — synthesize from .txt if not yet in variants file
-    if (!variants.find((v) => v.id === 'v-original')) {
-      const originalContent = await fs.readFile(chapterPath, 'utf-8');
-      variants.unshift({
-        id: 'v-original',
-        createdAt: indexEntry?.createdAt || new Date().toISOString(),
-        model: 'original',
-        userPrompt: originalUserPrompt,
-        content: originalContent,
-        title: indexEntry?.title || fileName.replace('.txt', ''),
-      });
-    }
-
-    res.json({ fileName, variants });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+const variantService = createVariantService({
+  safeProjectDir,
+  isValidChapterFileName,
+  readChapterIndex,
+  writeChapterIndex,
+  readVariants,
+  writeVariants,
+  updateChapterWordCount,
+  markChaptersStaleAfterRewrite,
+  withProjectLock,
 });
-
-// ---- PUT /api/projects/:projectName/chapters/:fileName/variants/:variantId/apply ----
-
-app.put('/api/projects/:projectName/chapters/:fileName/variants/:variantId/apply', async (req, res) => {
-  const { projectName, fileName, variantId } = req.params;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, fileName);
-  const relativePath = path.relative(chaptersDir, chapterPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  try {
-    await fs.access(chapterPath);
-  } catch {
-    return res.status(404).json({ error: '章节不存在' });
-  }
-
-  try {
-    await withProjectLock(projectName, 'apply-variant', async () => {
-      let variants = await readVariants(chaptersDir, fileName);
-      let variant = variants.find((v) => v.id === variantId);
-
-      // If v-original requested but not yet in variants file, synthesize from .txt
-      if (!variant && variantId === 'v-original') {
-        const indexEntries = await readChapterIndex(chaptersDir);
-        const indexEntry = indexEntries.find((e) => e.fileName === fileName);
-        const originalContent = await fs.readFile(chapterPath, 'utf-8');
-        variant = {
-          id: 'v-original',
-          createdAt: indexEntry?.createdAt || new Date().toISOString(),
-          model: 'original',
-          userPrompt: indexEntry?.userPrompt || '',
-          content: originalContent,
-          title: indexEntry?.title || fileName.replace('.txt', ''),
-        };
-        // Persist so subsequent requests read from file
-        variants = [variant, ...variants];
-        await writeVariants(chaptersDir, fileName, variants);
-      }
-
-      if (!variant) {
-        return res.status(404).json({ error: '候选版本不存在' });
-      }
-
-      // Write content to the main .txt file
-      await storage.writeText(chapterPath, variant.content);
-
-      // Update word count in index
-      await updateChapterWordCount(chaptersDir, fileName);
-
-      // Update index.json: set activeVersionId and track the version
-      let indexEntries = await readChapterIndex(chaptersDir);
-      const indexEntry = indexEntries.find((e) => e.fileName === fileName);
-      if (indexEntry) {
-        indexEntry.activeVersionId = variantId;
-        // Update chapter title if variant has a meaningful title
-        if (variant.title) {
-          indexEntry.title = variant.title;
-        }
-        // Propagate usedEventCards from variant to index entry
-        if (variant.usedEventCards && Array.isArray(variant.usedEventCards) && variant.usedEventCards.length > 0) {
-          indexEntry.usedEventCards = variant.usedEventCards;
-        }
-        // Ensure versions array exists with v-original as first entry
-        if (!indexEntry.versions) {
-          indexEntry.versions = [];
-        }
-        if (!indexEntry.versions.find((v) => v.id === 'v-original')) {
-          indexEntry.versions.unshift({
-            id: 'v-original',
-            title: indexEntry.title || fileName.replace('.txt', ''),
-            userPrompt: indexEntry.userPrompt || '',
-            createdAt: indexEntry.createdAt || new Date().toISOString(),
-          });
-        }
-        // Add this variant to versions if not already tracked
-        if (!indexEntry.versions.find((v) => v.id === variantId)) {
-          indexEntry.versions.push({
-            id: variantId,
-            title: indexEntry.title || fileName.replace('.txt', ''),
-            userPrompt: variant.userPrompt || '',
-            createdAt: variant.createdAt,
-          });
-        }
-        indexEntries = markChaptersStaleAfterRewrite(indexEntries, fileName);
-        await writeChapterIndex(chaptersDir, indexEntries);
-      }
-
-      res.json({ ok: true, fileName, content: variant.content, activeVersionId: variantId, title: indexEntry?.title || variant.title, chapters: indexEntries });
-    });
-  } catch (err) {
-    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
-    res.status(500).json({ error: err.message });
-  }
-});
+app.use(
+  '/api/projects/:projectName/chapters/:fileName/variants',
+  createVariantsRouter({ variantService }),
+);
 
 // ---- POST /api/projects/:projectName/summary/rebuild ----
 
