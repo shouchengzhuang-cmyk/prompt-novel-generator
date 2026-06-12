@@ -8,9 +8,11 @@ const { ZipArchive } = require('archiver');
 const vaultRoutes = require('./routes/vault');
 const createMaterialsRouter = require('./routes/materials');
 const createProjectsRouter = require('./routes/projects');
+const createChaptersRouter = require('./routes/chapters');
 const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
 const { createProjectService } = require('./services/projectService');
+const { createChapterService } = require('./services/chapterService');
 const { acquireProjectLock, releaseProjectLock, withProjectLock, ProjectLockError } = require('./services/projectLocks');
 
 const app = express();
@@ -384,20 +386,6 @@ async function writeChapterIndex(chaptersDir, entries) {
   await storage.writeJson(path.join(chaptersDir, INDEX_FILE), entries);
 }
 
-async function ensureChapterIndexEntry(chaptersDir, fileName) {
-  const entries = await readChapterIndex(chaptersDir);
-  let entry = entries.find((item) => item.fileName === fileName);
-  if (!entry) {
-    entry = {
-      fileName,
-      title: extractTitleFromContent('', parseInt(fileName, 10)),
-      createdAt: new Date().toISOString(),
-    };
-    entries.push(entry);
-  }
-  return { entries, entry };
-}
-
 function clearRewriteStaleMarker(entry) {
   if (!entry) return;
   delete entry.staleAfterRewrite;
@@ -530,273 +518,21 @@ const projectService = createProjectService({
 });
 app.use('/api/projects', createProjectsRouter({ projectService }));
 
-// ---- GET /api/projects/:projectName/chapters/:fileName ----
+// ---- Chapter routes ----
 
-app.get('/api/projects/:projectName/chapters/:fileName', async (req, res) => {
-  const { projectName, fileName } = req.params;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  try {
-    const chaptersDir = path.join(projectDir, 'chapters');
-    const chapterPath = path.join(chaptersDir, fileName);
-    const relativePath = path.relative(chaptersDir, chapterPath);
-    if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-      return res.status(400).json({ error: '无效的章节文件名' });
-    }
-    console.log('读取章节路径:', chapterPath);
-    const content = await fs.readFile(chapterPath, 'utf-8');
-    const indexEntries = await readChapterIndex(chaptersDir);
-    const entry = indexEntries.find((item) => item.fileName === fileName);
-    res.json({
-      fileName,
-      title: entry?.title || null,
-      content,
-      staleAfterRewrite: entry?.staleAfterRewrite === true,
-      staleReason: entry?.staleReason || '',
-      staleFromFileName: entry?.staleFromFileName || '',
-      staleAt: entry?.staleAt || null,
-    });
-  } catch {
-    res.status(404).json({ error: '章节不存在' });
-  }
+const chapterService = createChapterService({
+  safeProjectDir,
+  isValidChapterFileName,
+  readChapterIndex,
+  writeChapterIndex,
+  extractTitleFromContent,
+  clearRewriteStaleMarker,
+  readVariants,
+  writeVariants,
+  countChars,
+  withProjectLock,
 });
-
-// ---- PUT /api/projects/:projectName/chapters/:fileName/stale/confirm ----
-
-app.put('/api/projects/:projectName/chapters/:fileName/stale/confirm', async (req, res) => {
-  const { projectName, fileName } = req.params;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, fileName);
-  const relativePath = path.relative(chaptersDir, chapterPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  try {
-    await fs.access(chapterPath);
-    const { entries, entry } = await ensureChapterIndexEntry(chaptersDir, fileName);
-    clearRewriteStaleMarker(entry);
-    await writeChapterIndex(chaptersDir, entries);
-    res.json({ ok: true, chapter: entry, chapters: entries });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- DELETE /api/projects/:projectName/chapters/:fileName ----
-
-app.delete('/api/projects/:projectName/chapters/:fileName', async (req, res) => {
-  const { projectName, fileName } = req.params;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, fileName);
-  const relativePath = path.relative(chaptersDir, chapterPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  try {
-    await fs.access(chapterPath);
-  } catch {
-    return res.status(404).json({ error: '章节不存在' });
-  }
-
-  try {
-    await withProjectLock(projectName, 'delete-chapter', async () => {
-      await fs.rm(chapterPath);
-      // Remove entry from index.json
-      const indexEntries = await readChapterIndex(chaptersDir);
-      const filtered = indexEntries.filter((e) => e.fileName !== fileName);
-      if (filtered.length !== indexEntries.length) {
-        await writeChapterIndex(chaptersDir, filtered);
-      }
-      res.json({ ok: true, message: '章节已删除', fileName });
-    });
-  } catch (err) {
-    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- PUT /api/projects/:projectName/chapters/:fileName/title ----
-
-app.put('/api/projects/:projectName/chapters/:fileName/title', async (req, res) => {
-  const { projectName, fileName } = req.params;
-  let { title } = req.body;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, fileName);
-  const relativePath = path.relative(chaptersDir, chapterPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  try {
-    await fs.access(chapterPath);
-  } catch {
-    return res.status(404).json({ error: '章节不存在' });
-  }
-
-  if (typeof title !== 'string') {
-    return res.status(400).json({ error: 'title 必须为字符串' });
-  }
-
-  title = title.trim();
-  if (!title) {
-    return res.status(400).json({ error: 'title 不能为空' });
-  }
-
-  try {
-    await withProjectLock(projectName, 'save-title', async () => {
-      let indexEntries = await readChapterIndex(chaptersDir);
-
-      // Rebuild index.json if missing or empty
-      if (indexEntries.length === 0) {
-        const files = await fs.readdir(chaptersDir);
-        const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
-        indexEntries = txtFiles.map((f) => ({
-          fileName: f,
-          title: f.replace('.txt', ''),
-          createdAt: new Date().toISOString(),
-        }));
-      }
-
-      // Find or create entry
-      let entry = indexEntries.find((e) => e.fileName === fileName);
-      if (entry) {
-        entry.title = title;
-      } else {
-        entry = { fileName, title, createdAt: new Date().toISOString() };
-        indexEntries.push(entry);
-      }
-
-      await writeChapterIndex(chaptersDir, indexEntries);
-      res.json({ ok: true, chapter: { fileName: entry.fileName, title: entry.title, createdAt: entry.createdAt } });
-    });
-  } catch (err) {
-    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- PUT /api/projects/:projectName/chapters/:fileName/content (更新章节正文) ----
-
-app.put('/api/projects/:projectName/chapters/:fileName/content', async (req, res) => {
-  const { projectName, fileName } = req.params;
-  const { title, content } = req.body;
-
-  if (!isValidChapterFileName(fileName)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  if (typeof content !== 'string') {
-    return res.status(400).json({ error: 'content 必须为字符串' });
-  }
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-  const chapterPath = path.join(chaptersDir, fileName);
-  const relativePath = path.relative(chaptersDir, chapterPath);
-  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
-    return res.status(400).json({ error: '无效的章节文件名' });
-  }
-
-  try {
-    await fs.access(chapterPath);
-  } catch {
-    return res.status(404).json({ error: '章节不存在' });
-  }
-
-  try {
-    await withProjectLock(projectName, 'save-content', async () => {
-      // 1. Preserve original content as v-original variant if not already saved
-      const originalContent = await fs.readFile(chapterPath, 'utf-8');
-      const existingVariants = await readVariants(chaptersDir, fileName);
-      if (!existingVariants.find((v) => v.id === 'v-original')) {
-        existingVariants.unshift({
-          id: 'v-original',
-          createdAt: new Date().toISOString(),
-          model: 'original',
-          userPrompt: '',
-          content: originalContent,
-        });
-        await writeVariants(chaptersDir, fileName, existingVariants);
-      }
-
-      // 2. Write new content
-      await storage.writeText(chapterPath, content);
-
-      // 3. Update word count in index
-      const count = countChars(content);
-      const idxEntries = await readChapterIndex(chaptersDir);
-      const idxEntry = idxEntries.find((e) => e.fileName === fileName);
-      if (idxEntry) {
-        idxEntry.wordCount = count;
-        // Update title in index if provided
-        if (typeof title === 'string' && title.trim()) {
-          idxEntry.title = title.trim();
-        }
-        await writeChapterIndex(chaptersDir, idxEntries);
-      }
-
-      console.log(`[编辑正文] 已保存 项目=${projectName} 章节=${fileName}`);
-      res.json({ ok: true });
-    });
-  } catch (err) {
-    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
-    res.status(500).json({ error: err.message || '保存失败' });
-  }
-});
+app.use('/api/projects/:projectName/chapters', createChaptersRouter({ chapterService }));
 
 // ---- 生成上下文准备（供 /api/generate 和 /api/generate-stream 共用）----
 
