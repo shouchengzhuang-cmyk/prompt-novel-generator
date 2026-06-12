@@ -7,8 +7,10 @@ const { ZipArchive } = require('archiver');
 
 const vaultRoutes = require('./routes/vault');
 const createMaterialsRouter = require('./routes/materials');
+const createProjectsRouter = require('./routes/projects');
 const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
+const { createProjectService } = require('./services/projectService');
 const { acquireProjectLock, releaseProjectLock, withProjectLock, ProjectLockError } = require('./services/projectLocks');
 
 const app = express();
@@ -469,31 +471,6 @@ function extractTitleFromContent(content, chapterNumber) {
   return `第${chapterNumber}章`;
 }
 
-// ---- Helper: collect project file stats ----
-
-async function collectProjectStats(projectDir) {
-  let totalSize = 0;
-  let latestMtime = 0;
-
-  const entries = await fs.readdir(projectDir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = path.join(projectDir, entry.name);
-    if (entry.name.startsWith('.')) continue;
-    if (entry.isDirectory()) {
-      const sub = await collectProjectStats(fullPath);
-      totalSize += sub.totalSize;
-      if (sub.latestMtime > latestMtime) latestMtime = sub.latestMtime;
-    } else if (entry.isFile()) {
-      try {
-        const stat = await fs.stat(fullPath);
-        totalSize += stat.size;
-        if (stat.mtimeMs > latestMtime) latestMtime = stat.mtimeMs;
-      } catch { /* skip unreadable files */ }
-    }
-  }
-  return { totalSize, latestMtime };
-}
-
 // ---- Auth ----
 
 const AUTH_PIN = process.env.XIAOMOXIA_PIN
@@ -540,155 +517,18 @@ app.use('/api', (req, res, next) => {
   res.status(401).json({ error: '未登录' });
 });
 
-// ---- GET /api/projects ----
+// ---- Project routes ----
 
-app.get('/api/projects', async (_req, res) => {
-  try {
-    await ensureDir(NOVELS_DIR);
-    const entries = await fs.readdir(NOVELS_DIR, { withFileTypes: true });
-    const projectNames = entries
-      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-      .map((e) => e.name);
-
-    const projects = await Promise.all(projectNames.map(async (name) => {
-      const projectDir = path.join(NOVELS_DIR, name);
-      try {
-        const stats = await collectProjectStats(projectDir);
-        let chapterCount = 0;
-        let totalWords = 0;
-        try {
-          const chaptersDir = path.join(projectDir, 'chapters');
-          const chapterFiles = await fs.readdir(chaptersDir);
-          chapterCount = chapterFiles.filter((file) => isValidChapterFileName(file)).length;
-          const indexEntries = await readChapterIndex(chaptersDir);
-          totalWords = indexEntries.reduce((sum, e) => sum + (Number(e.wordCount) || 0), 0);
-        } catch {
-          chapterCount = 0;
-        }
-        return { name, size: stats.totalSize, updatedAt: stats.latestMtime, chapterCount, totalWords };
-      } catch {
-        return { name, size: 0, updatedAt: 0, chapterCount: 0 };
-      }
-    }));
-
-    res.json({ projects });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+const projectService = createProjectService({
+  novelsDir: NOVELS_DIR,
+  safeProjectDir,
+  isValidChapterFileName,
+  readChapterIndex,
+  extractTitleFromContent,
+  readEditorialMemory,
+  withProjectLock,
 });
-
-// ---- POST /api/projects ----
-
-app.post('/api/projects', async (req, res) => {
-  const { projectName, world, characters, style, summary } = req.body;
-
-  if (!projectName || !projectName.trim()) {
-    return res.status(400).json({ error: '项目名不能为空' });
-  }
-
-  const name = projectName.trim();
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(name);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  try {
-    // Reject if project directory already exists
-    try {
-      await fs.access(projectDir);
-      return res.status(409).json({ error: '项目名已存在，请换一个名称。' });
-    } catch {
-      // directory does not exist, safe to create
-    }
-
-    const chaptersDir = path.join(projectDir, 'chapters');
-    await ensureDir(chaptersDir);
-    await storage.writeText(path.join(projectDir, 'world.md'), world || '');
-    await storage.writeText(path.join(projectDir, 'characters.md'), characters || '');
-    await storage.writeText(path.join(projectDir, 'summary.md'), typeof summary === 'string' ? summary : '');
-    await storage.writeText(path.join(projectDir, 'style.md'), style || '');
-    res.json({ success: true, projectName: name });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- GET /api/projects/:projectName ----
-
-app.get('/api/projects/:projectName', async (req, res) => {
-  const { projectName } = req.params;
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  try {
-    await fs.access(projectDir);
-  } catch {
-    return res.status(404).json({ error: '项目不存在' });
-  }
-
-  try {
-    const [world, characters, summary, style] = await Promise.all([
-      fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'characters.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => ''),
-      fs.readFile(path.join(projectDir, 'style.md'), 'utf-8').catch(() => ''),
-    ]);
-    const editorialMemory = await readEditorialMemory(projectName);
-
-    const chaptersDir = path.join(projectDir, 'chapters');
-    let chapters = [];
-    let recentContent = '';
-
-    try {
-      const files = await fs.readdir(chaptersDir);
-      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
-      const indexEntries = await readChapterIndex(chaptersDir);
-      const indexMap = {};
-      for (const entry of indexEntries) {
-        indexMap[entry.fileName] = entry;
-      }
-      chapters = txtFiles.map((f) => ({
-        ...(indexMap[f] || {}),
-        filename: f,
-        fileName: f,
-        title: indexMap[f]?.title || extractTitleFromContent('', parseInt(f, 10)),
-        userPrompt: indexMap[f]?.userPrompt || '',
-        activeVersionId: indexMap[f]?.activeVersionId || 'v-original',
-      }));
-
-      // Load content of last 10 chapters for display
-      const recentFiles = chapters.slice(-10);
-      const contents = await Promise.all(
-        recentFiles.map((ch) =>
-          fs.readFile(path.join(chaptersDir, ch.filename), 'utf-8')
-            .then((c) => ({ fn: ch.filename, text: c }))
-        )
-      );
-      // If more than 10 total, show a separator
-      if (chapters.length > 10) {
-        recentContent = `…（共 ${chapters.length} 章，显示最近 10 章）\n\n`;
-      }
-      recentContent += contents
-        .map((c) => `--- ${c.fn} ---\n${c.text}`)
-        .join('\n\n');
-    } catch {
-      // chapters dir may not exist
-    }
-
-    const totalWords = chapters.reduce((sum, ch) => sum + (Number(ch.wordCount) || 0), 0);
-    res.json({ projectName, world, characters, summary, style, editorialMemory, chapters, recentContent, totalWords });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+app.use('/api/projects', createProjectsRouter({ projectService }));
 
 // ---- GET /api/projects/:projectName/chapters/:fileName ----
 
@@ -955,135 +795,6 @@ app.put('/api/projects/:projectName/chapters/:fileName/content', async (req, res
   } catch (err) {
     if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
     res.status(500).json({ error: err.message || '保存失败' });
-  }
-});
-
-// ---- DELETE /api/projects/:projectName ----
-
-app.delete('/api/projects/:projectName', async (req, res) => {
-  const { projectName } = req.params;
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  // Prevent deleting the novels root directory
-  if (projectDir === NOVELS_DIR) {
-    return res.status(400).json({ error: '不能删除根目录' });
-  }
-
-  try {
-    await fs.access(projectDir);
-  } catch {
-    return res.status(404).json({ error: '项目不存在' });
-  }
-
-  try {
-    await fs.rm(projectDir, { recursive: true, force: false });
-    res.json({ ok: true, message: '项目已删除', projectName });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- POST /api/projects/:projectName/rename ----
-
-app.post('/api/projects/:projectName/rename', async (req, res) => {
-  const { projectName } = req.params;
-  const { newName } = req.body;
-
-  if (!newName || !newName.trim()) {
-    return res.status(400).json({ error: '新项目名不能为空' });
-  }
-
-  const trimmed = newName.trim();
-
-  // Validate: no path separator or illegal chars
-  if (/[/\\:*?"<>|]/.test(trimmed)) {
-    return res.status(400).json({ error: '项目名包含非法字符（/ \\ : * ? " < > |）' });
-  }
-
-  let oldDir, newDir;
-  try {
-    oldDir = safeProjectDir(projectName);
-    newDir = safeProjectDir(trimmed);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  // Check old exists
-  try {
-    await fs.access(oldDir);
-  } catch {
-    return res.status(404).json({ error: '原项目不存在' });
-  }
-
-  // Check new doesn't exist
-  try {
-    await fs.access(newDir);
-    return res.status(409).json({ error: `项目「${trimmed}」已存在` });
-  } catch {
-    // good — new name doesn't exist
-  }
-
-  try {
-    await withProjectLock(projectName, 'rename-project', async () => {
-      await fs.rename(oldDir, newDir);
-      res.json({ ok: true, projectName: trimmed, oldName: projectName });
-    });
-  } catch (err) {
-    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- PUT /api/projects/:projectName ----
-
-app.put('/api/projects/:projectName', async (req, res) => {
-  const { projectName } = req.params;
-  const { world, characters, style, summary, editorialMemory } = req.body;
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  try {
-    await fs.access(projectDir);
-  } catch {
-    return res.status(404).json({ error: '项目不存在' });
-  }
-
-  try {
-    await withProjectLock(projectName, 'save-settings', async () => {
-      const project = {
-        world: typeof world === 'string' ? world : '',
-        characters: typeof characters === 'string' ? characters : '',
-        style: typeof style === 'string' ? style : '',
-        summary: typeof summary === 'string' ? summary : '',
-        editorialMemory: typeof editorialMemory === 'string' ? editorialMemory : undefined,
-      };
-
-      const writes = [
-        storage.writeText(path.join(projectDir, 'world.md'), project.world),
-        storage.writeText(path.join(projectDir, 'characters.md'), project.characters),
-        storage.writeText(path.join(projectDir, 'style.md'), project.style),
-        storage.writeText(path.join(projectDir, 'summary.md'), project.summary),
-      ];
-      if (project.editorialMemory !== undefined) {
-        writes.push(storage.writeText(path.join(projectDir, 'editorial-memory.md'), project.editorialMemory));
-      }
-      await Promise.all(writes);
-      res.json({ ok: true, message: '设定已保存', project });
-    });
-  } catch (err) {
-    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
-    res.status(500).json({ error: err.message });
   }
 });
 
