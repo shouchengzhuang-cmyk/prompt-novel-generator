@@ -15,6 +15,14 @@ const storage = require('./services/storage');
 const { createProjectService } = require('./services/projectService');
 const { createChapterService } = require('./services/chapterService');
 const { createVariantService } = require('./services/variantService');
+const {
+  resolveGenerationModel,
+  getNextChapterNumber,
+  formatChapterFileName,
+  buildGeneratedChapterIndexEntry,
+  appendAndExtractSseLines,
+  parseDeepSeekSseLine,
+} = require('./services/generationHelpers');
 const { acquireProjectLock, releaseProjectLock, withProjectLock, ProjectLockError } = require('./services/projectLocks');
 
 const app = express();
@@ -550,8 +558,7 @@ async function prepareGenerationContext({ projectName, userPrompt, model }) {
     throw err;
   }
 
-  const allowedModels = ['deepseek-v4-flash', 'deepseek-v4-pro'];
-  const effectiveModel = allowedModels.includes(model) ? model : 'deepseek-v4-flash';
+  const effectiveModel = resolveGenerationModel(model);
 
   const projectDir = safeProjectDir(projectName);
   const chaptersDir = path.join(projectDir, 'chapters');
@@ -855,26 +862,14 @@ app.post('/api/generate-stream', async (req, res) => {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+        const parsedChunk = appendAndExtractSseLines(buffer, decoder.decode(value, { stream: true }));
+        buffer = parsedChunk.buffer;
 
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-          const payload = trimmed.slice(6);
-          if (payload === '[DONE]') continue;
-
-          try {
-            const parsed = JSON.parse(payload);
-            const delta = parsed.choices?.[0]?.delta?.content;
-            if (delta) {
-              fullContent += delta;
-              sendEvent({ type: 'chunk', content: delta });
-            }
-          } catch {
-            // 跳过无法解析的行
+        for (const line of parsedChunk.lines) {
+          const event = parseDeepSeekSseLine(line);
+          if (event?.content) {
+            fullContent += event.content;
+            sendEvent({ type: 'chunk', content: event.content });
           }
         }
       }
@@ -893,39 +888,25 @@ app.post('/api/generate-stream', async (req, res) => {
     let nextNum = 1;
     try {
       const files = await fs.readdir(chaptersDir);
-      const nums = files
-        .filter((f) => /^\d+\.txt$/.test(f))
-        .map((f) => parseInt(f, 10));
-      if (nums.length > 0) {
-        nextNum = Math.max(...nums) + 1;
-      }
+      nextNum = getNextChapterNumber(files);
     } catch {
       // first chapter
     }
 
-    const filename = String(nextNum).padStart(3, '0') + '.txt';
+    const filename = formatChapterFileName(nextNum);
     await storage.writeText(path.join(chaptersDir, filename), fullContent);
 
     // 提取标题并更新 index.json
     const title = extractTitleFromContent(fullContent, nextNum);
     const indexEntries = await readChapterIndex(chaptersDir);
     const now = new Date().toISOString();
-    const chapterEntry = {
+    const chapterEntry = buildGeneratedChapterIndexEntry({
       fileName: filename,
       title,
       createdAt: now,
       userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
-      activeVersionId: 'v-original',
       wordCount: countChars(fullContent),
-      versions: [
-        {
-          id: 'v-original',
-          title,
-          userPrompt: typeof userPrompt === 'string' ? userPrompt.trim() : '',
-          createdAt: now,
-        },
-      ],
-    };
+    });
     indexEntries.push(chapterEntry);
     await writeChapterIndex(chaptersDir, indexEntries);
 
