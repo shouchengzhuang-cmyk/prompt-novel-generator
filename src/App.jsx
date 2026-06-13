@@ -402,11 +402,12 @@ function App() {
 
   const generatingRef = useRef(false);
   const [streamingChapterNum, setStreamingChapterNum] = useState('');
+  const appScrollRef = useRef(null);
   const readingSectionRef = useRef(null);
   const readingContentRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  // 章节内容区域滚动监听（桌面端使用 content div 的 onScroll，移动端使用 window scroll）
+  // 章节内容区域滚动监听（桌面端使用 content div，移动端使用 .app 滚动容器）
   const handleReadingContentScroll = () => {
     if (readingContentRef.current) {
       setShowScrollTop(readingContentRef.current.scrollTop > 300);
@@ -418,10 +419,12 @@ function App() {
       setShowScrollTop(false);
       return;
     }
-    const handleScroll = () => setShowScrollTop(window.scrollY > 300);
-    window.addEventListener('scroll', handleScroll, { passive: true });
+    const scrollContainer = appScrollRef.current;
+    if (!scrollContainer) return;
+    const handleScroll = () => setShowScrollTop(scrollContainer.scrollTop > 300);
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
     handleScroll();
-    return () => window.removeEventListener('scroll', handleScroll);
+    return () => scrollContainer.removeEventListener('scroll', handleScroll);
   }, [isMobile, readingChapter]);
 
   // 章节切换时重置滚动状态
@@ -431,7 +434,7 @@ function App() {
 
   const handleScrollToTop = () => {
     if (isMobile) {
-      readingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      appScrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       readingContentRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -2236,7 +2239,7 @@ function App() {
   }
 
   return (
-    <div className={`app${isMobile ? ' mobile-dark-app' : ''}${isMobile && mobileView === 'chapter' ? ' mobile-chapter-dark' : ''} mobile-reading-${readingTheme}`}>
+    <div ref={appScrollRef} className={`app${isMobile ? ' mobile-dark-app' : ''}${isMobile && mobileView === 'chapter' ? ' mobile-chapter-dark' : ''} mobile-reading-${readingTheme}`}>
       <h1>小墨匣
         {/* 退出：调用认证退出接口并清理本地登录状态，随后回到登录页。 */}
         <span className="logout-link" onClick={handleLogout}>退出</span>
