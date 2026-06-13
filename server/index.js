@@ -16,6 +16,7 @@ const createExportBackupRouter = require('./routes/exportBackup');
 const createSearchRouter = require('./routes/search');
 const createSummaryOutlineRouter = require('./routes/summaryOutline');
 const createPromptPreviewRouter = require('./routes/promptPreview');
+const createRebuildIndexRouter = require('./routes/rebuildIndex');
 const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
 const { createProjectService } = require('./services/projectService');
@@ -645,82 +646,21 @@ app.use(
   }),
 );
 
-// ---- POST /api/projects/:projectName/chapters/rebuild-index ----
+// ---- Rebuild index route ----
 
-app.post('/api/projects/:projectName/chapters/rebuild-index', async (req, res) => {
-  const { projectName } = req.params;
-
-  let projectDir;
-  try {
-    projectDir = safeProjectDir(projectName);
-  } catch (err) {
-    return res.status(400).json({ error: err.message });
-  }
-
-  try {
-    await fs.access(projectDir);
-  } catch {
-    return res.status(404).json({ error: '项目不存在' });
-  }
-
-  const chaptersDir = path.join(projectDir, 'chapters');
-
-  try {
-    await fs.access(chaptersDir);
-  } catch {
-    return res.status(404).json({ error: '该项目暂无章节' });
-  }
-
-  try {
-    await withProjectLock(projectName, 'rebuild-index', async () => {
-      // Scan all .txt files sorted
-      const files = await fs.readdir(chaptersDir);
-      const txtFiles = files.filter((f) => f.endsWith('.txt')).sort();
-
-      if (txtFiles.length === 0) {
-        return res.status(404).json({ error: '该项目暂无章节' });
-      }
-
-      // Read old index, keyed by fileName
-      const oldEntries = await readChapterIndex(chaptersDir);
-      const oldMap = {};
-      for (const entry of oldEntries) {
-        oldMap[entry.fileName] = entry;
-      }
-
-      // Build new index
-      const newEntries = [];
-      for (const f of txtFiles) {
-        const old = oldMap[f];
-        let createdAt;
-        if (old && old.createdAt) {
-          createdAt = old.createdAt;
-        } else {
-          try {
-            const stat = await fs.stat(path.join(chaptersDir, f));
-            createdAt = stat.birthtime?.toISOString() || stat.mtime.toISOString();
-          } catch {
-            createdAt = new Date().toISOString();
-          }
-        }
-        newEntries.push({
-          ...(old || {}),
-          fileName: f,
-          title: old?.title || `第${parseInt(f, 10)}章`,
-          createdAt,
-          activeVersionId: old?.activeVersionId || 'v-original',
-          versions: old?.versions || [],
-        });
-      }
-
-      await writeChapterIndex(chaptersDir, newEntries);
-      res.json({ ok: true, chapters: newEntries });
-    });
-  } catch (err) {
-    if (err instanceof ProjectLockError) return res.status(409).json({ error: err.message });
-    res.status(500).json({ error: err.message });
-  }
-});
+app.use(
+  '/api/projects/:projectName/chapters',
+  createRebuildIndexRouter({
+    safeProjectDir,
+    readChapterIndex,
+    writeChapterIndex,
+    withProjectLock,
+    ProjectLockError,
+    access: fs.access,
+    readDir: fs.readdir,
+    stat: fs.stat,
+  }),
+);
 
 // ---- Variant helpers ----
 
