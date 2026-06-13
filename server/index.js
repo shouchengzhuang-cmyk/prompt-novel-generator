@@ -877,6 +877,29 @@ app.get('*', (_req, res) => {
 // ---- Export (for testing via supertest) ----
 
 module.exports = app;
+module.exports.__testHelpers = {
+  DEFAULT_EDITORIAL_MEMORY,
+  safeProjectDir,
+  isValidChapterFileName,
+  countChars,
+  getEditorialMemoryPath,
+  ensureEditorialMemory,
+  readEditorialMemory,
+  writeEditorialMemory,
+  replaceChapterMemoryBlock,
+  selectEditorialMemoryForPrompt,
+  updateEditorialMemoryForChapter,
+  readChapterIndex,
+  writeChapterIndex,
+  clearRewriteStaleMarker,
+  updateChapterWordCount,
+  markChaptersStaleAfterRewrite,
+  extractTitleFromContent,
+  readActiveChapterContent,
+  variantsFilePath,
+  readVariants,
+  writeVariants,
+};
 
 // ---- Start ----
 

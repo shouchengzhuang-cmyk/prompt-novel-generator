@@ -179,6 +179,37 @@ describe('POST /api/generate-stream', () => {
     });
   });
 
+  it('后台摘要或编辑记忆更新失败时不影响已经完成的 done 响应', async () => {
+    const { chaptersDir } = await createProject('background-update-error');
+    const originalImplementation = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockImplementation(async (_url, options) => {
+      const body = JSON.parse(options.body);
+      if (body.stream) {
+        const next = streamResponses.shift();
+        if (!next) throw new Error('missing mocked stream response');
+        return next;
+      }
+      throw new Error('mocked background update failure');
+    });
+    streamResponses.push(createStreamResponse([
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '正文已完成' } }] })}\n\n`,
+      'data: [DONE]\n\n',
+    ]));
+
+    try {
+      const res = await postGenerate('background-update-error');
+      expect(parseSse(res.body).at(-1)).toMatchObject({
+        type: 'done',
+        content: '正文已完成',
+      });
+      await expect(fs.readFile(path.join(chaptersDir, '001.txt'), 'utf8'))
+        .resolves.toBe('正文已完成');
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    } finally {
+      vi.mocked(fetch).mockImplementation(originalImplementation);
+    }
+  });
+
   it('能拼接被拆在多个网络 chunk 中的 DeepSeek JSON，并忽略 [DONE]', async () => {
     await createProject('split-json');
     const payload = `data: ${JSON.stringify({ choices: [{ delta: { content: '拆包成功' } }] })}\n\n`;
