@@ -12,7 +12,6 @@ import MobileShell from './pages/mobile/MobileShell';
 import MobileWritingPage from './pages/mobile/MobileWritingPage';
 import LoginScreen from './components/auth/LoginScreen';
 import AppNotification from './components/AppNotification';
-import ProjectList from './components/project/ProjectList';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -108,11 +107,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('xiaomoxia_project_sort', JSON.stringify(projectSort));
   }, [projectSort]);
-
-  // Sidebar layout
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isProjectsCollapsed, setIsProjectsCollapsed] = useState(false);
-  const [isChaptersCollapsed, setIsChaptersCollapsed] = useState(false);
 
   // Mobile view routing: 'shelf' | 'project' | 'chapter' | 'editor' | 'writing'
   const [mobileView, setMobileView] = useState('shelf');
@@ -2398,113 +2392,7 @@ function App() {
         />
       )}
       {isMobile && (
-      <MobileShell isSidebarCollapsed={isSidebarCollapsed}>
-        {/* ===== Left Panel: Projects (desktop only) ===== */}
-        {!isMobile && (isSidebarCollapsed ? (
-          /* 展开旧侧栏：只切换旧桌面侧栏折叠状态，不请求后端。 */
-          <button
-            className="sidebar-collapsed-toggle"
-            onClick={() => setIsSidebarCollapsed(false)}
-            title="展开侧栏"
-          >
-            ›
-          </button>
-        ) : (
-          <aside className="panel panel-left sidebar">
-            {!isMobile && (
-            /* 收起旧侧栏：只切换旧桌面侧栏折叠状态，不保存内容。 */
-            <button
-              className="sidebar-collapsed-toggle sidebar-collapse-button"
-              onClick={() => setIsSidebarCollapsed(true)}
-              title="收起侧栏"
-            >
-              ‹
-            </button>
-            )}
-
-            <ProjectList
-              projects={sortedProjects}
-              currentProject={currentProject}
-              projectSort={projectSort}
-              isCollapsed={isProjectsCollapsed}
-              onSortChange={setProjectSort}
-              onSelect={handleSelectProject}
-              onDelete={handleDeleteProject}
-              onCreate={() => { setShowCreateForm(true); setCreateError(''); }}
-              onRefresh={handleRefresh}
-              onToggle={() => setIsProjectsCollapsed((prev) => !prev)}
-            />
-
-            {projectDetails && (
-              <section className="sidebar-section chapters-list">
-                <div className="sidebar-section-header">
-                  <h3>章节列表</h3>
-                  <div className="sidebar-section-actions">
-                    {!isChaptersCollapsed && (
-                      <>
-                        {/* 导出全文：调用后端导出接口生成当前项目全文，不修改项目内容。 */}
-                        <button className="btn" onClick={handleExport} disabled={exportStatus === 'exporting'}>
-                          {exportStatus === 'exporting' ? '导出中...' : '导出全文'}
-                        </button>
-                        <details className="project-tools">
-                          <summary className="project-tools-summary">项目工具</summary>
-                          <div className="project-tools-body">
-                            {/* 重建索引：调用后端重建当前项目章节索引，可能更新章节元数据。 */}
-                            <button className="btn" onClick={handleRebuildIndex}>重建索引</button>
-                            {/* 导出项目备份：调用后端备份接口下载当前项目数据，不修改服务器内容。 */}
-                            <button className="btn btn-secondary" onClick={handleBackup}>
-                              导出项目备份
-                            </button>
-                          </div>
-                        </details>
-                      </>
-                    )}
-                    {/* 折叠章节区：只切换旧侧栏章节列表显示状态，不请求后端。 */}
-                    <button className="btn btn-secondary" onClick={() => setIsChaptersCollapsed((prev) => !prev)}>
-                      {isChaptersCollapsed ? '展开' : '收起'}
-                    </button>
-                  </div>
-                </div>
-
-                {!isChaptersCollapsed && (
-                  <div className="sidebar-section-body chapter-list-scroll">
-                    {projectDetails.chapters && projectDetails.chapters.length > 0 ? (
-                      <ul>
-                        {projectDetails.chapters.map((ch, index) => {
-                          const cf = ch.fileName || ch.filename;
-                          const key = cf || `chapter-${index}`;
-                          return (
-                          <li key={key} className={`chapter-item-wrap${!cf ? ' disabled' : ''}`}>
-                            <div
-                              className={'chapter-item' + (cf && readingChapter === cf ? ' active' : '')}
-                              onClick={() => {
-                              if (cf) {
-                                handleReadChapter(cf);
-                                if (isMobile) { navigateTo('chapter'); setMobileGenerateOpen(false); setMobileVariantsOpen(false); }
-                              }
-                            }}
-                            >
-                              <span className="chapter-name">
-                                <span className="chapter-name-text">{cf ? `${cf.slice(0, 3)} ${ch.title || cf.replace(/\.txt$/, '')}` : '无效章节'}</span>
-                                {ch.staleAfterRewrite && <span className="chapter-stale-badge">待检查</span>}
-                              </span>
-                            </div>
-                            {/* 删除章节：调用后端删除当前章节文件；handler 内应有确认，避免误删正文。 */}
-                            <button className="delete-btn chapter-delete" disabled={!cf} onClick={(e) => cf && handleDeleteChapter(cf, e)}>删除</button>
-                          </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="hint">暂无章节</p>
-                    )}
-                  </div>
-                )}
-              </section>
-            )}
-          </aside>
-        ))}
-
+      <MobileShell>
         {mobileView === 'writing' && (
           <MobileWritingPage
             currentProject={currentProject}
