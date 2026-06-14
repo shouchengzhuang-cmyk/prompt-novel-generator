@@ -24,6 +24,7 @@ import * as ProjectsApi from './api/projectsApi';
 import { parseSSEStream } from './utils/sseReader';
 import { useWritingPrefsState } from './hooks/useWritingPrefsState';
 import { useGenerationProgress } from './hooks/useGenerationProgress';
+import { useVariantState } from './hooks/useVariantState';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -42,6 +43,7 @@ function App() {
   // Generation
   const [userPrompt, setUserPrompt] = useState('');
   const [loading, setLoading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState('');
   const [displayContent, setDisplayContent] = useState('');
   const [lastFilename, setLastFilename] = useState('');
@@ -57,14 +59,6 @@ function App() {
   // Chapter title editing
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState('');
-
-  // Variants (regenerated chapter candidates)
-  const [variants, setVariants] = useState([]);
-  const [regenerating, setRegenerating] = useState(false);
-  const [variantPreview, setVariantPreview] = useState(null);
-  const [applyingVariant, setApplyingVariant] = useState(false);
-  const [showRewriteInput, setShowRewriteInput] = useState(false);
-  const [rewritePrompt, setRewritePrompt] = useState('');
 
   // Reading settings
   const [readingTheme, setReadingTheme] = useState(() => {
@@ -487,10 +481,7 @@ function App() {
 
     setError('');
     // 清理重写/变体状态，避免 variantPreview 遮挡新生成内容
-    setVariantPreview(null);
-    setVariants([]);
-    setShowRewriteInput(false);
-    setRewritePrompt('');
+    clearVariantState();
     setLoading(true);
     setMobileWritingError('');
     setMobileWritingOutput('');
@@ -1339,9 +1330,15 @@ function App() {
     }
   };
 
-  const handlePreviewVariant = (variant) => {
-    setVariantPreview(variantPreview?.id === variant.id ? null : variant);
-  };
+  const {
+    variants, setVariants,
+    variantPreview, setVariantPreview,
+    applyingVariant, setApplyingVariant,
+    showRewriteInput, setShowRewriteInput,
+    rewritePrompt, setRewritePrompt,
+    handlePreviewVariant,
+    clearVariantState,
+  } = useVariantState();
 
   const { model, setModel, writingPrefs, setWritingPrefs, enhancedPrompt, enhancedRewritePrompt } =
     useWritingPrefsState({ userPrompt, rewritePrompt });
