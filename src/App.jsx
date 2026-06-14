@@ -19,6 +19,7 @@ import { useProjectCreateFormState } from './hooks/useProjectCreateFormState';
 import { useProjectSelectionState } from './hooks/useProjectSelectionState';
 import { useChapterSelectionState } from './hooks/useChapterSelectionState';
 import { useWorkspaceUiState } from './hooks/useWorkspaceUiState';
+import { useProjectSettingsDraftState } from './hooks/useProjectSettingsDraftState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -46,13 +47,6 @@ function App() {
 
   // Project settings editor
   const [showSettings, setShowSettings] = useState(false);
-  const [savingSettings, setSavingSettings] = useState(false);
-  const [editWorld, setEditWorld] = useState('');
-  const [editCharacters, setEditCharacters] = useState('');
-  const [editStyle, setEditStyle] = useState('');
-  const [editSummary, setEditSummary] = useState('');
-  const [editEditorialMemory, setEditEditorialMemory] = useState('');
-  const [editingProjectName, setEditingProjectName] = useState(null);
 
   // Export
   const [exportStatus, setExportStatus] = useState('');
@@ -144,6 +138,18 @@ function App() {
   const [desktopSavingContent, setDesktopSavingContent] = useState(false);
 
   const { notification, setNotification, clearNotification } = useNotificationState();
+  const settingsDraft = useProjectSettingsDraftState();
+  const {
+    savingSettings, setSavingSettings,
+    editWorld, setEditWorld,
+    editCharacters, setEditCharacters,
+    editStyle, setEditStyle,
+    editSummary, setEditSummary,
+    editEditorialMemory, setEditEditorialMemory,
+    editingProjectName, setEditingProjectName,
+    hydrateSettingsDraft, clearSettingsDraft,
+    getSettingsPayload, getSavedSettings,
+  } = settingsDraft;
   const {
     desktopView, setDesktopView, desktopEditorTab, setDesktopEditorTab,
     mobileView, setMobileView, isMobile,
@@ -375,7 +381,7 @@ function App() {
     setShowRewriteInput(false);
     setRewritePrompt('');
     setShowSettings(false);
-    setEditingProjectName(null);
+    clearSettingsDraft();
     setShowOutline(false);
     setMobileMaterialsOpen(false);
     setMobileWritingTarget(null);
@@ -387,11 +393,6 @@ function App() {
     setDebugPromptInfo(null);
     if (isMobile) navigateTo('project');
     setWritingPrefs({ style: '', paragraph: 'normal', pace: 'normal', characterConsistency: 'strict' });
-    setEditWorld('');
-    setEditCharacters('');
-    setEditStyle('');
-    setEditSummary('');
-    setEditEditorialMemory('');
     try {
       const data = await loadProjectDetails(name);
       setProjectChapterCounts(prev => ({ ...prev, [name]: data.chapters ? data.chapters.length : 0 }));
@@ -781,13 +782,8 @@ function App() {
         setLastFilename('');
         setUserPrompt('');
         setShowSettings(false);
-        setEditingProjectName(null);
+        clearSettingsDraft();
         setDebugPromptInfo(null);
-        setEditWorld('');
-        setEditCharacters('');
-        setEditStyle('');
-        setEditSummary('');
-        setEditEditorialMemory('');
           }
       await fetchProjects();
       setError('项目已删除');
@@ -875,12 +871,7 @@ function App() {
   /** 打开项目设定编辑器，支持自动聚焦到指定字段（world/characters/summary） */
   const openSettingsEditor = (details = projectDetails, projectName = currentProject, focusTarget = '') => {
     if (!details || !projectName) return;
-    setEditWorld(details.world || '');
-    setEditCharacters(details.characters || '');
-    setEditStyle(details.style || '');
-    setEditSummary(details.summary || '');
-    setEditEditorialMemory(details.editorialMemory || '');
-    setEditingProjectName(projectName);
+    hydrateSettingsDraft(details, projectName);
     setShowSettings(true);
     setShowOutline(false);
     setMobileMaterialsOpen(false);
@@ -916,21 +907,11 @@ function App() {
     rememberLastProject(currentProject);
     setSavingSettings(true);
     try {
-      const data = await ProjectsApi.updateProjectSettings(currentProject, {
-        world: editWorld,
-        characters: editCharacters,
-        style: editStyle,
-        summary: editSummary,
-        editorialMemory: editEditorialMemory,
-      });
+      const data = await ProjectsApi.updateProjectSettings(currentProject, getSettingsPayload());
       // Sync projectDetails
       setProjectDetails((prev) => prev ? {
         ...prev,
-        world: data.project?.world ?? editWorld,
-        characters: data.project?.characters ?? editCharacters,
-        style: data.project?.style ?? editStyle,
-        summary: data.project?.summary ?? editSummary,
-        editorialMemory: data.project?.editorialMemory ?? editEditorialMemory,
+        ...getSavedSettings(data.project),
       } : prev);
       setError('设定已保存');
       setTimeout(() => setError(''), 3000);
