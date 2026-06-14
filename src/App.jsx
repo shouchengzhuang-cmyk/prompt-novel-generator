@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
-import { apiFetch, safeJsonFetch, setOnAuthExpired } from './api';
+import { apiFetch, safeJsonFetch } from './api';
 import ProjectWorkspacePage from './pages/ProjectWorkspacePage';
 import HomePage from './pages/HomePage';
 import MobileAllProjectsPage from './pages/mobile/MobileAllProjectsPage';
@@ -13,6 +13,7 @@ import MobileWritingPage from './pages/mobile/MobileWritingPage';
 import LoginScreen from './components/auth/LoginScreen';
 import AppNotification from './components/AppNotification';
 import { useNotificationState } from './hooks/useNotificationState';
+import { useAuthState } from './hooks/useAuthState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -178,27 +179,7 @@ function App() {
 
   const { notification, setNotification, clearNotification } = useNotificationState();
 
-  // Auth
-  const [authenticated, setAuthenticated] = useState(null); // null=checking, true/false=done
-  const [loginPin, setLoginPin] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginPinVisible, setLoginPinVisible] = useState(false);
-
-  useEffect(() => {
-    safeJsonFetch('/api/auth/me')
-      .then((data) => setAuthenticated(data.authenticated))
-      .catch(() => setAuthenticated(false));
-
-    // Register global 401 handler — when API calls detect auth expiry,
-    // reset to login page
-    setOnAuthExpired(() => {
-      setAuthenticated(false);
-      setLoginPin('');
-      setLoginPinVisible(false);
-      setLoginError('登录已过期，请重新输入 PIN');
-    });
-  }, []);
+  const auth = useAuthState();
 
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
@@ -209,35 +190,6 @@ function App() {
     if (!projectName) return;
     localStorage.setItem('xiaomoxia-last-project', projectName);
     setLastProjectName(projectName);
-  }, []);
-
-  // ========== 认证处理 ==========
-  /** 登录：验证 4 位 PIN 码 */
-  const handleLogin = useCallback(async () => {
-    if (loginPin.length !== 4) return;
-    setLoginLoading(true);
-    setLoginError('');
-    try {
-      await safeJsonFetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: loginPin }),
-      });
-      setAuthenticated(true);
-    } catch (err) {
-      setLoginError(err.message || '密码错误');
-    } finally {
-      setLoginLoading(false);
-    }
-  }, [loginPin]);
-
-  const handleLogout = useCallback(async () => {
-    try {
-      await safeJsonFetch('/api/auth/logout', { method: 'POST' });
-    } catch { /* ignore */ }
-    setAuthenticated(false);
-    setLoginPin('');
-    setLoginPinVisible(false);
   }, []);
 
   // Browser title during generation / rewrite
@@ -453,12 +405,12 @@ function App() {
   };
 
   useEffect(() => {
-    if (authenticated === true) {
+    if (auth.isAuthenticated === true) {
       fetchProjects();
     } else {
       setProjects([]);
     }
-  }, [authenticated]);
+  }, [auth.isAuthenticated]);
 
   // ---- 进入项目（加载详情和章节列表） ----
   /** 选中并加载一个项目，请求后端获取章节列表和最近内容 */
@@ -2213,21 +2165,21 @@ function App() {
       ? '已保存'
       : '等待选择章节';
 
-  if (authenticated === null) {
+  if (auth.authChecking) {
     return <LoginScreen checkingAuth />;
   }
 
-  if (!authenticated) {
+  if (!auth.isAuthenticated) {
     return (
       <LoginScreen
-        loginPassword={loginPin}
-        setLoginPassword={setLoginPin}
-        showPassword={loginPinVisible}
-        setShowPassword={setLoginPinVisible}
-        loginError={loginError}
-        setLoginError={setLoginError}
-        loggingIn={loginLoading}
-        handleLogin={handleLogin}
+        loginPassword={auth.password}
+        setLoginPassword={auth.setPassword}
+        showPassword={auth.showPassword}
+        setShowPassword={auth.setShowPassword}
+        loginError={auth.loginError}
+        setLoginError={auth.setLoginError}
+        loggingIn={auth.loginLoading}
+        handleLogin={auth.handleLogin}
       />
     );
   }
@@ -2236,7 +2188,7 @@ function App() {
     <div ref={appScrollRef} className={`app${isMobile ? ' mobile-dark-app' : ''}${isMobile && mobileView === 'chapter' ? ' mobile-chapter-dark' : ''} mobile-reading-${readingTheme}`}>
       <h1>小墨匣
         {/* 退出：调用认证退出接口并清理本地登录状态，随后回到登录页。 */}
-        <span className="logout-link" onClick={handleLogout}>退出</span>
+        <span className="logout-link" onClick={auth.handleLogout}>退出</span>
       </h1>
       {/* 新桌面工作台：桌面端会先渲染 ProjectWorkspacePage，后续旧 app-shell 仍需单独确认是否重复显示。 */}
       {!isMobile && (
@@ -2357,7 +2309,7 @@ function App() {
           onSetNewCharacters={setNewCharacters}
           onSetNewStyle={setNewStyle}
           onSetNewSummary={setNewSummary}
-          onHandleLogout={handleLogout}
+          onHandleLogout={auth.handleLogout}
           onHandleSelectProject={handleSelectProject}
           onHandleGenerate={handleGenerate}
           onRenameProject={handleRenameProject}
