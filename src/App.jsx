@@ -182,6 +182,23 @@ function App() {
     clearChapterSelection,
   } = chapterSelection;
 
+  const {
+    debugPromptInfo, setDebugPromptInfo,
+    genProgress, setGenProgress,
+    streamingChapterNum, setStreamingChapterNum,
+    handleGenProgressDone,
+  } = useGenerationProgress();
+
+  const {
+    variants, setVariants,
+    variantPreview, setVariantPreview,
+    applyingVariant, setApplyingVariant,
+    showRewriteInput, setShowRewriteInput,
+    rewritePrompt, setRewritePrompt,
+    handlePreviewVariant,
+    clearVariantState,
+  } = useVariantState();
+
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
   }, [readingContent, variantPreview]);
@@ -1330,16 +1347,6 @@ function App() {
     }
   };
 
-  const {
-    variants, setVariants,
-    variantPreview, setVariantPreview,
-    applyingVariant, setApplyingVariant,
-    showRewriteInput, setShowRewriteInput,
-    rewritePrompt, setRewritePrompt,
-    handlePreviewVariant,
-    clearVariantState,
-  } = useVariantState();
-
   const { model, setModel, writingPrefs, setWritingPrefs, enhancedPrompt, enhancedRewritePrompt } =
     useWritingPrefsState({ userPrompt, rewritePrompt });
   const readingChapterRecord = useMemo(
@@ -1802,13 +1809,6 @@ function App() {
     }
     if (!isMobile) setDesktopView('workbench');
   };
-
-  const {
-    debugPromptInfo, setDebugPromptInfo,
-    genProgress, setGenProgress,
-    streamingChapterNum, setStreamingChapterNum,
-    handleGenProgressDone,
-  } = useGenerationProgress();
 
   const notifyDevFeature = useCallback((name = '该功能') => {
     setNotification({ title: '功能开发中', message: `功能开发中：当前版本暂未接入此功能。${name ? `（${name}）` : ''}` });
