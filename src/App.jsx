@@ -14,6 +14,7 @@ import LoginScreen from './components/auth/LoginScreen';
 import AppNotification from './components/AppNotification';
 import { useNotificationState } from './hooks/useNotificationState';
 import { useAuthState } from './hooks/useAuthState';
+import { useDesktopSearchState } from './hooks/useDesktopSearchState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -123,12 +124,6 @@ function App() {
   const [mobileSearchIndex, setMobileSearchIndex] = useState([]);
   const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
 
-  // Desktop global search
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [showDesktopSearch, setShowDesktopSearch] = useState(false);
-  const searchInputRef = useRef(null);
   const [lastProjectName, setLastProjectName] = useState(() => localStorage.getItem('xiaomoxia-last-project') || '');
   const [mobileWritingTarget, setMobileWritingTarget] = useState(null);
   const [mobileWritingPrompt, setMobileWritingPrompt] = useState('');
@@ -180,6 +175,7 @@ function App() {
   const { notification, setNotification, clearNotification } = useNotificationState();
 
   const auth = useAuthState();
+  const desktopSearch = useDesktopSearchState();
 
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
@@ -1962,42 +1958,11 @@ function App() {
     navigateTo('project');
   };
 
-  // ---- 全局搜索（桌面 + 移动端共用 API） ----
-
-  // 桌面搜索 debounce
-  const searchTimerRef = useRef(null);
-
-  const handleSearch = async (q) => {
-    if (!q || !q.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    setSearchLoading(true);
-    try {
-      const data = await ProjectsApi.searchProjects(q.trim(), 50);
-      setSearchResults(data.results || []);
-    } catch {
-      setSearchResults([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  };
-
-  const handleSearchQueryChange = (value) => {
-    setSearchQuery(value);
-    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    if (!value.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    searchTimerRef.current = setTimeout(() => handleSearch(value), 300);
-  };
+  // ---- 全局搜索 ----
 
   const handleSearchResultClick = async (result) => {
     if (!result?.projectName) return;
-    setShowDesktopSearch(false);
-    setSearchQuery('');
-    setSearchResults([]);
+    desktopSearch.closeDesktopSearch();
     await handleSelectProject(result.projectName);
     if (result.type === 'chapter' && result.fileName) {
       await handleReadChapter(result.fileName, result.projectName);
@@ -2012,19 +1977,6 @@ function App() {
       if (isMobile) navigateTo('project');
     }
     if (!isMobile) setDesktopView('workbench');
-  };
-
-  const openDesktopSearch = () => {
-    setShowDesktopSearch(true);
-    setSearchQuery('');
-    setSearchResults([]);
-    requestAnimationFrame(() => searchInputRef.current?.focus());
-  };
-
-  const closeDesktopSearch = () => {
-    setShowDesktopSearch(false);
-    setSearchQuery('');
-    setSearchResults([]);
   };
 
   const handleGenProgressDone = useCallback(() => {
@@ -2317,15 +2269,15 @@ function App() {
           onGenerateOutline={handleGenerateOutline}
           formatProjectUpdatedAt={formatProjectUpdatedAt}
           getProjectChapterCount={getProjectChapterCount}
-          searchQuery={searchQuery}
-          onSearchQueryChange={handleSearchQueryChange}
-          searchResults={searchResults}
-          searchLoading={searchLoading}
-          showDesktopSearch={showDesktopSearch}
-          onOpenDesktopSearch={openDesktopSearch}
-          onCloseDesktopSearch={closeDesktopSearch}
+          searchQuery={desktopSearch.searchQuery}
+          onSearchQueryChange={desktopSearch.handleSearchQueryChange}
+          searchResults={desktopSearch.searchResults}
+          searchLoading={desktopSearch.searchLoading}
+          showDesktopSearch={desktopSearch.showDesktopSearch}
+          onOpenDesktopSearch={desktopSearch.openDesktopSearch}
+          onCloseDesktopSearch={desktopSearch.closeDesktopSearch}
           onSearchResultClick={handleSearchResultClick}
-          searchInputRef={searchInputRef}
+          searchInputRef={desktopSearch.searchInputRef}
           onNotify={setNotification}
         />
       )}
