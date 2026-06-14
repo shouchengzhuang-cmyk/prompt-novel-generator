@@ -22,6 +22,7 @@ import { useWorkspaceUiState } from './hooks/useWorkspaceUiState';
 import { useProjectSettingsDraftState } from './hooks/useProjectSettingsDraftState';
 import * as ProjectsApi from './api/projectsApi';
 import { parseSSEStream } from './utils/sseReader';
+import { useWritingPrefsState } from './hooks/useWritingPrefsState';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -38,7 +39,6 @@ function App() {
   const createForm = useProjectCreateFormState();
 
   // Generation
-  const [model, setModel] = useState('deepseek-v4-flash');
   const [userPrompt, setUserPrompt] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -105,14 +105,6 @@ function App() {
   const mobileCharactersRef = useRef(null);
   const mobileSummaryRef = useRef(null);
   const mobileSearchInputRef = useRef(null);
-
-  // Writing preferences
-  const [writingPrefs, setWritingPrefs] = useState({
-    style: '',
-    paragraph: 'normal',
-    pace: 'normal',
-    characterConsistency: 'strict',
-  });
 
   // Outline (chapter planning)
   const [outline, setOutline] = useState([]);
@@ -1357,23 +1349,8 @@ function App() {
     setVariantPreview(variantPreview?.id === variant.id ? null : variant);
   };
 
-  // Build enhanced prompt by appending writing preferences
-  function buildEnhancedPrompt(basePrompt, prefs) {
-    const lines = [];
-    const paragraphMap = { short: '短段，加快叙事节奏', normal: '自然段', long: '长段，展开细节描写' };
-    lines.push(`- 段落：${paragraphMap[prefs.paragraph] || paragraphMap.normal}`);
-
-    const paceMap = { slow: '慢热，铺垫细节', normal: '正常推进', fast: '快一点，减少冗余描写' };
-    lines.push(`- 剧情推进：${paceMap[prefs.pace] || paceMap.normal}`);
-
-    const charMap = { strict: '严格保持既有人物性格和关系', natural: '允许人物自然发展' };
-    lines.push(`- 人设：${charMap[prefs.characterConsistency] || charMap.strict}`);
-
-    return basePrompt + '\n\n【本次写作偏好】\n' + lines.join('\n');
-  }
-
-  const enhancedPrompt = useMemo(() => buildEnhancedPrompt(userPrompt.trim(), writingPrefs), [userPrompt, writingPrefs]);
-  const enhancedRewritePrompt = useMemo(() => buildEnhancedPrompt((rewritePrompt || '').trim(), writingPrefs), [rewritePrompt, writingPrefs]);
+  const { model, setModel, writingPrefs, setWritingPrefs, enhancedPrompt, enhancedRewritePrompt } =
+    useWritingPrefsState({ userPrompt, rewritePrompt });
   const readingChapterRecord = useMemo(
     () => projectDetails?.chapters?.find((ch) => (ch.fileName || ch.filename) === readingChapter) || null,
     [projectDetails, readingChapter]
