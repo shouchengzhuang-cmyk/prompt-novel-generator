@@ -21,6 +21,7 @@ import { useChapterSelectionState } from './hooks/useChapterSelectionState';
 import { useWorkspaceUiState } from './hooks/useWorkspaceUiState';
 import { useProjectSettingsDraftState } from './hooks/useProjectSettingsDraftState';
 import * as ProjectsApi from './api/projectsApi';
+import { parseSSEStream } from './utils/sseReader';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -537,51 +538,33 @@ function App() {
       }
 
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
 
       console.log('[生成] 请求 URL: /api/generate-stream');
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-          try {
-            const event = JSON.parse(trimmed.slice(6));
-            if (event.type === 'chunk') {
-              const chunk = event.content || '';
-              streamedContent += chunk;
-              setReadingContent((prev) => prev + chunk);
-              setDesktopEditorContent((prev) => prev + chunk);
-              setMobileWritingOutput((prev) => prev + chunk);
-            } else if (event.type === 'done') {
-              fileName = event.fileName;
-              content = event.content;
-              title = event.title;
-              debugInfo = event.debugPromptInfo;
-            } else if (event.type === 'error') {
-              throw new Error(event.message);
-            }
-          } catch (e) {
-            if (e.message && !e.message.includes('JSON')) throw e;
+      await parseSSEStream(reader, {
+        onChunk: (chunk) => {
+          streamedContent += chunk;
+          setReadingContent((prev) => prev + chunk);
+          setDesktopEditorContent((prev) => prev + chunk);
+          setMobileWritingOutput((prev) => prev + chunk);
+        },
+        onDone: (event) => {
+          fileName = event.fileName;
+          content = event.content;
+          title = event.title;
+          debugInfo = event.debugPromptInfo;
+        },
+        onError: (message) => {
+          throw new Error(message);
+        },
+        onReadCycle: () => {
+          if (streamedContent) {
+            setReadingContent(streamedContent);
+            setDesktopEditorContent(streamedContent);
+            console.log('[生成] done 事件:', fileName ? `fileName=${fileName}` : '(未收到)');
           }
-        }
-
-        // 每轮 read() 后更新阅读区正文，让 React 在 await 间隙渲染
-        if (streamedContent) {
-          setReadingContent(streamedContent);
-          setDesktopEditorContent(streamedContent);
-          console.log('[生成] done 事件:', fileName ? `fileName=${fileName}` : '(未收到)');
-        }
-      }
+        },
+      });
 
       // 流式完成但未收到 done 事件 → 后端可能已保存章节，尝试刷新项目定位
       if (!fileName && streamedContent.trim()) {
@@ -1199,43 +1182,25 @@ function App() {
       }
 
       const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
       let streamedContent = '';
       let doneVariant = null;
       let doneDebugInfo = null;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-          try {
-            const event = JSON.parse(trimmed.slice(6));
-            if (event.type === 'chunk') {
-              const chunk = event.content || '';
-              streamedContent += chunk;
-              setReadingContent((prev) => prev + chunk);
-              setDesktopEditorContent((prev) => prev + chunk);
-              setMobileWritingOutput((prev) => prev + chunk);
-            } else if (event.type === 'done') {
-              doneVariant = event.variant;
-              doneDebugInfo = event.debugPromptInfo;
-            } else if (event.type === 'error') {
-              throw new Error(event.message);
-            }
-          } catch (e) {
-            if (e.message && !e.message.includes('JSON')) throw e;
-          }
-        }
-      }
+      await parseSSEStream(reader, {
+        onChunk: (chunk) => {
+          streamedContent += chunk;
+          setReadingContent((prev) => prev + chunk);
+          setDesktopEditorContent((prev) => prev + chunk);
+          setMobileWritingOutput((prev) => prev + chunk);
+        },
+        onDone: (event) => {
+          doneVariant = event.variant;
+          doneDebugInfo = event.debugPromptInfo;
+        },
+        onError: (message) => {
+          throw new Error(message);
+        },
+      });
 
       console.log('[重写] done 事件:', doneVariant ? `variantId=${doneVariant.id}` : '(未收到)');
 
