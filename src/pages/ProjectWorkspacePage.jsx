@@ -6,6 +6,7 @@ import DesktopProjectRail from '../components/desktop/DesktopProjectRail';
 import DesktopTopBar from '../components/desktop/DesktopTopBar';
 import MaterialPanel from '../components/material/MaterialPanel';
 import ProjectCreateForm from '../components/project/ProjectCreateForm';
+import ProjectSettingsEditor from '../components/project/ProjectSettingsEditor';
 
 export default function ProjectWorkspacePage({
   settingsDraft,
@@ -107,17 +108,6 @@ export default function ProjectWorkspacePage({
   searchInputRef,
   onNotify,
 }) {
-  const {
-    editWorld,
-    setEditWorld,
-    editCharacters,
-    setEditCharacters,
-    editStyle,
-    setEditStyle,
-    editSummary,
-    setEditSummary,
-    savingSettings,
-  } = settingsDraft;
   const {
     desktopView,
     setDesktopView,
@@ -310,29 +300,7 @@ export default function ProjectWorkspacePage({
               )}
 
               {desktopEditorTab === 'settings' && (
-                <div className="desktop-settings-wrapper">
-                  <div className="desktop-settings-grid">
-                    <div className="desktop-settings-field">
-                      <label>世界观设定</label>
-                      <textarea className="settings-input" value={editWorld} onChange={(e) => setEditWorld(e.target.value)} />
-                    </div>
-                    <div className="desktop-settings-field">
-                      <label>人物设定</label>
-                      <textarea className="settings-input" value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} />
-                    </div>
-                    <div className="desktop-settings-field">
-                      <label>写作规则</label>
-                      <textarea className="settings-input" value={editStyle} onChange={(e) => setEditStyle(e.target.value)} />
-                    </div>
-                    <div className="desktop-settings-field">
-                      <label>剧情摘要</label>
-                      <textarea className="settings-input" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="desktop-settings-footer">
-                    <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>
-                  </div>
-                </div>
+                <ProjectSettingsEditor settingsDraft={settingsDraft} onSave={handleSaveSettings} variant="desktop" />
               )}
 
               {showOutline && (

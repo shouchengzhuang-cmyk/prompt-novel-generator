@@ -6,6 +6,7 @@ import PromptPreviewPanel from '../../components/PromptPreviewPanel';
 import VaultPanel from '../../components/VaultPanel';
 import WritingControlPanel from '../../components/WritingControlPanel';
 import ProjectCreateForm from '../../components/project/ProjectCreateForm';
+import ProjectSettingsEditor from '../../components/project/ProjectSettingsEditor';
 
 export default function MobileReaderEditorPage(props) {
   const {
@@ -87,19 +88,6 @@ export default function MobileReaderEditorPage(props) {
     onReadChapter
   } = props;
   const {
-    editWorld,
-    setEditWorld,
-    editCharacters,
-    setEditCharacters,
-    editStyle,
-    setEditStyle,
-    editSummary,
-    setEditSummary,
-    editEditorialMemory,
-    setEditEditorialMemory,
-    savingSettings,
-  } = settingsDraft;
-  const {
     isMobile,
     mobileView,
     mobileGenerateOpen,
@@ -159,52 +147,12 @@ export default function MobileReaderEditorPage(props) {
 
             {/* Settings Editor */}
             {showSettings && (
-              <div className="settings-panel">
-                <h3>项目设定</h3>
-                <label>世界观设定</label>
-                <textarea
-                  className="settings-input"
-                  ref={mobileWorldRef}
-                  value={editWorld}
-                  onChange={(e) => setEditWorld(e.target.value)}
-                  rows={3}
-                  placeholder="世界观设定..."
-                />
-                <label>人物设定</label>
-                <textarea
-                  className="settings-input"
-                  ref={mobileCharactersRef}
-                  value={editCharacters}
-                  onChange={(e) => setEditCharacters(e.target.value)}
-                  rows={3}
-                  placeholder="人物设定..."
-                />
-                <label>写作规则</label>
-                <textarea
-                  className="settings-input"
-                  value={editStyle}
-                  onChange={(e) => setEditStyle(e.target.value)}
-                  rows={5}
-                  placeholder="写作规则、文风要求..."
-                />
-                <label>剧情摘要</label>
-                <textarea
-                  className="settings-input"
-                  ref={mobileSummaryRef}
-                  value={editSummary}
-                  onChange={(e) => setEditSummary(e.target.value)}
-                  rows={5}
-                  placeholder="剧情摘要..."
-                />
-                <label>项目编辑记忆</label>
-                <div className="settings-hint">记录跨章节人物关系、伏笔、长期写作风险和编辑判断。不同于剧情摘要：摘要记录剧情事实，这里记录编辑分析。</div>
-                <textarea
-                  className="settings-input"
-                  value={editEditorialMemory}
-                  onChange={(e) => setEditEditorialMemory(e.target.value)}
-                  rows={6}
-                  placeholder="项目编辑记忆..."
-                />
+              <ProjectSettingsEditor
+                settingsDraft={settingsDraft}
+                onSave={handleSaveSettings}
+                fieldRefs={{ world: mobileWorldRef, characters: mobileCharactersRef, summary: mobileSummaryRef }}
+                onClose={() => setShowSettings(false)}
+              >
                 <details className="advanced-options">
                   <summary className="advanced-options-summary">
                     <span className="advanced-options-title">生成高级选项</span>
@@ -229,17 +177,7 @@ export default function MobileReaderEditorPage(props) {
                     </details>
                   </div>
                 </details>
-                <div className="form-actions">
-                  {/* 保存设定：把当前项目设定 PUT 到服务器，会覆盖该项目现有设定字段。 */}
-                  <button className="btn" disabled={savingSettings} onClick={handleSaveSettings}>
-                    {savingSettings ? '保存中...' : '保存设定'}
-                  </button>
-                  {/* 关闭设定：只关闭设定面板，不会自动保存未提交内容。 */}
-                  <button className="btn btn-secondary" disabled={savingSettings} onClick={() => setShowSettings(false)}>
-                    关闭
-                  </button>
-                </div>
-              </div>
+              </ProjectSettingsEditor>
             )}
 
             {/* Outline Editor */}
