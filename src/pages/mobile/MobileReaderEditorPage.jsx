@@ -2,6 +2,7 @@ import GenerationProgress from '../../components/GenerationProgress';
 import MobileReaderTopBar from '../../components/mobile/MobileReaderTopBar';
 import MobileReadingContent from '../../components/mobile/MobileReadingContent';
 import MobileChapterNavigation from '../../components/mobile/MobileChapterNavigation';
+import MobileGeneratePanel from '../../components/mobile/MobileGeneratePanel';
 import MobileSimpleEditorPanel from '../../components/mobile/MobileSimpleEditorPanel';
 import PromptPreviewPanel from '../../components/PromptPreviewPanel';
 import VaultPanel from '../../components/VaultPanel';
@@ -95,8 +96,6 @@ export default function MobileReaderEditorPage(props) {
     setMobileGenerateOpen,
     showMobileEdit,
     setShowMobileEdit,
-    mobileVariantsOpen,
-    setMobileVariantsOpen,
   } = workspaceUi;
   const {
     currentProject,
@@ -476,86 +475,17 @@ export default function MobileReaderEditorPage(props) {
                 />
 
                 {/* Variants list */}
-                {variants.length > 0 && (
-                  <>
-                    {isMobile && (
-                      /* 候选版本开关：只切换移动端候选列表显示状态，不请求后端。 */
-                      <button
-                        className="mobile-section-toggle"
-                        onClick={() => setMobileVariantsOpen(!mobileVariantsOpen)}
-                      >
-                        候选版本（{variants.length}） {mobileVariantsOpen ? '▲' : '▼'}
-                      </button>
-                    )}
-                    {!(isMobile && !mobileVariantsOpen) && (
-                  <div className="variants-section">
-                    <div className="panel-header" style={{ marginTop: 16 }}>
-                      <h3>候选版本（{variants.length}）</h3>
-                    </div>
-                    {(() => {
-                      const ch = projectDetails?.chapters?.find((c) => (c.fileName || c.filename) === readingChapter);
-                      const activeVersionId = ch?.activeVersionId || 'v-original';
-                      return variants.map((v, index) => {
-                        const versionLabel = v.id === 'v-original'
-                          ? '第一版 / 原始版'
-                          : `第${index + 1}版 / 候选版`;
-                        const promptSummary = v.userPrompt || '继续写';
-                        return (
-                        <div key={v.id}>
-                          <div className={'variant-item' + (v.id === activeVersionId ? ' active' : '')}>
-                            <div className="variant-info">
-                              <span className="variant-meta">
-                                {v.id === activeVersionId && <span style={{ color: '#52c41a', fontWeight: 600, marginRight: 8 }}>● 当前主线</span>}
-                                {versionLabel} · {new Date(v.createdAt).toLocaleString()} · {v.model || '原始版'}
-                              </span>
-                              {v.title && v.title !== ch?.title && (
-                                <span className="variant-instruction" style={{ color: '#4a6cf7' }}>
-                                  标题：{v.title.slice(0, 80)}{v.title.length > 80 ? '...' : ''}
-                                </span>
-                              )}
-                              <span className="variant-instruction">
-                                续写要求：{promptSummary.slice(0, 100)}{promptSummary.length > 100 ? '...' : ''}
-                              </span>
-                              {v._debugPromptInfo && !v._debugPromptInfo.usedFallback && (
-                                <span className="debug-prompt-info debug-prompt-info-inline">
-                                  模板：{v._debugPromptInfo.templateTitle || '未知'}
-                                </span>
-                              )}
-                            </div>
-                            <div className="variant-actions">
-                              {/* 查看正文：只预览/关闭该候选版本正文，不会应用到主线。 */}
-                              <button
-                                className={'btn' + (variantPreview?.id === v.id ? ' active' : '')}
-                                onClick={() => {
-                                  handlePreviewVariant(v);
-                                  if (isMobile) {
-                                    setMobileVariantsOpen(false);
-                                    requestAnimationFrame(() => {
-                                      readingSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                                    });
-                                  }
-                                }}
-                              >
-                                {variantPreview?.id === v.id ? '关闭正文' : '查看正文'}
-                              </button>
-                              {/* 沿此版本继续：把候选版本应用为当前主线内容，会改变当前章节版本。 */}
-                              <button
-                                className="btn btn-secondary"
-                                disabled={applyingVariant || v.id === activeVersionId}
-                                onClick={() => handleApplyVariant(v.id)}
-                              >
-                                {v.id === activeVersionId ? '当前主线' : (applyingVariant ? '应用中...' : '沿此版本继续')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                    )}
-                  </>
-                )}
+                <MobileGeneratePanel
+                  workspaceUi={workspaceUi}
+                  projectSelection={projectSelection}
+                  chapterSelection={chapterSelection}
+                  variants={variants}
+                  variantPreview={variantPreview}
+                  onPreviewVariant={handlePreviewVariant}
+                  onApplyVariant={handleApplyVariant}
+                  applyingVariant={applyingVariant}
+                  readingSectionRef={readingSectionRef}
+                />
               </div>
             )}
           </>
