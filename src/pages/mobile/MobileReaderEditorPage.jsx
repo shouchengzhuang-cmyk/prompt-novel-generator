@@ -2,7 +2,7 @@ import GenerationProgress from '../../components/GenerationProgress';
 import MobileReaderTopBar from '../../components/mobile/MobileReaderTopBar';
 import MobileReadingContent from '../../components/mobile/MobileReadingContent';
 import MobileChapterNavigation from '../../components/mobile/MobileChapterNavigation';
-import MobileGeneratePanel from '../../components/mobile/MobileGeneratePanel';
+import MobileVariantsPanel from '../../components/mobile/MobileVariantsPanel';
 import MobileSimpleEditorPanel from '../../components/mobile/MobileSimpleEditorPanel';
 import PromptPreviewPanel from '../../components/PromptPreviewPanel';
 import VaultPanel from '../../components/VaultPanel';
@@ -475,7 +475,7 @@ export default function MobileReaderEditorPage(props) {
                 />
 
                 {/* Variants list */}
-                <MobileGeneratePanel
+                <MobileVariantsPanel
                   workspaceUi={workspaceUi}
                   projectSelection={projectSelection}
                   chapterSelection={chapterSelection}

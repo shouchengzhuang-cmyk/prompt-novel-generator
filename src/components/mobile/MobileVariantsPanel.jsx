@@ -1,4 +1,4 @@
-export default function MobileGeneratePanel({
+export default function MobileVariantsPanel({
   workspaceUi,
   projectSelection,
   chapterSelection,
