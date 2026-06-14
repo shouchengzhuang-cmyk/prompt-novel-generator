@@ -1,6 +1,7 @@
 import GenerationProgress from '../../components/GenerationProgress';
 import MobileReaderTopBar from '../../components/mobile/MobileReaderTopBar';
 import MobileReadingContent from '../../components/mobile/MobileReadingContent';
+import MobileChapterNavigation from '../../components/mobile/MobileChapterNavigation';
 import MobileSimpleEditorPanel from '../../components/mobile/MobileSimpleEditorPanel';
 import PromptPreviewPanel from '../../components/PromptPreviewPanel';
 import VaultPanel from '../../components/VaultPanel';
@@ -451,32 +452,14 @@ export default function MobileReaderEditorPage(props) {
                 )}
 
                 {/* Chapter bottom navigation */}
-                {(() => {
-                  if (!projectDetails?.chapters) return null;
-                  const chapters = projectDetails.chapters;
-                  const idx = chapters.findIndex((ch) => (ch.fileName || ch.filename) === readingChapter);
-                  if (idx === -1) return null;
-                  const prev = idx > 0 ? chapters[idx - 1] : null;
-                  const next = idx < chapters.length - 1 ? chapters[idx + 1] : null;
-                  const prevFn = prev ? (prev.fileName || prev.filename) : null;
-                  const nextFn = next ? (next.fileName || next.filename) : null;
-                  return (
-                    <div className="chapter-bottom-nav">
-                      {/* 上一章：读取上一章正文并关闭移动端生成/候选浮层，会改变当前阅读章节。 */}
-                      <button className="btn" disabled={!prev} onClick={() => { if (prevFn) { onReadChapter?.(prevFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
-                        上一章
-                      </button>
-                      {/* 返回目录：移动端走应用内返回；桌面端只滚动到页面顶部，不保存内容。 */}
-                      <button className="btn btn-secondary" onClick={() => { if (isMobile) { onBackClick(); } else { window.scrollTo({ top: 0, behavior: 'smooth' }); } }}>
-                        {isMobile ? '目录' : '回目录'}
-                      </button>
-                      {/* 下一章：读取下一章正文并关闭移动端生成/候选浮层，会改变当前阅读章节。 */}
-                      <button className="btn" disabled={!next} onClick={() => { if (nextFn) { onReadChapter?.(nextFn); setMobileGenerateOpen(false); setMobileVariantsOpen(false); } }}>
-                        下一章
-                      </button>
-                    </div>
-                  );
-                })()}
+                <MobileChapterNavigation
+                  chapters={projectDetails?.chapters}
+                  readingChapter={readingChapter}
+                  isMobile={isMobile}
+                  onBackClick={onBackClick}
+                  onReadChapter={onReadChapter}
+                  workspaceUi={workspaceUi}
+                />
 
                 <MobileSimpleEditorPanel
                   isMobile={isMobile}
