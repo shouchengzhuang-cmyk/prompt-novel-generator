@@ -139,6 +139,7 @@ function App() {
 
   const { notification, setNotification, clearNotification } = useNotificationState();
   const settingsDraft = useProjectSettingsDraftState();
+  const workspaceUi = useWorkspaceUiState();
   const {
     savingSettings, setSavingSettings,
     editWorld, setEditWorld,
@@ -161,7 +162,7 @@ function App() {
     mobileReadingSettingsOpen, setMobileReadingSettingsOpen,
     showMobileEdit, setShowMobileEdit,
     closeMobileOverlays, switchMobileView, navigateTo,
-  } = useWorkspaceUiState();
+  } = workspaceUi;
 
   const auth = useAuthState();
   const desktopSearch = useDesktopSearchState();
@@ -2035,8 +2036,8 @@ function App() {
       {/* 新桌面工作台：桌面端会先渲染 ProjectWorkspacePage，后续旧 app-shell 仍需单独确认是否重复显示。 */}
       {!isMobile && (
         <ProjectWorkspacePage
-          desktopView={desktopView}
-          desktopEditorTab={desktopEditorTab}
+          settingsDraft={settingsDraft}
+          workspaceUi={workspaceUi}
           createForm={createForm}
           currentProject={currentProject}
           projectDetails={projectDetails}
@@ -2056,12 +2057,6 @@ function App() {
           model={model}
           writingPrefs={writingPrefs}
           userPrompt={userPrompt}
-          editWorld={editWorld}
-          editCharacters={editCharacters}
-          editStyle={editStyle}
-          editSummary={editSummary}
-          editEditorialMemory={editEditorialMemory}
-          editingProjectName={editingProjectName}
           showSettings={showSettings}
           showOutline={showOutline}
           outlineSaving={outlineSaving}
@@ -2073,7 +2068,6 @@ function App() {
           debugPromptInfo={debugPromptInfo}
           genProgress={genProgress}
           copied={copied}
-          savingSettings={savingSettings}
           applyingVariant={applyingVariant}
           readingContentRef={readingContentRef}
           readingSectionRef={readingSectionRef}
@@ -2116,18 +2110,11 @@ function App() {
           onCopyFull={handleCopyFull}
           onSetRewritePrompt={setRewritePrompt}
           onSetShowRewriteInput={setShowRewriteInput}
-          onSetDesktopView={setDesktopView}
-          onSetDesktopEditorTab={setDesktopEditorTab}
           onCreateProject={handleCreateProject}
           onLoadOutline={handleLoadOutline}
           onSaveOutline={handleSaveOutline}
           onSetOutlineText={setOutlineText}
           onSetOutlineError={setOutlineError}
-          onSetEditWorld={setEditWorld}
-          onSetEditCharacters={setEditCharacters}
-          onSetEditStyle={setEditStyle}
-          onSetEditSummary={setEditSummary}
-          onSetEditEditorialMemory={setEditEditorialMemory}
           onSetShowOutline={setShowOutline}
           onSetShowSettings={setShowSettings}
           onSetModel={setModel}
@@ -2217,8 +2204,8 @@ function App() {
         )}
 
         <MobileReaderEditorPage
-          isMobile={isMobile}
-          mobileView={mobileView}
+          settingsDraft={settingsDraft}
+          workspaceUi={workspaceUi}
           readingChapter={readingChapter}
           onReadChapter={handleReadChapter}
           onBackClick={onBackClick}
@@ -2232,21 +2219,10 @@ function App() {
           handleLoadOutline={handleLoadOutline}
           showSettings={showSettings}
           mobileWorldRef={mobileWorldRef}
-          editWorld={editWorld}
-          setEditWorld={setEditWorld}
           mobileCharactersRef={mobileCharactersRef}
-          editCharacters={editCharacters}
-          setEditCharacters={setEditCharacters}
-          editStyle={editStyle}
-          setEditStyle={setEditStyle}
           mobileSummaryRef={mobileSummaryRef}
-          editSummary={editSummary}
-          setEditSummary={setEditSummary}
-          editEditorialMemory={editEditorialMemory}
-          setEditEditorialMemory={setEditEditorialMemory}
           enhancedPrompt={enhancedPrompt}
           projectDetails={projectDetails}
-          savingSettings={savingSettings}
           handleSaveSettings={handleSaveSettings}
           outlineText={outlineText}
           setOutlineText={setOutlineText}
@@ -2254,8 +2230,6 @@ function App() {
           outlineError={outlineError}
           handleSaveOutline={handleSaveOutline}
           outlineSaving={outlineSaving}
-          mobileGenerateOpen={mobileGenerateOpen}
-          setMobileGenerateOpen={setMobileGenerateOpen}
           userPrompt={userPrompt}
           setUserPrompt={setUserPrompt}
           model={model}
@@ -2287,8 +2261,6 @@ function App() {
           handleRegenerate={handleRegenerate}
           readingChapterRecord={readingChapterRecord}
           handleConfirmKeepChapter={handleConfirmKeepChapter}
-          mobileReadingSettingsOpen={mobileReadingSettingsOpen}
-          setMobileReadingSettingsOpen={setMobileReadingSettingsOpen}
           readingTheme={readingTheme}
           setReadingTheme={setReadingTheme}
           readingFontSize={readingFontSize}
@@ -2301,17 +2273,13 @@ function App() {
           handleScrollToTop={handleScrollToTop}
           debugPromptInfo={debugPromptInfo}
           handleOpenMobileWriting={handleOpenMobileWriting}
-          showMobileEdit={showMobileEdit}
           setMobileEditTitle={setMobileEditTitle}
           setMobileEditContent={setMobileEditContent}
-          setShowMobileEdit={setShowMobileEdit}
           mobileEditTitle={mobileEditTitle}
           mobileEditContent={mobileEditContent}
           handleMobileSaveEdit={handleMobileSaveEdit}
           mobileEditSaving={mobileEditSaving}
           variants={variants}
-          mobileVariantsOpen={mobileVariantsOpen}
-          setMobileVariantsOpen={setMobileVariantsOpen}
           handlePreviewVariant={handlePreviewVariant}
           handleApplyVariant={handleApplyVariant}
           applyingVariant={applyingVariant}

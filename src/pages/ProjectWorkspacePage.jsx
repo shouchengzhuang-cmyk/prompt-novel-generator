@@ -8,8 +8,8 @@ import MaterialPanel from '../components/material/MaterialPanel';
 import ProjectCreateForm from '../components/project/ProjectCreateForm';
 
 export default function ProjectWorkspacePage({
-  desktopView,
-  desktopEditorTab,
+  settingsDraft,
+  workspaceUi,
   createForm,
   currentProject,
   projectDetails,
@@ -28,12 +28,6 @@ export default function ProjectWorkspacePage({
   model,
   writingPrefs,
   userPrompt,
-  editWorld,
-  editCharacters,
-  editStyle,
-  editSummary,
-  editEditorialMemory,
-  editingProjectName,
   showSettings,
   showOutline,
   outlineSaving,
@@ -46,7 +40,6 @@ export default function ProjectWorkspacePage({
   debugPromptInfo,
   genProgress,
   copied,
-  savingSettings,
   applyingVariant,
   readingContentRef,
   readingSectionRef,
@@ -86,16 +79,9 @@ export default function ProjectWorkspacePage({
   onCopyChapter,
   onCopyFull,
   onSetRewritePrompt,
-  onSetDesktopView,
-  onSetDesktopEditorTab,
   onCreateProject,
   onLoadOutline,
   onSaveOutline,
-  onSetEditWorld,
-  onSetEditCharacters,
-  onSetEditStyle,
-  onSetEditSummary,
-  onSetEditEditorialMemory,
   onSetShowOutline,
   onSetShowSettings,
   onSetModel,
@@ -124,6 +110,23 @@ export default function ProjectWorkspacePage({
   searchInputRef,
   onNotify,
 }) {
+  const {
+    editWorld,
+    setEditWorld,
+    editCharacters,
+    setEditCharacters,
+    editStyle,
+    setEditStyle,
+    editSummary,
+    setEditSummary,
+    savingSettings,
+  } = settingsDraft;
+  const {
+    desktopView,
+    setDesktopView,
+    desktopEditorTab,
+    setDesktopEditorTab,
+  } = workspaceUi;
   const handleDesktopNav = onDesktopNav;
   const handleSelectProject = onSelectProject;
   const handleGenerate = onGenerate;
@@ -146,7 +149,7 @@ export default function ProjectWorkspacePage({
   const prepareDesktopMode = onPrepareDesktopMode;
 
   const handleNavigateToChapter = (chapterFileName) => {
-    onSetDesktopView('workbench');
+    setDesktopView('workbench');
     if (chapterFileName && onReadChapter) {
       onReadChapter(chapterFileName);
     }
@@ -181,7 +184,7 @@ export default function ProjectWorkspacePage({
           desktopChapterQuery={desktopChapterQuery}
           filteredDesktopChapters={filteredDesktopChapters}
           readingChapter={readingChapter}
-          onSetDesktopEditorTab={onSetDesktopEditorTab}
+          onSetDesktopEditorTab={setDesktopEditorTab}
           onOpenSettings={onOpenSettings}
           onRenameProject={onRenameProject}
           onSetDesktopChapterQuery={onSetDesktopChapterQuery}
@@ -204,7 +207,7 @@ export default function ProjectWorkspacePage({
               sortedProjects={sortedProjects}
               currentProject={currentProject}
               onHandleSelectProject={onHandleSelectProject}
-              onSetDesktopView={onSetDesktopView}
+              onSetDesktopView={setDesktopView}
               onSetShowCreateForm={createForm.setShowCreateForm}
               onSetCreateError={createForm.setCreateError}
               onRenameProject={onRenameProject}
@@ -227,7 +230,7 @@ export default function ProjectWorkspacePage({
                   </h2>
                   <DesktopEditorTabs
                     desktopEditorTab={desktopEditorTab}
-                    onSetDesktopEditorTab={onSetDesktopEditorTab}
+                    onSetDesktopEditorTab={setDesktopEditorTab}
                     onOpenSettings={onOpenSettings}
                   />
                 </div>
@@ -306,19 +309,19 @@ export default function ProjectWorkspacePage({
                   <div className="desktop-settings-grid">
                     <div className="desktop-settings-field">
                       <label>世界观设定</label>
-                      <textarea className="settings-input" value={editWorld} onChange={(e) => onSetEditWorld(e.target.value)} />
+                      <textarea className="settings-input" value={editWorld} onChange={(e) => setEditWorld(e.target.value)} />
                     </div>
                     <div className="desktop-settings-field">
                       <label>人物设定</label>
-                      <textarea className="settings-input" value={editCharacters} onChange={(e) => onSetEditCharacters(e.target.value)} />
+                      <textarea className="settings-input" value={editCharacters} onChange={(e) => setEditCharacters(e.target.value)} />
                     </div>
                     <div className="desktop-settings-field">
                       <label>写作规则</label>
-                      <textarea className="settings-input" value={editStyle} onChange={(e) => onSetEditStyle(e.target.value)} />
+                      <textarea className="settings-input" value={editStyle} onChange={(e) => setEditStyle(e.target.value)} />
                     </div>
                     <div className="desktop-settings-field">
                       <label>剧情摘要</label>
-                      <textarea className="settings-input" value={editSummary} onChange={(e) => onSetEditSummary(e.target.value)} />
+                      <textarea className="settings-input" value={editSummary} onChange={(e) => setEditSummary(e.target.value)} />
                     </div>
                   </div>
                   <div className="desktop-settings-footer">
@@ -441,11 +444,11 @@ export default function ProjectWorkspacePage({
             <label>关联设定</label>
             <div className="desktop-linked-settings">
               {/* 关联设定入口：切换到设定页签编辑项目设定。 */}
-              <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>世界观：{projectDetails?.world ? '已挂载' : '待补充'}</button>
+              <button type="button" onClick={() => { setDesktopEditorTab('settings'); handleOpenSettings(); }}>世界观：{projectDetails?.world ? '已挂载' : '待补充'}</button>
               {/* 关联设定入口：切换到设定页签编辑项目设定。 */}
-              <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
+              <button type="button" onClick={() => { setDesktopEditorTab('settings'); handleOpenSettings(); }}>人物：{projectDetails?.characters ? '已挂载' : '待补充'}</button>
               {/* 关联设定入口：切换到设定页签编辑项目设定。 */}
-              <button type="button" onClick={() => { onSetDesktopEditorTab('settings'); handleOpenSettings(); }}>关系：编辑记忆</button>
+              <button type="button" onClick={() => { setDesktopEditorTab('settings'); handleOpenSettings(); }}>关系：编辑记忆</button>
               {/* 章节大纲入口：切换到大纲编辑面板。 */}
               <button type="button" onClick={() => { onSetShowOutline(true); onLoadOutline(); }}>章节大纲：{outline.length > 0 ? '已挂载' : '未填写'}</button>
             </div>
