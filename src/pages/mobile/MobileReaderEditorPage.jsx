@@ -92,8 +92,6 @@ export default function MobileReaderEditorPage(props) {
     mobileView,
     mobileGenerateOpen,
     setMobileGenerateOpen,
-    mobileReadingSettingsOpen,
-    setMobileReadingSettingsOpen,
     showMobileEdit,
     setShowMobileEdit,
     mobileVariantsOpen,
@@ -392,8 +390,7 @@ export default function MobileReaderEditorPage(props) {
 
                 <MobileReadingContent
                   isMobile={isMobile}
-                  mobileReadingSettingsOpen={mobileReadingSettingsOpen}
-                  setMobileReadingSettingsOpen={setMobileReadingSettingsOpen}
+                  workspaceUi={workspaceUi}
                   readingTheme={readingTheme}
                   setReadingTheme={setReadingTheme}
                   readingFontSize={readingFontSize}
