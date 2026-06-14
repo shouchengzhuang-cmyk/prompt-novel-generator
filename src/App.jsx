@@ -199,6 +199,9 @@ function App() {
     clearVariantState,
   } = useVariantState();
 
+  const { model, setModel, writingPrefs, setWritingPrefs, enhancedPrompt, enhancedRewritePrompt } =
+    useWritingPrefsState({ userPrompt, rewritePrompt });
+
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
   }, [readingContent, variantPreview]);
@@ -1347,8 +1350,6 @@ function App() {
     }
   };
 
-  const { model, setModel, writingPrefs, setWritingPrefs, enhancedPrompt, enhancedRewritePrompt } =
-    useWritingPrefsState({ userPrompt, rewritePrompt });
   const readingChapterRecord = useMemo(
     () => projectDetails?.chapters?.find((ch) => (ch.fileName || ch.filename) === readingChapter) || null,
     [projectDetails, readingChapter]
