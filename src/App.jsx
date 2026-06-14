@@ -16,6 +16,7 @@ import { useNotificationState } from './hooks/useNotificationState';
 import { useAuthState } from './hooks/useAuthState';
 import { useDesktopSearchState } from './hooks/useDesktopSearchState';
 import { useProjectCreateFormState } from './hooks/useProjectCreateFormState';
+import { useProjectSelectionState } from './hooks/useProjectSelectionState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -28,10 +29,7 @@ function normalizeChapters(chapters) {
 }
 
 function App() {
-  const [projects, setProjects] = useState([]);
   const [projectChapterCounts, setProjectChapterCounts] = useState({});
-  const [currentProject, setCurrentProject] = useState(null);
-  const [projectDetails, setProjectDetails] = useState(null);
 
   const createForm = useProjectCreateFormState();
 
@@ -114,7 +112,6 @@ function App() {
   const [mobileSearchIndex, setMobileSearchIndex] = useState([]);
   const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
 
-  const [lastProjectName, setLastProjectName] = useState(() => localStorage.getItem('xiaomoxia-last-project') || '');
   const [mobileWritingTarget, setMobileWritingTarget] = useState(null);
   const [mobileWritingPrompt, setMobileWritingPrompt] = useState('');
   const [mobileWritingKind, setMobileWritingKind] = useState('generate');
@@ -166,17 +163,27 @@ function App() {
 
   const auth = useAuthState();
   const desktopSearch = useDesktopSearchState();
+  const projectSelection = useProjectSelectionState({
+    setNotification,
+    setError,
+    normalizeChapters,
+    isAuthenticated: auth.isAuthenticated,
+  });
+  const {
+    projects,
+    currentProject,
+    setCurrentProject,
+    projectDetails,
+    setProjectDetails,
+    lastProjectName,
+    rememberLastProject,
+    fetchProjects,
+    loadProjectDetails,
+  } = projectSelection;
 
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
   }, [readingContent, variantPreview]);
-
-  /** 记住最近打开的项目（存 localStorage） */
-  const rememberLastProject = useCallback((projectName) => {
-    if (!projectName) return;
-    localStorage.setItem('xiaomoxia-last-project', projectName);
-    setLastProjectName(projectName);
-  }, []);
 
   // Browser title during generation / rewrite
   useEffect(() => {
@@ -366,32 +373,6 @@ function App() {
     }
   };
 
-  // ========== 项目列表 ==========
-  /** 获取项目列表（登录后自动调用） */
-  const fetchProjects = async () => {
-    try {
-      const data = await ProjectsApi.fetchProjects();
-      setProjects(data.projects || []);
-      setError(''); // clear any previous error on success
-    } catch (err) {
-      // 401 is handled globally by api.js (clears auth state)
-      // Only show local error for non-auth failures
-      if (!err.message.includes('登录已过期')) {
-        const msg = '获取项目列表失败，请检查网络连接';
-        setError(msg);
-        setNotification({ title: '加载失败', message: msg });
-      }
-    }
-  };
-
-  useEffect(() => {
-    if (auth.isAuthenticated === true) {
-      fetchProjects();
-    } else {
-      setProjects([]);
-    }
-  }, [auth.isAuthenticated]);
-
   // ---- 进入项目（加载详情和章节列表） ----
   /** 选中并加载一个项目，请求后端获取章节列表和最近内容 */
   const handleSelectProject = async (name) => {
@@ -426,10 +407,7 @@ function App() {
     setEditSummary('');
     setEditEditorialMemory('');
     try {
-      const data = await ProjectsApi.fetchProjectDetails(name);
-      // Normalize: ensure chapters have fileName regardless of backend field name
-      if (data.chapters) data.chapters = normalizeChapters(data.chapters);
-      setProjectDetails(data);
+      const data = await loadProjectDetails(name);
       setProjectChapterCounts(prev => ({ ...prev, [name]: data.chapters ? data.chapters.length : 0 }));
       setDisplayContent(data.recentContent || '');
       return data;
