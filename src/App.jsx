@@ -12,6 +12,7 @@ import MobileShell from './pages/mobile/MobileShell';
 import MobileWritingPage from './pages/mobile/MobileWritingPage';
 import LoginScreen from './components/auth/LoginScreen';
 import AppNotification from './components/AppNotification';
+import { useNotificationState } from './hooks/useNotificationState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -167,9 +168,6 @@ function App() {
   const [mobileEditSaving, setMobileEditSaving] = useState(false);
 
 
-  // Bottom-right notification card
-  const [notification, setNotification] = useState(null);
-
   // Desktop workbench state
   const [desktopView, setDesktopView] = useState('workbench');
   const [desktopEditorTab, setDesktopEditorTab] = useState('writing');
@@ -177,6 +175,8 @@ function App() {
   const [desktopAiMode, setDesktopAiMode] = useState('continue');
   const [desktopEditorContent, setDesktopEditorContent] = useState('');
   const [desktopSavingContent, setDesktopSavingContent] = useState(false);
+
+  const { notification, setNotification, clearNotification } = useNotificationState();
 
   // Auth
   const [authenticated, setAuthenticated] = useState(null); // null=checking, true/false=done
@@ -199,12 +199,6 @@ function App() {
       setLoginError('登录已过期，请重新输入 PIN');
     });
   }, []);
-
-  useEffect(() => {
-    if (!notification) return;
-    const timer = setTimeout(() => setNotification(null), 10000);
-    return () => clearTimeout(timer);
-  }, [notification]);
 
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
@@ -2644,7 +2638,7 @@ function App() {
       </MobileShell>
       )}
 
-      <AppNotification notification={notification} onClose={() => setNotification(null)} />
+      <AppNotification notification={notification} onClose={clearNotification} />
     </div>
   );
 }
