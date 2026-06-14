@@ -5,6 +5,7 @@ import MobileSimpleEditorPanel from '../../components/mobile/MobileSimpleEditorP
 import PromptPreviewPanel from '../../components/PromptPreviewPanel';
 import VaultPanel from '../../components/VaultPanel';
 import WritingControlPanel from '../../components/WritingControlPanel';
+import ProjectCreateForm from '../../components/project/ProjectCreateForm';
 
 export default function MobileReaderEditorPage(props) {
   const {
@@ -13,22 +14,8 @@ export default function MobileReaderEditorPage(props) {
     readingChapter,
     onBackClick,
     readingChapterTitle,
-    showCreateForm,
-    newProjectName,
-    setNewProjectName,
-    newWorld,
-    setNewWorld,
-    newCharacters,
-    setNewCharacters,
-    newStyle,
-    setNewStyle,
-    newSummary,
-    setNewSummary,
-    createError,
-    creating,
+    createForm,
     handleCreateProject,
-    setShowCreateForm,
-    setCreateError,
     currentProject,
     handleOpenSettings,
     showOutline,
@@ -134,62 +121,14 @@ export default function MobileReaderEditorPage(props) {
         <>
         {/* Mobile: back button on chapter view */}
         <MobileReaderTopBar isMobile={isMobile} mobileView={mobileView} onBackClick={onBackClick} />
-        {showCreateForm ? (
-          <div className="create-panel">
-            <h2>创建新项目</h2>
-
-            <label>项目名</label>
-            <input
-              value={newProjectName}
-              onChange={(e) => setNewProjectName(e.target.value)}
-              placeholder="输入项目名称"
-            />
-
-            <label>世界观设定</label>
-            <textarea
-              value={newWorld}
-              onChange={(e) => setNewWorld(e.target.value)}
-              placeholder="描述世界观设定..."
-              rows={6}
-            />
-
-            <label>人物设定</label>
-            <textarea
-              value={newCharacters}
-              onChange={(e) => setNewCharacters(e.target.value)}
-              placeholder="描述主要人物..."
-              rows={6}
-            />
-
-            <label>写作规则 / 风格要求</label>
-            <textarea
-              value={newStyle}
-              onChange={(e) => setNewStyle(e.target.value)}
-              placeholder="文风要求、篇幅要求、写作规则…"
-              rows={8}
-            />
-
-            <label>剧情摘要（可选）</label>
-            <textarea
-              value={newSummary}
-              onChange={(e) => setNewSummary(e.target.value)}
-              placeholder="剧情摘要…"
-              rows={5}
-            />
-
-            {createError && <div className="error">{createError}</div>}
-
-            <div className="form-actions">
-              {/* 创建项目：提交当前表单并调用后端创建项目接口，成功后刷新项目列表。 */}
-              <button className="btn" disabled={creating} onClick={handleCreateProject}>
-                {creating ? '创建中...' : '创建'}
-              </button>
-              {/* 取消创建：只关闭表单并清空本地临时输入/错误，不会请求后端。 */}
-              <button className="btn btn-secondary" disabled={creating} onClick={() => { setShowCreateForm(false); setCreateError(''); setNewProjectName(''); setNewWorld(''); setNewCharacters(''); setNewStyle(''); setNewSummary(''); }}>
-                取消
-              </button>
-            </div>
-          </div>
+        {createForm.showCreateForm ? (
+          <ProjectCreateForm
+            form={createForm}
+            onSubmit={handleCreateProject}
+            onCancel={createForm.closeCreateProjectForm}
+            className="create-panel"
+            submitLabel="创建"
+          />
         ) : (
           <>
             {!isMobile && <h2>生成小说</h2>}

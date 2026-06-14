@@ -2125,7 +2125,7 @@ function App() {
         <ProjectWorkspacePage
           desktopView={desktopView}
           desktopEditorTab={desktopEditorTab}
-          showCreateForm={createForm.showCreateForm}
+          createForm={createForm}
           currentProject={currentProject}
           projectDetails={projectDetails}
           readingChapter={readingChapter}
@@ -2165,13 +2165,6 @@ function App() {
           applyingVariant={applyingVariant}
           readingContentRef={readingContentRef}
           readingSectionRef={readingSectionRef}
-          creating={createForm.creating}
-          newProjectName={createForm.newProjectName}
-          newWorld={createForm.newWorld}
-          newCharacters={createForm.newCharacters}
-          newStyle={createForm.newStyle}
-          newSummary={createForm.newSummary}
-          createError={createForm.createError}
           desktopChapters={desktopChapters}
           filteredDesktopChapters={filteredDesktopChapters}
           desktopCurrentChapter={desktopCurrentChapter}
@@ -2211,8 +2204,6 @@ function App() {
           onCopyFull={handleCopyFull}
           onSetRewritePrompt={setRewritePrompt}
           onSetShowRewriteInput={setShowRewriteInput}
-          onSetShowCreateForm={createForm.setShowCreateForm}
-          onSetCreateError={createForm.setCreateError}
           onSetDesktopView={setDesktopView}
           onSetDesktopEditorTab={setDesktopEditorTab}
           onCreateProject={handleCreateProject}
@@ -2234,11 +2225,6 @@ function App() {
           onSetDesktopEditorContent={setDesktopEditorContent}
           onSetDesktopChapterQuery={setDesktopChapterQuery}
           onSetEditTitleValue={setEditTitleValue}
-          onSetNewProjectName={createForm.setNewProjectName}
-          onSetNewWorld={createForm.setNewWorld}
-          onSetNewCharacters={createForm.setNewCharacters}
-          onSetNewStyle={createForm.setNewStyle}
-          onSetNewSummary={createForm.setNewSummary}
           onHandleLogout={auth.handleLogout}
           onHandleSelectProject={handleSelectProject}
           onHandleGenerate={handleGenerate}
@@ -2325,22 +2311,8 @@ function App() {
           onReadChapter={handleReadChapter}
           onBackClick={onBackClick}
           readingChapterTitle={readingChapterTitle}
-          showCreateForm={createForm.showCreateForm}
-          newProjectName={createForm.newProjectName}
-          setNewProjectName={createForm.setNewProjectName}
-          newWorld={createForm.newWorld}
-          setNewWorld={createForm.setNewWorld}
-          newCharacters={createForm.newCharacters}
-          setNewCharacters={createForm.setNewCharacters}
-          newStyle={createForm.newStyle}
-          setNewStyle={createForm.setNewStyle}
-          newSummary={createForm.newSummary}
-          setNewSummary={createForm.setNewSummary}
-          createError={createForm.createError}
-          creating={createForm.creating}
+          createForm={createForm}
           handleCreateProject={handleCreateProject}
-          setShowCreateForm={createForm.setShowCreateForm}
-          setCreateError={createForm.setCreateError}
           currentProject={currentProject}
           handleOpenSettings={handleOpenSettings}
           showOutline={showOutline}
@@ -2436,14 +2408,7 @@ function App() {
         {/* ===== Mobile: Shelf View ===== */}
         {mobileView === 'shelf' && (
           <HomePage
-            showCreateForm={createForm.showCreateForm}
-            creating={createForm.creating}
-            newProjectName={createForm.newProjectName}
-            newWorld={createForm.newWorld}
-            newCharacters={createForm.newCharacters}
-            newStyle={createForm.newStyle}
-            newSummary={createForm.newSummary}
-            createError={createForm.createError}
+            createForm={createForm}
             featuredProject={featuredProject}
             featuredChapterLabel={featuredChapterLabel}
             featuredUpdatedLabel={featuredUpdatedLabel}
@@ -2456,13 +2421,6 @@ function App() {
             onMobileQuickAction={handleMobileQuickAction}
             onOpenMobileSearch={openMobileSearch}
             onCreateProject={handleCreateProject}
-            onCancelCreate={createForm.closeCreateProjectForm}
-            onOpenCreate={createForm.openCreateProjectForm}
-            onNewProjectNameChange={createForm.setNewProjectName}
-            onNewWorldChange={createForm.setNewWorld}
-            onNewCharactersChange={createForm.setNewCharacters}
-            onNewStyleChange={createForm.setNewStyle}
-            onNewSummaryChange={createForm.setNewSummary}
             formatProjectUpdatedAt={formatProjectUpdatedAt}
             getProjectChapterCount={getProjectChapterCount}
           />

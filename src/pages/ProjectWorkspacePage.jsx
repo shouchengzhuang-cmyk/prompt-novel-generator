@@ -5,11 +5,12 @@ import DesktopProjectLibrary from '../components/desktop/DesktopProjectLibrary';
 import DesktopProjectRail from '../components/desktop/DesktopProjectRail';
 import DesktopTopBar from '../components/desktop/DesktopTopBar';
 import MaterialPanel from '../components/material/MaterialPanel';
+import ProjectCreateForm from '../components/project/ProjectCreateForm';
 
 export default function ProjectWorkspacePage({
   desktopView,
   desktopEditorTab,
-  showCreateForm,
+  createForm,
   currentProject,
   projectDetails,
   readingChapter,
@@ -49,13 +50,6 @@ export default function ProjectWorkspacePage({
   applyingVariant,
   readingContentRef,
   readingSectionRef,
-  creating,
-  newProjectName,
-  newWorld,
-  newCharacters,
-  newStyle,
-  newSummary,
-  createError,
   desktopChapters,
   filteredDesktopChapters,
   desktopCurrentChapter,
@@ -92,8 +86,6 @@ export default function ProjectWorkspacePage({
   onCopyChapter,
   onCopyFull,
   onSetRewritePrompt,
-  onSetShowCreateForm,
-  onSetCreateError,
   onSetDesktopView,
   onSetDesktopEditorTab,
   onCreateProject,
@@ -112,11 +104,6 @@ export default function ProjectWorkspacePage({
   onSetDesktopEditorContent,
   onSetDesktopChapterQuery,
   onSetEditTitleValue,
-  onSetNewProjectName,
-  onSetNewWorld,
-  onSetNewCharacters,
-  onSetNewStyle,
-  onSetNewSummary,
   onSetOutlineText,
   onSetOutlineError,
   onHandleLogout,
@@ -177,8 +164,8 @@ export default function ProjectWorkspacePage({
         onOpenDesktopSearch={onOpenDesktopSearch}
         onCloseDesktopSearch={onCloseDesktopSearch}
         onSearchResultClick={onSearchResultClick}
-        onSetShowCreateForm={onSetShowCreateForm}
-        onSetCreateError={onSetCreateError}
+        onSetShowCreateForm={createForm.setShowCreateForm}
+        onSetCreateError={createForm.setCreateError}
         onHandleLogout={onHandleLogout}
       />
 
@@ -203,35 +190,23 @@ export default function ProjectWorkspacePage({
         />
 
         <main className="desktop-writing-main">
-          {showCreateForm ? (
-            <section className="desktop-card desktop-create-panel">
-              <h2>创建新项目</h2>
-              <label>项目名</label>
-              <input value={newProjectName} onChange={(e) => onSetNewProjectName(e.target.value)} placeholder="输入项目名称" />
-              <label>世界观设定</label>
-              <textarea value={newWorld} onChange={(e) => onSetNewWorld(e.target.value)} placeholder="描述世界观设定..." rows={4} />
-              <label>人物设定</label>
-              <textarea value={newCharacters} onChange={(e) => onSetNewCharacters(e.target.value)} placeholder="描述主要人物..." rows={4} />
-              <label>写作规则 / 风格要求</label>
-              <textarea value={newStyle} onChange={(e) => onSetNewStyle(e.target.value)} placeholder="文风要求、篇幅要求、写作规则…" rows={5} />
-              <label>剧情摘要（可选）</label>
-              <textarea value={newSummary} onChange={(e) => onSetNewSummary(e.target.value)} placeholder="剧情摘要…" rows={3} />
-              {createError && <div className="error">{createError}</div>}
-              <div className="desktop-editor-actions">
-                {/* 创建项目：提交桌面创建表单，预期调用后端创建项目接口并刷新项目列表。 */}
-                <button className="btn" disabled={creating} onClick={onCreateProject}>{creating ? '创建中...' : '创建项目'}</button>
-                {/* 取消创建：只关闭创建表单并清理错误状态，不会保存表单内容。 */}
-                <button className="btn btn-secondary" disabled={creating} onClick={() => { onSetShowCreateForm(false); onSetCreateError(''); }}>取消</button>
-              </div>
-            </section>
+          {createForm.showCreateForm ? (
+            <ProjectCreateForm
+              form={createForm}
+              onSubmit={onCreateProject}
+              onCancel={() => { createForm.setShowCreateForm(false); createForm.setCreateError(''); }}
+              className="desktop-card desktop-create-panel"
+              actionsClass="desktop-editor-actions"
+              submitLabel="创建项目"
+            />
           ) : desktopView === 'projects' ? (
             <DesktopProjectLibrary
               sortedProjects={sortedProjects}
               currentProject={currentProject}
               onHandleSelectProject={onHandleSelectProject}
               onSetDesktopView={onSetDesktopView}
-              onSetShowCreateForm={onSetShowCreateForm}
-              onSetCreateError={onSetCreateError}
+              onSetShowCreateForm={createForm.setShowCreateForm}
+              onSetCreateError={createForm.setCreateError}
               onRenameProject={onRenameProject}
               onDeleteProject={onDeleteProject}
               formatProjectUpdatedAt={formatProjectUpdatedAt}
@@ -391,7 +366,7 @@ export default function ProjectWorkspacePage({
               <h2>选择一个项目开始写作</h2>
               <p>小墨匣会把小说项目、章节、人物与世界观设定放在同一个写作工作台里。</p>
               {/* 空态新建项目：只打开创建项目表单并清理错误状态，不会立即请求后端。 */}
-              <button className="btn" onClick={() => { onSetShowCreateForm(true); onSetCreateError(''); }}>新建项目</button>
+              <button className="btn" onClick={() => { createForm.setShowCreateForm(true); createForm.setCreateError(''); }}>新建项目</button>
             </section>
           )}
         </main>

@@ -1,12 +1,7 @@
+import ProjectCreateForm from '../components/project/ProjectCreateForm';
+
 export default function HomePage({
-  showCreateForm,
-  creating,
-  newProjectName,
-  newWorld,
-  newCharacters,
-  newStyle,
-  newSummary,
-  createError,
+  createForm,
   featuredProject,
   featuredChapterLabel,
   featuredUpdatedLabel,
@@ -19,39 +14,19 @@ export default function HomePage({
   onMobileQuickAction,
   onOpenMobileSearch,
   onCreateProject,
-  onCancelCreate,
-  onOpenCreate,
-  onNewProjectNameChange,
-  onNewWorldChange,
-  onNewCharactersChange,
-  onNewStyleChange,
-  onNewSummaryChange,
   formatProjectUpdatedAt,
   getProjectChapterCount,
 }) {
   return (
     <div className="panel mobile-shelf-view">
-      {showCreateForm ? (
-        <div className="create-panel">
-          <h2>创建新项目</h2>
-          <label>项目名</label>
-          <input value={newProjectName} onChange={(e) => onNewProjectNameChange(e.target.value)} placeholder="输入项目名称" />
-          <label>世界观设定</label>
-          <textarea value={newWorld} onChange={(e) => onNewWorldChange(e.target.value)} placeholder="描述世界观设定..." rows={4} />
-          <label>人物设定</label>
-          <textarea value={newCharacters} onChange={(e) => onNewCharactersChange(e.target.value)} placeholder="描述主要人物..." rows={4} />
-          <label>写作规则 / 风格要求</label>
-          <textarea value={newStyle} onChange={(e) => onNewStyleChange(e.target.value)} placeholder="文风要求、篇幅要求、写作规则…" rows={4} />
-          <label>剧情摘要（可选）</label>
-          <textarea value={newSummary} onChange={(e) => onNewSummaryChange(e.target.value)} placeholder="剧情摘要…" rows={3} />
-          {createError && <div className="error">{createError}</div>}
-          <div className="form-actions">
-            {/* 创建项目：提交当前表单给父级创建流程，预期会调用后端创建项目接口。 */}
-            <button className="btn" disabled={creating} onClick={onCreateProject}>{creating ? '创建中...' : '创建'}</button>
-            {/* 取消创建：只关闭创建表单并清理临时输入/错误状态，不会保存到后端。 */}
-            <button className="btn btn-secondary" disabled={creating} onClick={onCancelCreate}>取消</button>
-          </div>
-        </div>
+      {createForm.showCreateForm ? (
+        <ProjectCreateForm
+          form={createForm}
+          onSubmit={onCreateProject}
+          onCancel={createForm.closeCreateProjectForm}
+          className="create-panel"
+          submitLabel="创建"
+        />
       ) : (
         <>
           <header className="mobile-home-header">
@@ -68,7 +43,7 @@ export default function HomePage({
                 type="button"
                 aria-label="新增项目"
                 data-action="create-project"
-                onClick={onOpenCreate}
+                onClick={createForm.openCreateProjectForm}
               >
                 +
               </button>
