@@ -23,6 +23,7 @@ import { useProjectSettingsDraftState } from './hooks/useProjectSettingsDraftSta
 import * as ProjectsApi from './api/projectsApi';
 import { parseSSEStream } from './utils/sseReader';
 import { useWritingPrefsState } from './hooks/useWritingPrefsState';
+import { useGenerationProgress } from './hooks/useGenerationProgress';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -112,12 +113,6 @@ function App() {
   const [outlineText, setOutlineText] = useState('');
   const [outlineSaving, setOutlineSaving] = useState(false);
   const [outlineError, setOutlineError] = useState('');
-
-  // Debug: current generation template info
-  const [debugPromptInfo, setDebugPromptInfo] = useState(null);
-
-  // Generation progress
-  const [genProgress, setGenProgress] = useState({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
 
   // Mobile simple edit
   const [mobileEditTitle, setMobileEditTitle] = useState('');
@@ -322,7 +317,6 @@ function App() {
   }, []);
 
   const generatingRef = useRef(false);
-  const [streamingChapterNum, setStreamingChapterNum] = useState('');
   const appScrollRef = useRef(null);
   const readingSectionRef = useRef(null);
   const readingContentRef = useRef(null);
@@ -1812,9 +1806,12 @@ function App() {
     if (!isMobile) setDesktopView('workbench');
   };
 
-  const handleGenProgressDone = useCallback(() => {
-    setGenProgress({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
-  }, []);
+  const {
+    debugPromptInfo, setDebugPromptInfo,
+    genProgress, setGenProgress,
+    streamingChapterNum, setStreamingChapterNum,
+    handleGenProgressDone,
+  } = useGenerationProgress();
 
   const notifyDevFeature = useCallback((name = '该功能') => {
     setNotification({ title: '功能开发中', message: `功能开发中：当前版本暂未接入此功能。${name ? `（${name}）` : ''}` });
