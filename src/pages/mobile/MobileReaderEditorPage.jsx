@@ -11,12 +11,11 @@ export default function MobileReaderEditorPage(props) {
   const {
     settingsDraft,
     workspaceUi,
-    readingChapter,
+    projectSelection,
+    chapterSelection,
     onBackClick,
-    readingChapterTitle,
     createForm,
     handleCreateProject,
-    currentProject,
     handleOpenSettings,
     showOutline,
     setShowOutline,
@@ -26,7 +25,6 @@ export default function MobileReaderEditorPage(props) {
     mobileCharactersRef,
     mobileSummaryRef,
     enhancedPrompt,
-    projectDetails,
     handleSaveSettings,
     outlineText,
     setOutlineText,
@@ -73,7 +71,6 @@ export default function MobileReaderEditorPage(props) {
     variantPreview,
     readingContentRef,
     handleReadingContentScroll,
-    readingContent,
     showScrollTop,
     handleScrollToTop,
     handleOpenMobileWriting,
@@ -114,6 +111,15 @@ export default function MobileReaderEditorPage(props) {
     mobileVariantsOpen,
     setMobileVariantsOpen,
   } = workspaceUi;
+  const {
+    currentProject,
+    projectDetails,
+  } = projectSelection;
+  const {
+    readingChapter,
+    readingChapterTitle,
+    readingContent,
+  } = chapterSelection;
 
   return (
     <>

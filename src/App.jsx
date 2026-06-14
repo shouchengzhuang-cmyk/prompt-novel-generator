@@ -2038,12 +2038,9 @@ function App() {
         <ProjectWorkspacePage
           settingsDraft={settingsDraft}
           workspaceUi={workspaceUi}
+          projectSelection={projectSelection}
+          chapterSelection={chapterSelection}
           createForm={createForm}
-          currentProject={currentProject}
-          projectDetails={projectDetails}
-          readingChapter={readingChapter}
-          readingChapterTitle={readingChapterTitle}
-          readingContent={readingContent}
           showRewriteInput={showRewriteInput}
           rewritePrompt={rewritePrompt}
           variants={variants}
@@ -2206,13 +2203,12 @@ function App() {
         <MobileReaderEditorPage
           settingsDraft={settingsDraft}
           workspaceUi={workspaceUi}
-          readingChapter={readingChapter}
+          projectSelection={projectSelection}
+          chapterSelection={chapterSelection}
           onReadChapter={handleReadChapter}
           onBackClick={onBackClick}
-          readingChapterTitle={readingChapterTitle}
           createForm={createForm}
           handleCreateProject={handleCreateProject}
-          currentProject={currentProject}
           handleOpenSettings={handleOpenSettings}
           showOutline={showOutline}
           setShowOutline={setShowOutline}
@@ -2222,7 +2218,6 @@ function App() {
           mobileCharactersRef={mobileCharactersRef}
           mobileSummaryRef={mobileSummaryRef}
           enhancedPrompt={enhancedPrompt}
-          projectDetails={projectDetails}
           handleSaveSettings={handleSaveSettings}
           outlineText={outlineText}
           setOutlineText={setOutlineText}
@@ -2268,7 +2263,6 @@ function App() {
           variantPreview={variantPreview}
           readingContentRef={readingContentRef}
           handleReadingContentScroll={handleReadingContentScroll}
-          readingContent={readingContent}
           showScrollTop={showScrollTop}
           handleScrollToTop={handleScrollToTop}
           debugPromptInfo={debugPromptInfo}

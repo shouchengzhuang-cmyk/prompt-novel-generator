@@ -10,12 +10,9 @@ import ProjectCreateForm from '../components/project/ProjectCreateForm';
 export default function ProjectWorkspacePage({
   settingsDraft,
   workspaceUi,
+  projectSelection,
+  chapterSelection,
   createForm,
-  currentProject,
-  projectDetails,
-  readingChapter,
-  readingChapterTitle,
-  readingContent,
   rewritePrompt,
   variants,
   variantPreview,
@@ -127,6 +124,14 @@ export default function ProjectWorkspacePage({
     desktopEditorTab,
     setDesktopEditorTab,
   } = workspaceUi;
+  const {
+    currentProject,
+    projectDetails,
+  } = projectSelection;
+  const {
+    readingChapter,
+    readingChapterTitle,
+  } = chapterSelection;
   const handleDesktopNav = onDesktopNav;
   const handleSelectProject = onSelectProject;
   const handleGenerate = onGenerate;
