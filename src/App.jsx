@@ -15,6 +15,7 @@ import AppNotification from './components/AppNotification';
 import { useNotificationState } from './hooks/useNotificationState';
 import { useAuthState } from './hooks/useAuthState';
 import { useDesktopSearchState } from './hooks/useDesktopSearchState';
+import { useProjectCreateFormState } from './hooks/useProjectCreateFormState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -31,19 +32,8 @@ function App() {
   const [projectChapterCounts, setProjectChapterCounts] = useState({});
   const [currentProject, setCurrentProject] = useState(null);
   const [projectDetails, setProjectDetails] = useState(null);
-  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Create project form
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newWorld, setNewWorld] = useState('');
-  const [newCharacters, setNewCharacters] = useState('');
-  const [newStyle, setNewStyle] = useState('');
-
-  const [newSummary, setNewSummary] = useState('');
-
-  // Create project form error (separate from main error to show it in the left panel)
-  const [createError, setCreateError] = useState('');
-  const [creating, setCreating] = useState(false);
+  const createForm = useProjectCreateFormState();
 
   // Generation
   const [model, setModel] = useState('deepseek-v4-flash');
@@ -227,14 +217,8 @@ function App() {
       setEditingProjectName(null);
       return 'overlay';
     }
-    if (showCreateForm) {
-      setShowCreateForm(false);
-      setCreateError('');
-      setNewProjectName('');
-      setNewWorld('');
-      setNewCharacters('');
-      setNewStyle('');
-      setNewSummary('');
+    if (createForm.showCreateForm) {
+      createForm.closeCreateProjectForm();
       return 'overlay';
     }
     if (showOutline) {
@@ -480,43 +464,37 @@ function App() {
   // ---- 新建项目 ----
   /** 创建新项目：校验项目名（禁止特殊字符），POST 到后端，成功后自动选中 */
   const handleCreateProject = async () => {
-    const name = newProjectName.trim();
+    const name = createForm.newProjectName.trim();
 
     if (!name) {
-      setCreateError('项目名不能为空');
+      createForm.setCreateError('项目名不能为空');
       return;
     }
     if (ILLEGAL_CHARS.test(name)) {
-      setCreateError('项目名不能包含 / \\ : * ? " < > | 等字符');
+      createForm.setCreateError('项目名不能包含 / \\ : * ? " < > | 等字符');
       return;
     }
 
-    setCreateError('');
-    setCreating(true);
+    createForm.setCreateError('');
+    createForm.setCreating(true);
     try {
       await ProjectsApi.createProject({
         projectName: name,
-        world: newWorld,
-        characters: newCharacters,
-        style: newStyle,
-        summary: newSummary,
+        world: createForm.newWorld,
+        characters: createForm.newCharacters,
+        style: createForm.newStyle,
+        summary: createForm.newSummary,
       });
 
-      setShowCreateForm(false);
-      setNewProjectName('');
-      setNewWorld('');
-      setNewCharacters('');
-      setNewStyle('');
-      setNewSummary('');
-      setCreateError('');
+      createForm.closeCreateProjectForm();
       await fetchProjects();
       rememberLastProject(name);
       await handleSelectProject(name);
       setDesktopView('workbench');
     } catch (err) {
-      setCreateError(err.message);
+      createForm.setCreateError(err.message);
     } finally {
-      setCreating(false);
+      createForm.setCreating(false);
     }
   };
 
@@ -2147,7 +2125,7 @@ function App() {
         <ProjectWorkspacePage
           desktopView={desktopView}
           desktopEditorTab={desktopEditorTab}
-          showCreateForm={showCreateForm}
+          showCreateForm={createForm.showCreateForm}
           currentProject={currentProject}
           projectDetails={projectDetails}
           readingChapter={readingChapter}
@@ -2187,13 +2165,13 @@ function App() {
           applyingVariant={applyingVariant}
           readingContentRef={readingContentRef}
           readingSectionRef={readingSectionRef}
-          creating={creating}
-          newProjectName={newProjectName}
-          newWorld={newWorld}
-          newCharacters={newCharacters}
-          newStyle={newStyle}
-          newSummary={newSummary}
-          createError={createError}
+          creating={createForm.creating}
+          newProjectName={createForm.newProjectName}
+          newWorld={createForm.newWorld}
+          newCharacters={createForm.newCharacters}
+          newStyle={createForm.newStyle}
+          newSummary={createForm.newSummary}
+          createError={createForm.createError}
           desktopChapters={desktopChapters}
           filteredDesktopChapters={filteredDesktopChapters}
           desktopCurrentChapter={desktopCurrentChapter}
@@ -2233,8 +2211,8 @@ function App() {
           onCopyFull={handleCopyFull}
           onSetRewritePrompt={setRewritePrompt}
           onSetShowRewriteInput={setShowRewriteInput}
-          onSetShowCreateForm={setShowCreateForm}
-          onSetCreateError={setCreateError}
+          onSetShowCreateForm={createForm.setShowCreateForm}
+          onSetCreateError={createForm.setCreateError}
           onSetDesktopView={setDesktopView}
           onSetDesktopEditorTab={setDesktopEditorTab}
           onCreateProject={handleCreateProject}
@@ -2256,11 +2234,11 @@ function App() {
           onSetDesktopEditorContent={setDesktopEditorContent}
           onSetDesktopChapterQuery={setDesktopChapterQuery}
           onSetEditTitleValue={setEditTitleValue}
-          onSetNewProjectName={setNewProjectName}
-          onSetNewWorld={setNewWorld}
-          onSetNewCharacters={setNewCharacters}
-          onSetNewStyle={setNewStyle}
-          onSetNewSummary={setNewSummary}
+          onSetNewProjectName={createForm.setNewProjectName}
+          onSetNewWorld={createForm.setNewWorld}
+          onSetNewCharacters={createForm.setNewCharacters}
+          onSetNewStyle={createForm.setNewStyle}
+          onSetNewSummary={createForm.setNewSummary}
           onHandleLogout={auth.handleLogout}
           onHandleSelectProject={handleSelectProject}
           onHandleGenerate={handleGenerate}
@@ -2347,22 +2325,22 @@ function App() {
           onReadChapter={handleReadChapter}
           onBackClick={onBackClick}
           readingChapterTitle={readingChapterTitle}
-          showCreateForm={showCreateForm}
-          newProjectName={newProjectName}
-          setNewProjectName={setNewProjectName}
-          newWorld={newWorld}
-          setNewWorld={setNewWorld}
-          newCharacters={newCharacters}
-          setNewCharacters={setNewCharacters}
-          newStyle={newStyle}
-          setNewStyle={setNewStyle}
-          newSummary={newSummary}
-          setNewSummary={setNewSummary}
-          createError={createError}
-          creating={creating}
+          showCreateForm={createForm.showCreateForm}
+          newProjectName={createForm.newProjectName}
+          setNewProjectName={createForm.setNewProjectName}
+          newWorld={createForm.newWorld}
+          setNewWorld={createForm.setNewWorld}
+          newCharacters={createForm.newCharacters}
+          setNewCharacters={createForm.setNewCharacters}
+          newStyle={createForm.newStyle}
+          setNewStyle={createForm.setNewStyle}
+          newSummary={createForm.newSummary}
+          setNewSummary={createForm.setNewSummary}
+          createError={createForm.createError}
+          creating={createForm.creating}
           handleCreateProject={handleCreateProject}
-          setShowCreateForm={setShowCreateForm}
-          setCreateError={setCreateError}
+          setShowCreateForm={createForm.setShowCreateForm}
+          setCreateError={createForm.setCreateError}
           currentProject={currentProject}
           handleOpenSettings={handleOpenSettings}
           showOutline={showOutline}
@@ -2458,14 +2436,14 @@ function App() {
         {/* ===== Mobile: Shelf View ===== */}
         {mobileView === 'shelf' && (
           <HomePage
-            showCreateForm={showCreateForm}
-            creating={creating}
-            newProjectName={newProjectName}
-            newWorld={newWorld}
-            newCharacters={newCharacters}
-            newStyle={newStyle}
-            newSummary={newSummary}
-            createError={createError}
+            showCreateForm={createForm.showCreateForm}
+            creating={createForm.creating}
+            newProjectName={createForm.newProjectName}
+            newWorld={createForm.newWorld}
+            newCharacters={createForm.newCharacters}
+            newStyle={createForm.newStyle}
+            newSummary={createForm.newSummary}
+            createError={createForm.createError}
             featuredProject={featuredProject}
             featuredChapterLabel={featuredChapterLabel}
             featuredUpdatedLabel={featuredUpdatedLabel}
@@ -2478,13 +2456,13 @@ function App() {
             onMobileQuickAction={handleMobileQuickAction}
             onOpenMobileSearch={openMobileSearch}
             onCreateProject={handleCreateProject}
-            onCancelCreate={() => { setShowCreateForm(false); setCreateError(''); setNewProjectName(''); setNewWorld(''); setNewCharacters(''); setNewStyle(''); setNewSummary(''); }}
-            onOpenCreate={() => { setShowCreateForm(true); setCreateError(''); }}
-            onNewProjectNameChange={setNewProjectName}
-            onNewWorldChange={setNewWorld}
-            onNewCharactersChange={setNewCharacters}
-            onNewStyleChange={setNewStyle}
-            onNewSummaryChange={setNewSummary}
+            onCancelCreate={createForm.closeCreateProjectForm}
+            onOpenCreate={createForm.openCreateProjectForm}
+            onNewProjectNameChange={createForm.setNewProjectName}
+            onNewWorldChange={createForm.setNewWorld}
+            onNewCharactersChange={createForm.setNewCharacters}
+            onNewStyleChange={createForm.setNewStyle}
+            onNewSummaryChange={createForm.setNewSummary}
             formatProjectUpdatedAt={formatProjectUpdatedAt}
             getProjectChapterCount={getProjectChapterCount}
           />
