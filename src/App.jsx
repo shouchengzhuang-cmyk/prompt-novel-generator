@@ -18,6 +18,7 @@ import { useDesktopSearchState } from './hooks/useDesktopSearchState';
 import { useProjectCreateFormState } from './hooks/useProjectCreateFormState';
 import { useProjectSelectionState } from './hooks/useProjectSelectionState';
 import { useChapterSelectionState } from './hooks/useChapterSelectionState';
+import { useWorkspaceUiState } from './hooks/useWorkspaceUiState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -78,7 +79,6 @@ function App() {
     return saved || 'ink';
   });
   const [readingFontSize, setReadingFontSize] = useState(() => localStorage.getItem('readingFontSize') || 'medium');
-  const [mobileReadingSettingsOpen, setMobileReadingSettingsOpen] = useState(false);
 
   useEffect(() => { localStorage.setItem('readingTheme', readingTheme); }, [readingTheme]);
   useEffect(() => { localStorage.setItem('readingFontSize', readingFontSize); }, [readingFontSize]);
@@ -95,14 +95,6 @@ function App() {
     localStorage.setItem('xiaomoxia_project_sort', JSON.stringify(projectSort));
   }, [projectSort]);
 
-  // Mobile view routing: 'shelf' | 'project' | 'chapter' | 'editor' | 'writing'
-  const [mobileView, setMobileView] = useState('shelf');
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 900);
-  const [mobileGenerateOpen, setMobileGenerateOpen] = useState(false);
-  const [mobileVariantsOpen, setMobileVariantsOpen] = useState(false);
-  const [mobileShelfMenu, setMobileShelfMenu] = useState(null);
-  const [mobileChapterMenu, setMobileChapterMenu] = useState(null);
-  const [mobileMaterialsOpen, setMobileMaterialsOpen] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   const [mobileSearchIndex, setMobileSearchIndex] = useState([]);
@@ -141,21 +133,29 @@ function App() {
   const [genProgress, setGenProgress] = useState({ visible: false, mode: 'generate', status: 'running', errorMessage: '' });
 
   // Mobile simple edit
-  const [showMobileEdit, setShowMobileEdit] = useState(false);
   const [mobileEditTitle, setMobileEditTitle] = useState('');
   const [mobileEditContent, setMobileEditContent] = useState('');
   const [mobileEditSaving, setMobileEditSaving] = useState(false);
 
 
-  // Desktop workbench state
-  const [desktopView, setDesktopView] = useState('workbench');
-  const [desktopEditorTab, setDesktopEditorTab] = useState('writing');
   const [desktopChapterQuery, setDesktopChapterQuery] = useState('');
   const [desktopAiMode, setDesktopAiMode] = useState('continue');
   const [desktopEditorContent, setDesktopEditorContent] = useState('');
   const [desktopSavingContent, setDesktopSavingContent] = useState(false);
 
   const { notification, setNotification, clearNotification } = useNotificationState();
+  const {
+    desktopView, setDesktopView, desktopEditorTab, setDesktopEditorTab,
+    mobileView, setMobileView, isMobile,
+    mobileGenerateOpen, setMobileGenerateOpen,
+    mobileVariantsOpen, setMobileVariantsOpen,
+    mobileShelfMenu, setMobileShelfMenu,
+    mobileChapterMenu, setMobileChapterMenu,
+    mobileMaterialsOpen, setMobileMaterialsOpen,
+    mobileReadingSettingsOpen, setMobileReadingSettingsOpen,
+    showMobileEdit, setShowMobileEdit,
+    closeMobileOverlays, switchMobileView, navigateTo,
+  } = useWorkspaceUiState();
 
   const auth = useAuthState();
   const desktopSearch = useDesktopSearchState();
@@ -203,26 +203,6 @@ function App() {
     document.title = busy ? '生成中...' : '小墨匣';
     return () => { document.title = '小墨匣'; };
   }, [loading, regenerating]);
-
-  // Detect mobile viewport
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 900px)');
-    const handler = (e) => setIsMobile(e.matches);
-    setIsMobile(mq.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-
-  // ---- 移动端视图导航 ----
-  /** 切换移动端视图（shelf / project / chapter / writing / outline 等） */
-  const navigateTo = useCallback((view) => {
-    window.history.pushState({ mobileView: view }, '', '');
-    setMobileView(view);
-    setMobileGenerateOpen(false);
-    setMobileVariantsOpen(false);
-    setMobileChapterMenu(null);
-    setMobileShelfMenu(null);
-  }, []);
 
   const handleAppBackRef = useRef(null);
 
@@ -715,9 +695,7 @@ function App() {
 
     // Mobile: auto-navigate to reading page after successful generation
     if (isMobile && fileName) {
-      setMobileView('chapter');
-      setMobileGenerateOpen(false);
-      setMobileVariantsOpen(false);
+      switchMobileView('chapter');
       setNotification({ title: '新章节已保存', message: `${fileName} 已保存，正在打开阅读页` });
       requestAnimationFrame(() => {
         readingSectionRef.current?.scrollIntoView({ block: 'start' });
@@ -860,9 +838,7 @@ function App() {
     setMobileShelfMenu(null);
     const ok = await handleDeleteProject(name, { stopPropagation() {} });
     if (ok && isMobile) {
-      setMobileView('shelf');
-      setMobileGenerateOpen(false);
-      setMobileVariantsOpen(false);
+      switchMobileView('shelf');
     }
   };
 
@@ -1709,8 +1685,7 @@ function App() {
     setShowSettings(false);
     setShowOutline(false);
     setMobileMaterialsOpen(false);
-    setMobileGenerateOpen(false);
-    setMobileVariantsOpen(false);
+    closeMobileOverlays();
     setShowRewriteInput(false);
     setMobileWritingError('');
     setMobileWritingOutput('');
