@@ -1,5 +1,6 @@
 import GenerationProgress from '../components/GenerationProgress';
 import DesktopEditorTabs from '../components/desktop/DesktopEditorTabs';
+import DesktopChapterListPanel from '../components/desktop/DesktopChapterListPanel';
 import DesktopMainNav from '../components/desktop/DesktopMainNav';
 import DesktopProjectLibrary from '../components/desktop/DesktopProjectLibrary';
 import DesktopProjectRail from '../components/desktop/DesktopProjectRail';
@@ -236,11 +237,7 @@ export default function ProjectWorkspacePage({
               </div>
 
               {desktopEditorTab === 'overview' && (
-                <div className="desktop-overview-panel">
-                  <h3>章节总览</h3>
-                  <p>当前项目 {currentProject}，共 {desktopChapters.length} 章，总计 {desktopTotalWords.toLocaleString()} 字。</p>
-                  <p>{projectDetails?.summary || '暂无剧情摘要，可在设定页签中补充。'}</p>
-                </div>
+                <DesktopChapterListPanel currentProject={currentProject} chapters={desktopChapters} totalWords={desktopTotalWords} summary={projectDetails?.summary} />
               )}
 
               {desktopEditorTab === 'writing' && (
