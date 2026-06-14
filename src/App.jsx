@@ -17,6 +17,7 @@ import { useAuthState } from './hooks/useAuthState';
 import { useDesktopSearchState } from './hooks/useDesktopSearchState';
 import { useProjectCreateFormState } from './hooks/useProjectCreateFormState';
 import { useProjectSelectionState } from './hooks/useProjectSelectionState';
+import { useChapterSelectionState } from './hooks/useChapterSelectionState';
 import * as ProjectsApi from './api/projectsApi';
 
 function normalizeChapters(chapters) {
@@ -41,11 +42,6 @@ function App() {
   const [displayContent, setDisplayContent] = useState('');
   const [lastFilename, setLastFilename] = useState('');
   const [copied, setCopied] = useState(false);
-
-  // Reading
-  const [readingChapter, setReadingChapter] = useState(null);
-  const [readingChapterTitle, setReadingChapterTitle] = useState('');
-  const [readingContent, setReadingContent] = useState('');
 
   // Project settings editor
   const [showSettings, setShowSettings] = useState(false);
@@ -180,6 +176,22 @@ function App() {
     fetchProjects,
     loadProjectDetails,
   } = projectSelection;
+  const chapterSelection = useChapterSelectionState({
+    projectDetails,
+    setProjectDetails,
+    setError,
+  });
+  const {
+    chapters,
+    readingChapter,
+    setReadingChapter,
+    readingChapterTitle,
+    setReadingChapterTitle,
+    readingContent,
+    setReadingContent,
+    loadChapterContent,
+    clearChapterSelection,
+  } = chapterSelection;
 
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
@@ -264,9 +276,7 @@ function App() {
       return 'view';
     }
     if (mobileView === 'chapter' || readingChapter) {
-      setReadingChapter(null);
-      setReadingChapterTitle('');
-      setReadingContent('');
+      clearChapterSelection();
       setVariants([]);
       setVariantPreview(null);
       setShowRewriteInput(false);
@@ -279,9 +289,7 @@ function App() {
       setCurrentProject(null);
       setProjectDetails(null);
       setDisplayContent('');
-      setReadingChapter(null);
-      setReadingChapterTitle('');
-      setReadingContent('');
+      clearChapterSelection();
       setVariants([]);
       setVariantPreview(null);
       setShowRewriteInput(false);
@@ -381,9 +389,7 @@ function App() {
     setError('');
     setLastFilename('');
     setUserPrompt('');
-    setReadingChapter(null);
-    setReadingChapterTitle('');
-    setReadingContent('');
+    clearChapterSelection();
     setVariants([]);
     setVariantPreview(null);
     setShowRewriteInput(false);
@@ -728,46 +734,18 @@ function App() {
   const handleReadChapter = async (filename, projectName = currentProject) => {
     if (!projectName) return null;
     rememberLastProject(projectName);
-    setError('');
     setDebugPromptInfo(null);
     // Clear previous chapter state before loading new one
     setVariantPreview(null);
     setVariants([]);
     setShowRewriteInput(false);
     setRewritePrompt('');
-    setReadingContent('');
-    try {
-      const data = await ProjectsApi.getChapterContent(projectName, filename);
-      console.log('章节接口返回的数据:', data);
-      if (typeof data.fileName !== 'string' || typeof data.content !== 'string') {
-        throw new Error('章节读取失败：后端未返回有效数据');
-      }
-      setReadingChapter(data.fileName);
-      setReadingChapterTitle(data.title || '');
-      setReadingContent(data.content === '' ? '章节为空' : data.content);
-      setMobileWritingOutput('');
-      setProjectDetails((prev) => {
-        if (!prev?.chapters) return prev;
-        const chapters = prev.chapters.map((ch) =>
-          (ch.fileName || ch.filename) === data.fileName
-            ? {
-                ...ch,
-                staleAfterRewrite: data.staleAfterRewrite === true,
-                staleReason: data.staleReason || '',
-                staleFromFileName: data.staleFromFileName || '',
-                staleAt: data.staleAt || null,
-              }
-            : ch
-        );
-        return { ...prev, chapters };
-      });
-      // Load variants for this chapter
-      handleLoadVariants(data.fileName, projectName);
-      return data;
-    } catch (err) {
-      setError(err.message);
-      return null;
-    }
+    const data = await loadChapterContent(projectName, filename);
+    if (!data) return null;
+    setMobileWritingOutput('');
+    // Load variants for this chapter
+    handleLoadVariants(data.fileName, projectName);
+    return data;
   };
 
   // ---- 删除章节 ----
@@ -2055,7 +2033,7 @@ function App() {
     await handleApplyVariant(variantId);
   };
 
-  const desktopChapters = normalizeChapters(projectDetails?.chapters || []);
+  const desktopChapters = normalizeChapters(chapters);
   const filteredDesktopChapters = desktopChapterQuery.trim()
     ? desktopChapters.filter((ch) => {
       const q = desktopChapterQuery.trim().toLowerCase();
