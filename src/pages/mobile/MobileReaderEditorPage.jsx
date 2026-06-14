@@ -1,4 +1,5 @@
 import GenerationProgress from '../../components/GenerationProgress';
+import MobileReaderTopBar from '../../components/mobile/MobileReaderTopBar';
 import MobileReadingContent from '../../components/mobile/MobileReadingContent';
 import PromptPreviewPanel from '../../components/PromptPreviewPanel';
 import VaultPanel from '../../components/VaultPanel';
@@ -131,11 +132,7 @@ export default function MobileReaderEditorPage(props) {
         ) : (
         <>
         {/* Mobile: back button on chapter view */}
-        {isMobile && mobileView === 'chapter' && (
-          <button className="mobile-back-btn" onClick={onBackClick}>
-            ← 返回列表
-          </button>
-        )}
+        <MobileReaderTopBar isMobile={isMobile} mobileView={mobileView} onBackClick={onBackClick} />
         {showCreateForm ? (
           <div className="create-panel">
             <h2>创建新项目</h2>
