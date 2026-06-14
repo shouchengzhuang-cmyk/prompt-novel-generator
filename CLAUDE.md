@@ -66,14 +66,39 @@
 - 不提交真实密码、真实 SSH 密码、真实 `SESSION_SECRET`、真实 API Key。
 - 不把生产环境密钥写入 Git。
 
-## 3. Language Rules
+## 3. React Hook 提取安全规则
+
+从 App.jsx 提取自定义 hook 时，必须遵守以下规则，防止生产构建中的 TDZ 白屏事故（参考 a654015 热修复）：
+
+### 3.1 调用位置
+
+- 新 hook 调用必须放在组件顶部，位于所有 `useEffect` / `useMemo` / `useCallback` 之前。
+- 禁止在 `useEffect` / `useMemo` / `useCallback` 中引用尚未声明的 `const` 解构值。
+- 提取后必须检查：hook 返回值是否被上方 `useEffect` / `useMemo` / `useCallback` 引用。
+
+### 3.2 验证要求
+
+- 本地 `npm test` 和 `npm run build` 不能保证发现生产构建中的 TDZ 白屏，部署前必须跑浏览器 smoke。
+- 生成链路相关 hook 提取后必须使用 `_系统烟测项目_请勿删除` 执行生成/重写/候选 smoke。
+
+### 3.3 候选采用 smoke
+
+- 候选采用 smoke 必须真实点击成功，不能只确认按钮存在。
+- 如果 UI 遮挡，使用以下方式之一（仅限 `_系统烟测项目_请勿删除`）：
+  1. 滚动候选面板到按钮可见
+  2. 使用 Playwright locator 精确点击"采用"
+  3. 临时缩放页面
+  4. 切换桌面/移动视口
+- 如果以上方式均无法触发点击，必须回报"采用未验证"，不能写成通过。
+
+## 4. Language Rules
 
 - 默认中文回复。
 - 代码标识符、函数名、变量名、组件名、API 路径、文件路径、命令、依赖名保持原文。
 - 用户界面已有中文文案保持中文，不因语言规则强行翻译。
 - 技术解释可以中英混用，但必须清楚。
 
-## 4. Skill Index
+## 5. Skill Index
 
 根据任务类型读取对应 skill：
 
@@ -82,7 +107,7 @@
 - 飞书回报、收尾报告推送：`skills/xiaomoxia-feishu-report.md`
 - Windows SSH 部署辅助（连接/认证问题集）：`skills/xiaomoxia-windows-ssh-deploy.md`
 
-## 5. Default Report Format
+## 6. Default Report Format
 
 完成任务后汇报：
 
