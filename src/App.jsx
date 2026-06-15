@@ -1442,8 +1442,8 @@ function App() {
     return latest ? (latest.fileName || latest.filename) : '';
   };
 
-  const getProjectIntro = (details) => {
-    const text = details?.summary || details?.world || details?.style || details?.editorialMemory || '';
+  const getProjectIntro = (project, details) => {
+    const text = details?.summary || details?.world || details?.style || details?.editorialMemory || project?.intro || '';
     return text ? text.replace(/\s+/g, ' ').trim().slice(0, 48) : '暂无简介';
   };
 
@@ -1534,23 +1534,11 @@ function App() {
     navigateTo('outline');
   };
 
-  const handleOpenAllProjects = async () => {
+  const handleOpenAllProjects = () => {
     if (sortedProjects.length === 0) {
       setNotification({ title: '暂无项目', message: '还没有项目，先创建一个吧' });
       return;
     }
-    setNotification({ title: '加载中', message: '正在加载所有项目…' });
-    const entries = await Promise.all(sortedProjects.map(async (project) => {
-      const details = await ensureProjectDetailsCached(project.name);
-      return [project.name, details];
-    }));
-    setAllProjectDetails((prev) => {
-      const next = { ...prev };
-      entries.forEach(([name, details]) => {
-        if (name && details) next[name] = details;
-      });
-      return next;
-    });
     navigateTo('allProjects');
   };
 

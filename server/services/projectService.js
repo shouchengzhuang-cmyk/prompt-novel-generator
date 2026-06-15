@@ -71,21 +71,47 @@ function createProjectService({
     return Promise.all(projectNames.map(async (name) => {
       const projectDir = path.join(novelsDir, name);
       try {
-        const stats = await collectProjectStats(projectDir);
+        const keyFiles = [
+          path.join(projectDir, 'chapters', 'index.json'),
+          path.join(projectDir, 'summary.md'),
+          path.join(projectDir, 'world.md'),
+          path.join(projectDir, 'characters.md'),
+          path.join(projectDir, 'style.md'),
+          path.join(projectDir, 'editorial-memory.md'),
+        ];
+        const mtimes = await Promise.all(keyFiles.map((f) =>
+          fs.stat(f).then((s) => s.mtimeMs).catch(() => 0)
+        ));
+        const updatedAt = Math.max(...mtimes);
+
         let chapterCount = 0;
         let totalWords = 0;
+        let intro = '';
         try {
           const chaptersDir = path.join(projectDir, 'chapters');
-          const chapterFiles = await fs.readdir(chaptersDir);
-          chapterCount = chapterFiles.filter((file) => isValidChapterFileName(file)).length;
           const indexEntries = await readChapterIndex(chaptersDir);
-          totalWords = indexEntries.reduce((sum, entry) => sum + (Number(entry.wordCount) || 0), 0);
+          if (indexEntries.length > 0) {
+            chapterCount = indexEntries.length;
+            totalWords = indexEntries.reduce((sum, entry) => sum + (Number(entry.wordCount) || 0), 0);
+          } else {
+            const chapterFiles = await fs.readdir(chaptersDir).catch(() => []);
+            chapterCount = chapterFiles.filter((file) => isValidChapterFileName(file)).length;
+          }
         } catch {
           chapterCount = 0;
         }
-        return { name, size: stats.totalSize, updatedAt: stats.latestMtime, chapterCount, totalWords };
+
+        try {
+          const summaryRaw = await fs.readFile(path.join(projectDir, 'summary.md'), 'utf-8').catch(() => '');
+          const worldRaw = summaryRaw.trim() ? summaryRaw : await fs.readFile(path.join(projectDir, 'world.md'), 'utf-8').catch(() => '');
+          intro = worldRaw.replace(/\s+/g, ' ').trim().slice(0, 48);
+        } catch {
+          intro = '';
+        }
+
+        return { name, size: 0, updatedAt, chapterCount, totalWords, intro };
       } catch {
-        return { name, size: 0, updatedAt: 0, chapterCount: 0 };
+        return { name, size: 0, updatedAt: 0, chapterCount: 0, totalWords: 0, intro: '' };
       }
     }));
   }

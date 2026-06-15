@@ -26,7 +26,7 @@ export default function MobileProjectListPanel({
             <div>
               <strong>{project.name}</strong>
               <em>{formatProjectUpdatedAt(project.updatedAt)} · 第 {getProjectChapterCount(project)} 章</em>
-              <p>{getProjectIntro(details)}</p>
+              <p>{getProjectIntro(project, details)}</p>
             </div>
           </button>
         );
