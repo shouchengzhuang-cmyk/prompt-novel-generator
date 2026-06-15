@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react';
+import { safeJsonFetch } from '../api';
 
 export function useVariantState() {
   const [variants, setVariants] = useState([]);
@@ -18,6 +19,20 @@ export function useVariantState() {
     setRewritePrompt('');
   }, []);
 
+  const handleLoadVariants = useCallback(async (filename, projectName) => {
+    if (!filename || !projectName) {
+      setVariants([]);
+      return;
+    }
+
+    try {
+      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/chapters/${encodeURIComponent(filename)}/variants`);
+      setVariants(data.variants || []);
+    } catch {
+      setVariants([]);
+    }
+  }, []);
+
   return {
     variants,
     setVariants,
@@ -31,5 +46,6 @@ export function useVariantState() {
     setRewritePrompt,
     handlePreviewVariant,
     clearVariantState,
+    handleLoadVariants,
   };
 }

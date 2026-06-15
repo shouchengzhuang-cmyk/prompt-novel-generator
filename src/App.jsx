@@ -197,6 +197,7 @@ function App() {
     rewritePrompt, setRewritePrompt,
     handlePreviewVariant,
     clearVariantState,
+    handleLoadVariants,
   } = useVariantState();
 
   const { model, setModel, writingPrefs, setWritingPrefs, enhancedPrompt, enhancedRewritePrompt } =
@@ -266,10 +267,7 @@ function App() {
     }
     if (mobileView === 'chapter' || readingChapter) {
       clearChapterSelection();
-      setVariants([]);
-      setVariantPreview(null);
-      setShowRewriteInput(false);
-      setRewritePrompt('');
+      clearVariantState();
       setDebugPromptInfo(null);
       setMobileView('project');
       return 'view';
@@ -279,10 +277,7 @@ function App() {
       setProjectDetails(null);
       setDisplayContent('');
       clearChapterSelection();
-      setVariants([]);
-      setVariantPreview(null);
-      setShowRewriteInput(false);
-      setRewritePrompt('');
+      clearVariantState();
       setShowOutline(false);
       setShowSettings(false);
       setEditingProjectName(null);
@@ -378,10 +373,7 @@ function App() {
     setLastFilename('');
     setUserPrompt('');
     clearChapterSelection();
-    setVariants([]);
-    setVariantPreview(null);
-    setShowRewriteInput(false);
-    setRewritePrompt('');
+    clearVariantState();
     setShowSettings(false);
     clearSettingsDraft();
     setShowOutline(false);
@@ -727,10 +719,7 @@ function App() {
       if (readingChapter === filename) {
         setReadingChapter(null);
         setReadingContent('');
-        setVariants([]);
-        setVariantPreview(null);
-        setShowRewriteInput(false);
-        setRewritePrompt('');
+        clearVariantState();
         setDebugPromptInfo(null);
           }
       setError('章节已删除');
@@ -756,10 +745,7 @@ function App() {
         setDisplayContent('');
         setReadingChapter(null);
         setReadingContent('');
-        setVariants([]);
-        setVariantPreview(null);
-        setShowRewriteInput(false);
-        setRewritePrompt('');
+        clearVariantState();
         setLastFilename('');
         setUserPrompt('');
         setShowSettings(false);
@@ -1120,15 +1106,6 @@ function App() {
   };
 
   // ---- Variants (regenerate chapter) ----
-  const handleLoadVariants = async (filename, projectName = currentProject) => {
-    try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/chapters/${encodeURIComponent(filename)}/variants`);
-      setVariants(data.variants || []);
-    } catch {
-      setVariants([]);
-    }
-  };
-
   const handleLoadRewritePrompt = () => {
     if (!currentProject || !readingChapter) return;
     // Get saved userPrompt from projectDetails, fallback to "继续写"
@@ -1226,7 +1203,7 @@ function App() {
       setDesktopEditorContent(doneVariant.content || streamedContent);
       setMobileWritingOutput(doneVariant.content || streamedContent);
       setVariants((prev) => [...prev, { ...doneVariant, _debugPromptInfo: doneDebugInfo }]);
-      handleLoadVariants(origChapter);
+      handleLoadVariants(origChapter, currentProject);
       setShowRewriteInput(false);
       setRewritePrompt('');
       setGenProgress(prev => ({ ...prev, status: 'success' }));
