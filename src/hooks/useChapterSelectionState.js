@@ -30,7 +30,6 @@ export function useChapterSelectionState({ projectDetails, setProjectDetails, se
     setReadingContent('');
     try {
       const data = await ProjectsApi.getChapterContent(projectName, filename);
-      console.log('章节接口返回的数据:', data);
       if (typeof data.fileName !== 'string' || typeof data.content !== 'string') {
         throw new Error('章节读取失败：后端未返回有效数据');
       }
