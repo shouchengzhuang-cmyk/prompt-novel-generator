@@ -1,5 +1,9 @@
 const path = require('path');
 const express = require('express');
+const {
+  appendAndExtractSseLines,
+  parseDeepSeekSseLine,
+} = require('../services/generationHelpers');
 
 function createRegenerateRouter({
   isValidChapterFileName,
@@ -329,26 +333,14 @@ function createRegenerateRouter({
           const { done, value } = await reader.read();
           if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+          const parsedChunk = appendAndExtractSseLines(buffer, decoder.decode(value, { stream: true }));
+          buffer = parsedChunk.buffer;
 
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || !trimmed.startsWith('data: ')) continue;
-
-            const payload = trimmed.slice(6);
-            if (payload === '[DONE]') continue;
-
-            try {
-              const parsed = JSON.parse(payload);
-              const delta = parsed.choices?.[0]?.delta?.content;
-              if (delta) {
-                fullContent += delta;
-                sendEvent({ type: 'chunk', content: delta });
-              }
-            } catch {
-              // skip unparseable lines
+          for (const line of parsedChunk.lines) {
+            const event = parseDeepSeekSseLine(line);
+            if (event?.content) {
+              fullContent += event.content;
+              sendEvent({ type: 'chunk', content: event.content });
             }
           }
         }
