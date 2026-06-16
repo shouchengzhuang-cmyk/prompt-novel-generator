@@ -2,6 +2,38 @@ const path = require('path');
 const fs = require('fs/promises');
 const storage = require('./storage');
 
+const VARIANTS_DIR_NAME = 'variants';
+
+function variantsFilePath(chaptersDir, fileName) {
+  const base = fileName.replace(/\.txt$/, '');
+  return path.join(chaptersDir, VARIANTS_DIR_NAME, `${base}.json`);
+}
+
+async function readVariants(chaptersDir, fileName) {
+  const vDir = path.join(chaptersDir, VARIANTS_DIR_NAME);
+  const vFile = variantsFilePath(chaptersDir, fileName);
+  const relative = path.relative(vDir, vFile);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return [];
+  try {
+    const raw = await fs.readFile(vFile, 'utf-8');
+    const data = JSON.parse(raw);
+    return Array.isArray(data.variants) ? data.variants : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeVariants(chaptersDir, fileName, variants) {
+  const vDir = path.join(chaptersDir, VARIANTS_DIR_NAME);
+  await fs.mkdir(vDir, { recursive: true });
+  const vFile = variantsFilePath(chaptersDir, fileName);
+  const relative = path.relative(vDir, vFile);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw new Error('无效的文件名');
+  }
+  await storage.writeJson(vFile, { fileName, variants });
+}
+
 class VariantServiceError extends Error {
   constructor(message, statusCode) {
     super(message);
@@ -14,8 +46,6 @@ function createVariantService({
   isValidChapterFileName,
   readChapterIndex,
   writeChapterIndex,
-  readVariants,
-  writeVariants,
   updateChapterWordCount,
   markChaptersStaleAfterRewrite,
   withProjectLock,
@@ -154,7 +184,7 @@ function createVariantService({
     return result;
   }
 
-  return { listVariants, applyVariant };
+  return { listVariants, applyVariant, readVariants, writeVariants };
 }
 
-module.exports = { VariantServiceError, createVariantService };
+module.exports = { VariantServiceError, createVariantService, VARIANTS_DIR_NAME, variantsFilePath, readVariants, writeVariants };

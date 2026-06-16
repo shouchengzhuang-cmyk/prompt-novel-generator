@@ -21,7 +21,7 @@ const { buildPrompt } = require('./services/promptBuilder');
 const storage = require('./services/storage');
 const { createProjectService } = require('./services/projectService');
 const { createChapterService } = require('./services/chapterService');
-const { createVariantService } = require('./services/variantService');
+const { createVariantService, VARIANTS_DIR_NAME, variantsFilePath, readVariants, writeVariants } = require('./services/variantService');
 const { createGenerationContextService } = require('./services/generationContextService');
 const { createGenerationPersistenceService } = require('./services/generationPersistenceService');
 const {
@@ -356,40 +356,6 @@ app.use(
   }),
 );
 
-// ---- Variant helpers ----
-
-const VARIANTS_DIR_NAME = 'variants';
-
-function variantsFilePath(chaptersDir, fileName) {
-  const base = fileName.replace(/\.txt$/, '');
-  return path.join(chaptersDir, VARIANTS_DIR_NAME, `${base}.json`);
-}
-
-async function readVariants(chaptersDir, fileName) {
-  const vDir = path.join(chaptersDir, VARIANTS_DIR_NAME);
-  const vFile = variantsFilePath(chaptersDir, fileName);
-  const relative = path.relative(vDir, vFile);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) return [];
-  try {
-    const raw = await fs.readFile(vFile, 'utf-8');
-    const data = JSON.parse(raw);
-    return Array.isArray(data.variants) ? data.variants : [];
-  } catch {
-    return [];
-  }
-}
-
-async function writeVariants(chaptersDir, fileName, variants) {
-  const vDir = path.join(chaptersDir, VARIANTS_DIR_NAME);
-  await ensureDir(vDir);
-  const vFile = variantsFilePath(chaptersDir, fileName);
-  const relative = path.relative(vDir, vFile);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('无效的文件名');
-  }
-  await storage.writeJson(vFile, { fileName, variants });
-}
-
 // [P-X2 预留] 事件卡注入生成 — 被 466dfbc 禁用，如需恢复在此处接入 loadEventCards / buildEventCardPromptSection
 
 // ---- Regenerate routes ----
@@ -427,12 +393,11 @@ const variantService = createVariantService({
   isValidChapterFileName,
   readChapterIndex,
   writeChapterIndex,
-  readVariants,
-  writeVariants,
   updateChapterWordCount,
   markChaptersStaleAfterRewrite,
   withProjectLock,
 });
+
 app.use(
   '/api/projects/:projectName/chapters/:fileName/variants',
   createVariantsRouter({ variantService }),
