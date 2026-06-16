@@ -3,6 +3,63 @@ import { apiFetch, safeJsonFetch } from '../api';
 import { parseSSEStream } from '../utils/sseReader';
 import * as ProjectsApi from '../api/projectsApi';
 
+/**
+ * 生成流式任务的公共生命周期 runner。
+ * 统一处理：请求 → SSE 解析 → chunk 追加 → done 捕获 → 无 done 恢复。
+ * generate / regenerate 各自的差异通过回调注入。
+ */
+async function runGenerationStream({
+  url,
+  body,
+  errorFallbackLabel,
+  noDoneErrorLabel,
+  onChunk,
+  captureDone,
+  recoverNoDone,
+  onReadCycle,
+}) {
+  const response = await apiFetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let errData = {};
+    try {
+      const text = await response.text();
+      errData = JSON.parse(text);
+    } catch {}
+    throw new Error(errData.error || errorFallbackLabel);
+  }
+
+  const reader = response.body.getReader();
+  let streamedContent = '';
+  let doneData = null;
+
+  await parseSSEStream(reader, {
+    onChunk: (chunk) => {
+      streamedContent += chunk;
+      onChunk(chunk);
+    },
+    onDone: (event) => {
+      doneData = captureDone(event);
+    },
+    onError: (message) => {
+      throw new Error(message);
+    },
+    ...(onReadCycle ? { onReadCycle: () => { if (streamedContent) onReadCycle(streamedContent); } } : {}),
+  });
+
+  if (!doneData && streamedContent.trim()) {
+    doneData = await recoverNoDone(streamedContent);
+  }
+
+  if (!doneData) throw new Error(noDoneErrorLabel);
+
+  return { streamedContent, doneData };
+}
+
 export function useGenerationController({
   // shared by both handlers
   loading,
@@ -97,71 +154,50 @@ export function useGenerationController({
     let streamedContent = '';
 
     try {
-      // 优先使用流式生成
-      const response = await apiFetch('/api/generate-stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectName: currentProject,
-          userPrompt: enhancedPrompt,
-          model,
-        }),
-      });
-
-      if (!response.ok) {
-        const errBody = await response.json().catch(() => ({}));
-        throw new Error(errBody.error || '流式接口返回错误状态');
-      }
-
-      const reader = response.body.getReader();
-
       console.log('[生成] 请求 URL: /api/generate-stream');
-
-      await parseSSEStream(reader, {
+      const result = await runGenerationStream({
+        url: '/api/generate-stream',
+        body: { projectName: currentProject, userPrompt: enhancedPrompt, model },
+        errorFallbackLabel: '流式接口返回错误状态',
+        noDoneErrorLabel: '流式生成未完成',
         onChunk: (chunk) => {
-          streamedContent += chunk;
           setReadingContent((prev) => prev + chunk);
           setDesktopEditorContent((prev) => prev + chunk);
           setMobileWritingOutput((prev) => prev + chunk);
         },
-        onDone: (event) => {
-          fileName = event.fileName;
-          content = event.content;
-          title = event.title;
-          debugInfo = event.debugPromptInfo;
-        },
-        onError: (message) => {
-          throw new Error(message);
-        },
-        onReadCycle: () => {
-          if (streamedContent) {
-            setReadingContent(streamedContent);
-            setDesktopEditorContent(streamedContent);
-            console.log('[生成] done 事件:', fileName ? `fileName=${fileName}` : '(未收到)');
+        captureDone: (event) => ({
+          fileName: event.fileName,
+          content: event.content,
+          title: event.title,
+          debugInfo: event.debugPromptInfo,
+        }),
+        recoverNoDone: async (sc) => {
+          console.log('[生成] 流式未收到 done 事件，streamedContent 长度=' + sc.length + '，尝试刷新查找新章节');
+          try {
+            const refreshData = await ProjectsApi.fetchProjectDetails(currentProject);
+            if (refreshData.chapters) {
+              const chs = normalizeChapters(refreshData.chapters);
+              const last = chs[chs.length - 1];
+              if (last) {
+                console.log('[生成] 刷新后找到新章节:', last.fileName || last.filename);
+                return { fileName: last.fileName || last.filename, content: sc, title: last.title || '' };
+              }
+            }
+          } catch (fetchErr) {
+            console.warn('[生成] 刷新查找新章节失败:', fetchErr);
           }
+          return null;
+        },
+        onReadCycle: (sc) => {
+          setReadingContent(sc);
+          setDesktopEditorContent(sc);
         },
       });
-
-      // 流式完成但未收到 done 事件 → 后端可能已保存章节，尝试刷新项目定位
-      if (!fileName && streamedContent.trim()) {
-        console.log('[生成] 流式未收到 done 事件，streamedContent 长度=' + streamedContent.length + '，尝试刷新查找新章节');
-        try {
-          const refreshData = await ProjectsApi.fetchProjectDetails(currentProject);
-          if (refreshData.chapters) {
-            const chs = normalizeChapters(refreshData.chapters);
-            const last = chs[chs.length - 1];
-            if (last) {
-              fileName = last.fileName || last.filename;
-              content = streamedContent;
-              title = last.title || '';
-              console.log('[生成] 刷新后找到新章节:', fileName);
-            }
-          }
-        } catch (fetchErr) {
-          console.warn('[生成] 刷新查找新章节失败:', fetchErr);
-        }
-      }
-      if (!fileName) throw new Error('流式生成未完成');
+      streamedContent = result.streamedContent;
+      fileName = result.doneData.fileName;
+      content = result.doneData.content;
+      title = result.doneData.title;
+      debugInfo = result.doneData.debugInfo;
     } catch (streamErr) {
       console.warn('流式生成失败，回退到普通生成:', streamErr);
       setReadingChapter(null);
@@ -305,60 +341,45 @@ export function useGenerationController({
     setDesktopEditorContent('');
     setGenProgress({ visible: true, mode: 'rewrite', status: 'streaming', errorMessage: '' });
 
+    let streamedContent = '';
+    let doneVariant = null;
+    let doneDebugInfo = null;
+
     try {
-      const response = await apiFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(origChapter)}/regenerate-stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, userPrompt: enhancedRewritePrompt }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        let data;
-        try { data = JSON.parse(text); } catch { data = {}; }
-        throw new Error(data.error || '重写请求失败');
-      }
-
-      const reader = response.body.getReader();
-      let streamedContent = '';
-      let doneVariant = null;
-      let doneDebugInfo = null;
-
-      await parseSSEStream(reader, {
+      const result = await runGenerationStream({
+        url: `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(origChapter)}/regenerate-stream`,
+        body: { model, userPrompt: enhancedRewritePrompt },
+        errorFallbackLabel: '重写请求失败',
+        noDoneErrorLabel: '重写未完成',
         onChunk: (chunk) => {
-          streamedContent += chunk;
           setReadingContent((prev) => prev + chunk);
           setDesktopEditorContent((prev) => prev + chunk);
           setMobileWritingOutput((prev) => prev + chunk);
         },
-        onDone: (event) => {
-          doneVariant = event.variant;
-          doneDebugInfo = event.debugPromptInfo;
-        },
-        onError: (message) => {
-          throw new Error(message);
+        captureDone: (event) => ({
+          variant: event.variant,
+          debugInfo: event.debugPromptInfo,
+        }),
+        recoverNoDone: async (sc) => {
+          console.log('[重写] 流式未收到 done 事件，尝试加载变体列表');
+          try {
+            const vData = await safeJsonFetch(
+              `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(origChapter)}/variants`
+            );
+            const v = vData.variants || [];
+            if (v.length > 0) {
+              console.log('[重写] 通过加载变体找到最新变体:', v[v.length - 1].id);
+              return { variant: v[v.length - 1] };
+            }
+          } catch { /* ignore */ }
+          return null;
         },
       });
+      streamedContent = result.streamedContent;
+      doneVariant = result.doneData.variant;
+      doneDebugInfo = result.doneData.debugInfo;
 
       console.log('[重写] done 事件:', doneVariant ? `variantId=${doneVariant.id}` : '(未收到)');
-
-      // 流式完成但未收到 done 事件 → 后端可能已保存变体，尝试加载变体列表
-      if (!doneVariant && streamedContent.trim()) {
-        console.log('[重写] 流式未收到 done 事件，尝试加载变体列表');
-        try {
-          const vData = await safeJsonFetch(
-            `/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(origChapter)}/variants`
-          );
-          const v = vData.variants || [];
-          if (v.length > 0) {
-            doneVariant = v[v.length - 1];
-            console.log('[重写] 通过加载变体找到最新变体:', doneVariant.id);
-          }
-        } catch { /* ignore */ }
-      }
-      if (!doneVariant) {
-        throw new Error('重写未完成');
-      }
 
       // Success: restore readingChapter, update title from variant, keep streamed content
       setReadingChapter(origChapter);
