@@ -34,6 +34,7 @@ const {
 } = require('./services/generationHelpers');
 const { acquireProjectLock, releaseProjectLock, withProjectLock, ProjectLockError } = require('./services/projectLocks');
 const { createEditorialMemoryService } = require('./services/editorialMemoryService');
+const { isValidChapterFileName, countChars, createChapterMetadataService } = require('./services/chapterMetadataService');
 
 const app = express();
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -121,10 +122,6 @@ function safeProjectDir(projectName) {
   return dir;
 }
 
-function isValidChapterFileName(fileName) {
-  return /^\d{3,}\.txt$/.test(fileName);
-}
-
 async function callDeepSeek(model, messages) {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error('请在 server/.env 中配置 DEEPSEEK_API_KEY');
@@ -159,13 +156,6 @@ async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
 
-function countChars(text) {
-  if (!text) return 0;
-  return text.replace(/\s/g, '').length;
-}
-
-// ---- Editorial Memory Helpers ----
-
 // ---- Outline (chapter planning) ----
 
 function getOutlinePath(projectName) {
@@ -189,96 +179,6 @@ async function writeOutline(projectName, outline) {
   const filePath = getOutlinePath(projectName);
   await ensureDir(path.dirname(filePath));
   await storage.writeJson(filePath, outline);
-}
-
-// ---- Chapter title helpers ----
-
-const INDEX_FILE = 'index.json';
-
-async function readChapterIndex(chaptersDir) {
-  try {
-    const raw = await fs.readFile(path.join(chaptersDir, INDEX_FILE), 'utf-8');
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-async function writeChapterIndex(chaptersDir, entries) {
-  await storage.writeJson(path.join(chaptersDir, INDEX_FILE), entries);
-}
-
-function clearRewriteStaleMarker(entry) {
-  if (!entry) return;
-  delete entry.staleAfterRewrite;
-  delete entry.staleReason;
-  delete entry.staleFromFileName;
-  delete entry.staleAt;
-}
-
-async function updateChapterWordCount(chaptersDir, fileName) {
-  const filePath = path.join(chaptersDir, fileName);
-  let content;
-  try {
-    content = await fs.readFile(filePath, 'utf-8');
-  } catch {
-    return 0;
-  }
-  const count = countChars(content);
-  const entries = await readChapterIndex(chaptersDir);
-  const entry = entries.find((e) => e.fileName === fileName);
-  if (entry) {
-    entry.wordCount = count;
-    await writeChapterIndex(chaptersDir, entries);
-  }
-  return count;
-}
-
-function markChaptersStaleAfterRewrite(chapters, rewrittenFileName, staleAt = Date.now()) {
-  const rewrittenIndex = chapters.findIndex((item) => item.fileName === rewrittenFileName);
-  if (rewrittenIndex < 0) return chapters;
-
-  const chapterNumber = parseInt(rewrittenFileName, 10);
-  const staleReason = `第${chapterNumber}章已重写，后续章节可能与当前剧情不连续`;
-
-  return chapters.map((chapter, index) => {
-    if (index === rewrittenIndex) {
-      const nextChapter = { ...chapter };
-      clearRewriteStaleMarker(nextChapter);
-      return nextChapter;
-    }
-    if (index > rewrittenIndex) {
-      return {
-        ...chapter,
-        staleAfterRewrite: true,
-        staleReason,
-        staleFromFileName: rewrittenFileName,
-        staleAt,
-      };
-    }
-    return chapter;
-  });
-}
-
-function extractTitleFromContent(content, chapterNumber) {
-  // Scan first non-empty lines for a detectable title
-  const lines = content.split('\n').filter((l) => l.trim());
-  for (const line of lines) {
-    const trimmed = line.trim();
-    // Match: # 标题  or  ## 标题
-    const headingMatch = trimmed.match(/^#{1,3}\s+(.+)/);
-    if (headingMatch) return headingMatch[1].trim();
-    // Match: 章节标题：xxx
-    const titleDeclMatch = trimmed.match(/^章节标题[：:]\s*(.+)/);
-    if (titleDeclMatch) return titleDeclMatch[1].trim();
-    // Match: 第X章 标题
-    const chapterMatch = trimmed.match(/^第[一二三四五六七八九十百千万\d]+章\s+(.+)/);
-    if (chapterMatch) return `第${chapterNumber}章 ${chapterMatch[1].trim()}`;
-    // Match bare "第X章"
-    const bareChapter = trimmed.match(/^(第[一二三四五六七八九十百千万\d]+章)/);
-    if (bareChapter) return bareChapter[1];
-  }
-  return `第${chapterNumber}章`;
 }
 
 // ---- Auth ----
@@ -326,6 +226,22 @@ app.use('/api', (req, res, next) => {
   if (req.session?.authenticated) return next();
   res.status(401).json({ error: '未登录' });
 });
+
+// ---- Chapter metadata service ----
+
+const chapterMetadataService = createChapterMetadataService({
+  storage,
+  readFile: fs.readFile,
+});
+
+const {
+  readChapterIndex,
+  writeChapterIndex,
+  clearRewriteStaleMarker,
+  updateChapterWordCount,
+  markChaptersStaleAfterRewrite,
+  extractTitleFromContent,
+} = chapterMetadataService;
 
 // ---- Editorial memory service ----
 
