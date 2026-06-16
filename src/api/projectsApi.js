@@ -161,6 +161,15 @@ export function saveOutline(projectName, outline) {
   });
 }
 
+/** 生成章节大纲 */
+export function generateOutline(projectName, model) {
+  return safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/outline/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  });
+}
+
 // ========== 导出 / 备份 ==========
 
 /** 导出全文 */

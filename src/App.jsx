@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
-import { apiFetch, safeJsonFetch } from './api';
+
 import ProjectWorkspacePage from './pages/ProjectWorkspacePage';
 import HomePage from './pages/HomePage';
 import MobileAllProjectsPage from './pages/mobile/MobileAllProjectsPage';
@@ -21,7 +21,7 @@ import { useChapterSelectionState } from './hooks/useChapterSelectionState';
 import { useWorkspaceUiState } from './hooks/useWorkspaceUiState';
 import { useProjectSettingsDraftState } from './hooks/useProjectSettingsDraftState';
 import * as ProjectsApi from './api/projectsApi';
-import { parseSSEStream } from './utils/sseReader';
+
 import { useWritingPrefsState } from './hooks/useWritingPrefsState';
 import { useGenerationProgress } from './hooks/useGenerationProgress';
 import { useVariantState } from './hooks/useVariantState';
@@ -731,7 +731,7 @@ function App() {
     if (!projectName) return;
     setOutlineError('');
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(projectName)}/outline`);
+      const data = await ProjectsApi.loadOutline(projectName);
       const list = Array.isArray(data.outline) ? data.outline : [];
       setOutline(list);
       setOutlineText(JSON.stringify(list, null, 2));
@@ -754,11 +754,7 @@ function App() {
     }
     setOutlineSaving(true);
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/outline`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outline: parsed }),
-      });
+      const data = await ProjectsApi.saveOutline(currentProject, parsed);
       setOutline(data.outline);
       setOutlineText(JSON.stringify(data.outline, null, 2));
       setOutlineError('已保存');
@@ -777,11 +773,7 @@ function App() {
     setOutlineSaving(true);
     setOutlineError('');
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/outline/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model }),
-      });
+      const data = await ProjectsApi.generateOutline(currentProject, model);
       setOutline(data.outline);
       setOutlineText(JSON.stringify(data.outline, null, 2));
       setOutlineError('已生成');
@@ -809,7 +801,7 @@ function App() {
     rememberLastProject(currentProject);
     setExportStatus('exporting');
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/export`);
+      const data = await ProjectsApi.exportProject(currentProject);
       const blob = new Blob([data.content], { type: 'text/markdown;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -834,7 +826,7 @@ function App() {
     rememberLastProject(currentProject);
     setError('');
     try {
-      const response = await apiFetch(`/api/projects/${encodeURIComponent(currentProject)}/backup`);
+      const response = await ProjectsApi.backupProject(currentProject);
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || '备份下载失败');
@@ -863,9 +855,7 @@ function App() {
     setError('');
     setRebuildingSummary(true);
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/summary/rebuild`, {
-        method: 'POST',
-      });
+      const data = await ProjectsApi.rebuildSummary(currentProject);
       // Update local projectDetails summary
       setProjectDetails((prev) => prev ? { ...prev, summary: data.summary } : prev);
       setError('摘要已重建');
@@ -884,9 +874,7 @@ function App() {
     if (!confirm('确定要重建章节索引吗？已有章节标题会尽量保留。')) return;
     setError('');
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/rebuild-index`, {
-        method: 'POST',
-      });
+      const data = await ProjectsApi.rebuildChapterIndex(currentProject);
       // Update projectDetails chapters
       if (data.chapters) data.chapters = normalizeChapters(data.chapters);
       setProjectDetails((prev) => prev ? { ...prev, chapters: data.chapters } : prev);
@@ -916,11 +904,7 @@ function App() {
     }
     setError('');
     try {
-      await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/title`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: trimmed }),
-      });
+      await ProjectsApi.saveChapterTitle(currentProject, readingChapter, trimmed);
       // Update local state
       setProjectDetails((prev) => {
         if (!prev) return prev;
@@ -958,11 +942,7 @@ function App() {
     setMobileEditSaving(true);
     setError('');
     try {
-      await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/content`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: mobileEditTitle, content: mobileEditContent }),
-      });
+      await ProjectsApi.saveChapterContent(currentProject, readingChapter, { title: mobileEditTitle, content: mobileEditContent });
       setReadingChapterTitle(mobileEditTitle);
       setReadingContent(mobileEditContent);
       setShowMobileEdit(false);
@@ -978,9 +958,7 @@ function App() {
     if (!currentProject || !readingChapter) return;
     setError('');
     try {
-      const data = await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/stale/confirm`, {
-        method: 'PUT',
-      });
+      const data = await ProjectsApi.confirmKeepChapter(currentProject, readingChapter);
       if (data.chapters) {
         const chapters = normalizeChapters(data.chapters);
         setProjectDetails((prev) => prev ? { ...prev, chapters } : prev);
@@ -1511,11 +1489,7 @@ function App() {
     setDesktopSavingContent(true);
     setError('');
     try {
-      await safeJsonFetch(`/api/projects/${encodeURIComponent(currentProject)}/chapters/${encodeURIComponent(readingChapter)}/content`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: readingChapterTitle, content: desktopEditorContent }),
-      });
+      await ProjectsApi.saveChapterContent(currentProject, readingChapter, { title: readingChapterTitle, content: desktopEditorContent });
       setReadingContent(desktopEditorContent);
       // Refresh project details to update word counts
       try {
