@@ -21,6 +21,7 @@ import { useVariantState } from './hooks/useVariantState';
 import { useVariantActions } from './hooks/useVariantActions';
 import { useGenerationController } from './hooks/useGenerationController';
 import { useMobileUiState } from './hooks/useMobileUiState';
+import { useDesktopUiState } from './hooks/useDesktopUiState';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -108,10 +109,12 @@ function App() {
   const [outlineSaving, setOutlineSaving] = useState(false);
   const [outlineError, setOutlineError] = useState('');
 
-  const [desktopChapterQuery, setDesktopChapterQuery] = useState('');
-  const [desktopAiMode, setDesktopAiMode] = useState('continue');
-  const [desktopEditorContent, setDesktopEditorContent] = useState('');
-  const [desktopSavingContent, setDesktopSavingContent] = useState(false);
+  const {
+    desktopChapterQuery, setDesktopChapterQuery,
+    desktopAiMode, setDesktopAiMode,
+    desktopEditorContent, setDesktopEditorContent,
+    desktopSavingContent, setDesktopSavingContent,
+  } = useDesktopUiState();
 
   const { notification, setNotification, clearNotification } = useNotificationState();
   const settingsDraft = useProjectSettingsDraftState();
