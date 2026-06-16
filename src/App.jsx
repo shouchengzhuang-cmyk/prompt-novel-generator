@@ -20,6 +20,7 @@ import { useGenerationProgress } from './hooks/useGenerationProgress';
 import { useVariantState } from './hooks/useVariantState';
 import { useVariantActions } from './hooks/useVariantActions';
 import { useGenerationController } from './hooks/useGenerationController';
+import { useMobileUiState } from './hooks/useMobileUiState';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -34,6 +35,24 @@ function App() {
   const [projectChapterCounts, setProjectChapterCounts] = useState({});
 
   const createForm = useProjectCreateFormState();
+  const {
+    showMobileSearch, setShowMobileSearch,
+    mobileSearchQuery, setMobileSearchQuery,
+    mobileSearchIndex, setMobileSearchIndex,
+    mobileSearchLoading, setMobileSearchLoading,
+    mobileWritingTarget, setMobileWritingTarget,
+    mobileWritingPrompt, setMobileWritingPrompt,
+    mobileWritingKind, setMobileWritingKind,
+    mobileWritingOutput, setMobileWritingOutput,
+    mobileWritingError, setMobileWritingError,
+    mobileWorldRef,
+    mobileCharactersRef,
+    mobileSummaryRef,
+    mobileSearchInputRef,
+    mobileEditTitle, setMobileEditTitle,
+    mobileEditContent, setMobileEditContent,
+    mobileEditSaving, setMobileEditSaving,
+  } = useMobileUiState();
 
   // Generation
   const [userPrompt, setUserPrompt] = useState('');
@@ -80,21 +99,7 @@ function App() {
     localStorage.setItem('xiaomoxia_project_sort', JSON.stringify(projectSort));
   }, [projectSort]);
 
-  const [showMobileSearch, setShowMobileSearch] = useState(false);
-  const [mobileSearchQuery, setMobileSearchQuery] = useState('');
-  const [mobileSearchIndex, setMobileSearchIndex] = useState([]);
-  const [mobileSearchLoading, setMobileSearchLoading] = useState(false);
-
-  const [mobileWritingTarget, setMobileWritingTarget] = useState(null);
-  const [mobileWritingPrompt, setMobileWritingPrompt] = useState('');
-  const [mobileWritingKind, setMobileWritingKind] = useState('generate');
-  const [mobileWritingOutput, setMobileWritingOutput] = useState('');
-  const [mobileWritingError, setMobileWritingError] = useState('');
   const [allProjectDetails, setAllProjectDetails] = useState({});
-  const mobileWorldRef = useRef(null);
-  const mobileCharactersRef = useRef(null);
-  const mobileSummaryRef = useRef(null);
-  const mobileSearchInputRef = useRef(null);
 
   // Outline (chapter planning)
   const [outline, setOutline] = useState([]);
@@ -102,12 +107,6 @@ function App() {
   const [outlineText, setOutlineText] = useState('');
   const [outlineSaving, setOutlineSaving] = useState(false);
   const [outlineError, setOutlineError] = useState('');
-
-  // Mobile simple edit
-  const [mobileEditTitle, setMobileEditTitle] = useState('');
-  const [mobileEditContent, setMobileEditContent] = useState('');
-  const [mobileEditSaving, setMobileEditSaving] = useState(false);
-
 
   const [desktopChapterQuery, setDesktopChapterQuery] = useState('');
   const [desktopAiMode, setDesktopAiMode] = useState('continue');
