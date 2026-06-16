@@ -22,6 +22,7 @@ import { useVariantActions } from './hooks/useVariantActions';
 import { useGenerationController } from './hooks/useGenerationController';
 import { useMobileUiState } from './hooks/useMobileUiState';
 import { useDesktopUiState } from './hooks/useDesktopUiState';
+import { useReadingStateController } from './hooks/useReadingStateController';
 
 function normalizeChapters(chapters) {
   if (!Array.isArray(chapters)) return chapters;
@@ -213,6 +214,19 @@ function App() {
     normalizeChapters,
   });
 
+  const { readingSectionRef, readingContentRef, handleReadChapter } = useReadingStateController({
+    loadChapterContent,
+    handleLoadVariants,
+    rememberLastProject,
+    setDebugPromptInfo,
+    setVariantPreview,
+    setVariants,
+    setShowRewriteInput,
+    setRewritePrompt,
+    setMobileWritingOutput,
+    currentProject,
+  });
+
   useEffect(() => {
     setDesktopEditorContent(variantPreview ? variantPreview.content : readingContent || '');
   }, [readingContent, variantPreview]);
@@ -337,8 +351,6 @@ function App() {
 
   const generatingRef = useRef(false);
   const appScrollRef = useRef(null);
-  const readingSectionRef = useRef(null);
-  const readingContentRef = useRef(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   const { handleGenerate, handleRegenerate } = useGenerationController({
@@ -510,25 +522,6 @@ function App() {
     } finally {
       createForm.setCreating(false);
     }
-  };
-
-  // ---- 阅读章节 ----
-  /** 读取指定章节内容，同时加载该章节的候选版本 */
-  const handleReadChapter = async (filename, projectName = currentProject) => {
-    if (!projectName) return null;
-    rememberLastProject(projectName);
-    setDebugPromptInfo(null);
-    // Clear previous chapter state before loading new one
-    setVariantPreview(null);
-    setVariants([]);
-    setShowRewriteInput(false);
-    setRewritePrompt('');
-    const data = await loadChapterContent(projectName, filename);
-    if (!data) return null;
-    setMobileWritingOutput('');
-    // Load variants for this chapter
-    handleLoadVariants(data.fileName, projectName);
-    return data;
   };
 
   // ---- 删除章节 ----
