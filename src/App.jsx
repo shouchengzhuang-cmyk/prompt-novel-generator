@@ -1,15 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import './App.css';
 
-import ProjectWorkspacePage from './pages/ProjectWorkspacePage';
-import HomePage from './pages/HomePage';
-import MobileAllProjectsPage from './pages/mobile/MobileAllProjectsPage';
-import MobileOutlinePage from './pages/mobile/MobileOutlinePage';
-import MobileProjectPage from './pages/mobile/MobileProjectPage';
-import MobileReaderEditorPage from './pages/mobile/MobileReaderEditorPage';
-import MobileSearchOverlay from './pages/mobile/MobileSearchOverlay';
-import MobileShell from './pages/mobile/MobileShell';
-import MobileWritingPage from './pages/mobile/MobileWritingPage';
+import DesktopApp from './apps/DesktopApp';
+import MobileApp from './apps/MobileApp';
 import LoginScreen from './components/auth/LoginScreen';
 import AppNotification from './components/AppNotification';
 import { useNotificationState } from './hooks/useNotificationState';
@@ -1581,9 +1574,8 @@ function App() {
         {/* 退出：调用认证退出接口并清理本地登录状态，随后回到登录页。 */}
         <span className="logout-link" onClick={auth.handleLogout}>退出</span>
       </h1>
-      {/* 新桌面工作台：桌面端会先渲染 ProjectWorkspacePage，后续旧 app-shell 仍需单独确认是否重复显示。 */}
       {!isMobile && (
-        <ProjectWorkspacePage
+        <DesktopApp
           settingsDraft={settingsDraft}
           workspaceUi={workspaceUi}
           projectSelection={projectSelection}
@@ -1689,77 +1681,57 @@ function App() {
           onNotify={setNotification}
         />
       )}
-      {isMobile && showMobileSearch && (
-        <MobileSearchOverlay
-          inputRef={mobileSearchInputRef}
-          query={mobileSearchQuery}
-          onQueryChange={setMobileSearchQuery}
-          loading={mobileSearchLoading}
-          results={mobileSearchResults}
-          onClose={closeMobileSearch}
-          onResultClick={handleMobileSearchResultClick}
-        />
-      )}
       {isMobile && (
-      <MobileShell>
-        {mobileView === 'writing' && (
-          <MobileWritingPage
-            currentProject={currentProject}
-            mobileWritingTarget={mobileWritingTarget}
-            mobileWritingKind={mobileWritingKind}
-            mobileWritingPrompt={mobileWritingPrompt}
-            onMobileWritingPromptChange={handleMobileWritingPromptChange}
-            model={model}
-            onSetModel={setModel}
-            writingPrefs={writingPrefs}
-            onSetWritingPrefs={setWritingPrefs}
-            loading={loading}
-            regenerating={regenerating}
-            onMobileWritingGenerate={handleMobileWritingGenerate}
-            mobileWritingError={mobileWritingError}
-            error={error}
-            mobileWritingOutput={mobileWritingOutput}
-            readingChapter={readingChapter}
-            readingContent={readingContent}
-            navigateTo={navigateTo}
-            onSetMobileWritingOutput={setMobileWritingOutput}
-            onBackClick={onBackClick}
-          />
-        )}{mobileView === 'outline' && currentProject && (
-          <MobileOutlinePage
-            currentProject={currentProject}
-            projectDetails={projectDetails}
-            outline={outline}
-            formatOutlinePlan={formatOutlinePlan}
-            openSettingsEditor={openSettingsEditor}
-            navigateTo={navigateTo}
-            onSetShowOutline={setShowOutline}
-            onBackClick={onBackClick}
-          />
-        )}{mobileView === 'allProjects' && (
-          <MobileAllProjectsPage
-            sortedProjects={sortedProjects}
-            allProjectDetails={allProjectDetails}
-            getProjectIntro={getProjectIntro}
-            formatProjectUpdatedAt={formatProjectUpdatedAt}
-            getProjectChapterCount={getProjectChapterCount}
-            onHomeProjectOpen={handleHomeProjectOpen}
-            onBackClick={onBackClick}
-          />
-        )}
-
-        <MobileReaderEditorPage
+        <MobileApp
+          showMobileSearch={showMobileSearch}
+          mobileSearchInputRef={mobileSearchInputRef}
+          mobileSearchQuery={mobileSearchQuery}
+          setMobileSearchQuery={setMobileSearchQuery}
+          mobileSearchLoading={mobileSearchLoading}
+          mobileSearchResults={mobileSearchResults}
+          closeMobileSearch={closeMobileSearch}
+          handleMobileSearchResultClick={handleMobileSearchResultClick}
+          mobileView={mobileView}
+          onBackClick={onBackClick}
+          navigateTo={navigateTo}
+          currentProject={currentProject}
+          mobileWritingTarget={mobileWritingTarget}
+          mobileWritingKind={mobileWritingKind}
+          mobileWritingPrompt={mobileWritingPrompt}
+          handleMobileWritingPromptChange={handleMobileWritingPromptChange}
+          model={model}
+          setModel={setModel}
+          writingPrefs={writingPrefs}
+          setWritingPrefs={setWritingPrefs}
+          loading={loading}
+          regenerating={regenerating}
+          handleMobileWritingGenerate={handleMobileWritingGenerate}
+          mobileWritingError={mobileWritingError}
+          error={error}
+          mobileWritingOutput={mobileWritingOutput}
+          readingChapter={readingChapter}
+          readingContent={readingContent}
+          setMobileWritingOutput={setMobileWritingOutput}
+          projectDetails={projectDetails}
+          outline={outline}
+          formatOutlinePlan={formatOutlinePlan}
+          openSettingsEditor={openSettingsEditor}
+          setShowOutline={setShowOutline}
+          sortedProjects={sortedProjects}
+          allProjectDetails={allProjectDetails}
+          getProjectIntro={getProjectIntro}
+          formatProjectUpdatedAt={formatProjectUpdatedAt}
+          getProjectChapterCount={getProjectChapterCount}
+          handleHomeProjectOpen={handleHomeProjectOpen}
           settingsDraft={settingsDraft}
           workspaceUi={workspaceUi}
           projectSelection={projectSelection}
           chapterSelection={chapterSelection}
-          onReadChapter={handleReadChapter}
-          onBackClick={onBackClick}
+          handleReadChapter={handleReadChapter}
           createForm={createForm}
           handleCreateProject={handleCreateProject}
           handleOpenSettings={handleOpenSettings}
           showOutline={showOutline}
-          setShowOutline={setShowOutline}
           handleLoadOutline={handleLoadOutline}
           showSettings={showSettings}
           mobileWorldRef={mobileWorldRef}
@@ -1775,16 +1747,9 @@ function App() {
           outlineSaving={outlineSaving}
           userPrompt={userPrompt}
           setUserPrompt={setUserPrompt}
-          model={model}
-          setModel={setModel}
-          writingPrefs={writingPrefs}
-          setWritingPrefs={setWritingPrefs}
           handleGenerate={handleGenerate}
-          loading={loading}
-          regenerating={regenerating}
           genProgress={genProgress}
           handleGenProgressDone={handleGenProgressDone}
-          error={error}
           readingSectionRef={readingSectionRef}
           editingTitle={editingTitle}
           editTitleValue={editTitleValue}
@@ -1825,79 +1790,39 @@ function App() {
           handlePreviewVariant={handlePreviewVariant}
           handleApplyVariant={handleApplyVariant}
           applyingVariant={applyingVariant}
+          featuredProject={featuredProject}
+          featuredChapterLabel={featuredChapterLabel}
+          featuredUpdatedLabel={featuredUpdatedLabel}
+          recentHomeProjects={recentHomeProjects}
+          hasHomeProjects={hasHomeProjects}
+          fallbackRecentProjects={fallbackRecentProjects}
+          handleOpenAllProjects={handleOpenAllProjects}
+          handleMobileQuickAction={handleMobileQuickAction}
+          openMobileSearch={openMobileSearch}
+          exportStatus={exportStatus}
+          mobileMaterialsOpen={mobileMaterialsOpen}
+          savingSettings={savingSettings}
+          editWorld={editWorld}
+          editCharacters={editCharacters}
+          editStyle={editStyle}
+          editSummary={editSummary}
+          editEditorialMemory={editEditorialMemory}
+          mobileChapterMenu={mobileChapterMenu}
+          handleExport={handleExport}
+          handleBackup={handleBackup}
+          handleRefresh={handleRefresh}
+          setMobileMaterialsOpen={setMobileMaterialsOpen}
+          setEditWorld={setEditWorld}
+          setEditCharacters={setEditCharacters}
+          setEditStyle={setEditStyle}
+          setEditSummary={setEditSummary}
+          setEditEditorialMemory={setEditEditorialMemory}
+          setShowSettings={setShowSettings}
+          setMobileGenerateOpen={setMobileGenerateOpen}
+          setMobileVariantsOpen={setMobileVariantsOpen}
+          setMobileChapterMenu={setMobileChapterMenu}
+          handleMobileDeleteChapter={handleMobileDeleteChapter}
         />
-
-        {/* ===== Mobile: Shelf View ===== */}
-        {mobileView === 'shelf' && (
-          <HomePage
-            createForm={createForm}
-            featuredProject={featuredProject}
-            featuredChapterLabel={featuredChapterLabel}
-            featuredUpdatedLabel={featuredUpdatedLabel}
-            recentHomeProjects={recentHomeProjects}
-            hasHomeProjects={hasHomeProjects}
-            fallbackRecentProjects={fallbackRecentProjects}
-            onNavigate={navigateTo}
-            onHomeProjectOpen={handleHomeProjectOpen}
-            onOpenAllProjects={handleOpenAllProjects}
-            onMobileQuickAction={handleMobileQuickAction}
-            onOpenMobileSearch={openMobileSearch}
-            onCreateProject={handleCreateProject}
-            formatProjectUpdatedAt={formatProjectUpdatedAt}
-            getProjectChapterCount={getProjectChapterCount}
-          />
-        )}
-
-        {/* ===== Mobile: Project View (chapter list) ===== */}
-        {mobileView === 'project' && currentProject && (
-          <MobileProjectPage
-            currentProject={currentProject}
-            projectDetails={projectDetails}
-            readingChapter={readingChapter}
-            exportStatus={exportStatus}
-            mobileMaterialsOpen={mobileMaterialsOpen}
-            showSettings={showSettings}
-            showOutline={showOutline}
-            savingSettings={savingSettings}
-            editWorld={editWorld}
-            editCharacters={editCharacters}
-            editStyle={editStyle}
-            editSummary={editSummary}
-            editEditorialMemory={editEditorialMemory}
-            outlineText={outlineText}
-            outlineError={outlineError}
-            outlineSaving={outlineSaving}
-            mobileChapterMenu={mobileChapterMenu}
-            mobileWorldRef={mobileWorldRef}
-            mobileCharactersRef={mobileCharactersRef}
-            mobileSummaryRef={mobileSummaryRef}
-            onBackClick={onBackClick}
-            onExport={handleExport}
-            onBackup={handleBackup}
-            onOpenSettings={handleOpenSettings}
-            onRefresh={handleRefresh}
-            onSetMobileMaterialsOpen={setMobileMaterialsOpen}
-            onSetEditWorld={setEditWorld}
-            onSetEditCharacters={setEditCharacters}
-            onSetEditStyle={setEditStyle}
-            onSetEditSummary={setEditSummary}
-            onSetEditEditorialMemory={setEditEditorialMemory}
-            onSaveSettings={handleSaveSettings}
-            onSetShowSettings={setShowSettings}
-            onSetOutlineText={setOutlineText}
-            onSetOutlineError={setOutlineError}
-            onSaveOutline={handleSaveOutline}
-            onSetShowOutline={setShowOutline}
-            onOpenMobileWriting={handleOpenMobileWriting}
-            onReadChapter={handleReadChapter}
-            navigateTo={navigateTo}
-            onSetMobileGenerateOpen={setMobileGenerateOpen}
-            onSetMobileVariantsOpen={setMobileVariantsOpen}
-            onSetMobileChapterMenu={setMobileChapterMenu}
-            onMobileDeleteChapter={handleMobileDeleteChapter}
-          />
-        )}
-      </MobileShell>
       )}
 
       <AppNotification notification={notification} onClose={clearNotification} />
