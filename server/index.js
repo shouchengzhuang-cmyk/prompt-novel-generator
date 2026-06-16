@@ -6,6 +6,7 @@ const cors = require('cors');
 const { ZipArchive } = require('archiver');
 
 const vaultRoutes = require('./routes/vault');
+const { createAuthRouter } = require('./routes/auth');
 const createMaterialsRouter = require('./routes/materials');
 const createProjectsRouter = require('./routes/projects');
 const createChaptersRouter = require('./routes/chapters');
@@ -169,32 +170,7 @@ if (!AUTH_PIN) {
   console.warn('   生产环境请务必在 server/.env 中配置 XIAOMOXIA_PIN');
 }
 
-app.post('/api/auth/login', (req, res) => {
-  const { pin } = req.body;
-
-  if (!AUTH_PIN) {
-    return res.status(500).json({ error: 'PIN 未配置' });
-  }
-
-  if (pin !== AUTH_PIN) {
-    return res.status(401).json({ error: '密码错误' });
-  }
-
-  req.session.authenticated = true;
-  res.json({ ok: true });
-});
-
-app.get('/api/auth/me', (req, res) => {
-  res.json({ authenticated: !!req.session?.authenticated });
-});
-
-app.post('/api/auth/logout', (req, res) => {
-  req.session.destroy((err) => {
-    if (err) return res.status(500).json({ error: '退出失败' });
-    res.clearCookie('connect.sid');
-    res.json({ ok: true });
-  });
-});
+app.use('/api', createAuthRouter({ pin: AUTH_PIN }));
 
 // Protect all /api/ routes except /api/auth/
 app.use('/api', (req, res, next) => {
