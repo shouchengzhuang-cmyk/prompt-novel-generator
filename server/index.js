@@ -35,6 +35,7 @@ const {
 const { acquireProjectLock, releaseProjectLock, withProjectLock, ProjectLockError } = require('./services/projectLocks');
 const { createEditorialMemoryService } = require('./services/editorialMemoryService');
 const { isValidChapterFileName, countChars, createChapterMetadataService } = require('./services/chapterMetadataService');
+const { createProjectContextFilesService } = require('./services/projectContextFilesService');
 
 const app = express();
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -156,31 +157,6 @@ async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
 
-// ---- Outline (chapter planning) ----
-
-function getOutlinePath(projectName) {
-  return path.join(safeProjectDir(projectName), 'outline.json');
-}
-
-async function readOutline(projectName) {
-  try {
-    const raw = await fs.readFile(getOutlinePath(projectName), 'utf-8');
-    const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
-}
-
-async function writeOutline(projectName, outline) {
-  if (!Array.isArray(outline)) {
-    throw new Error('outline 必须是数组');
-  }
-  const filePath = getOutlinePath(projectName);
-  await ensureDir(path.dirname(filePath));
-  await storage.writeJson(filePath, outline);
-}
-
 // ---- Auth ----
 
 const AUTH_PIN = process.env.XIAOMOXIA_PIN
@@ -242,6 +218,23 @@ const {
   markChaptersStaleAfterRewrite,
   extractTitleFromContent,
 } = chapterMetadataService;
+
+// ---- Project context files service ----
+
+const projectContextFilesService = createProjectContextFilesService({
+  safeProjectDir,
+  ensureDir,
+  fsReadFile: fs.readFile,
+  writeJson: storage.writeJson,
+  isValidChapterFileName,
+  readVariants,
+});
+
+const {
+  readOutline,
+  writeOutline,
+  readActiveChapterContent,
+} = projectContextFilesService;
 
 // ---- Editorial memory service ----
 
@@ -330,36 +323,6 @@ app.use('/api', createGenerateRouter({
   fetchImpl: (...args) => fetch(...args),
   getDeepSeekApiKey: () => process.env.DEEPSEEK_API_KEY,
 }));
-
-// ---- Export / backup helpers ----
-
-async function readActiveChapterContent(chaptersDir, chapterRecord) {
-  const fileName = chapterRecord.fileName || chapterRecord.filename;
-  const chapterPath = path.join(chaptersDir, fileName);
-  const relative = path.relative(chaptersDir, chapterPath);
-  if (!isValidChapterFileName(fileName) || relative.startsWith('..') || path.isAbsolute(relative)) {
-    throw new Error('无效的章节文件名');
-  }
-
-  const readChapterTxt = () => fs.readFile(chapterPath, 'utf-8');
-  const activeVersionId = chapterRecord.activeVersionId || 'v-original';
-  const variants = await readVariants(chaptersDir, fileName);
-
-  if (activeVersionId !== 'v-original') {
-    const activeVariant = variants.find((variant) => variant.id === activeVersionId);
-    if (activeVariant && typeof activeVariant.content === 'string' && activeVariant.content) {
-      return activeVariant.content;
-    }
-    return readChapterTxt();
-  }
-
-  const originalVariant = variants.find((variant) => variant.id === 'v-original');
-  if (originalVariant && typeof originalVariant.content === 'string' && originalVariant.content) {
-    return originalVariant.content;
-  }
-
-  return readChapterTxt();
-}
 
 // ---- Export / backup routes ----
 
