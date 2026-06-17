@@ -2382,6 +2382,14 @@
     box-shadow: var(--xmx-shadow-soft);
   }
 
+  .mobile-home-actions .mobile-icon-btn,
+  .mobile-home-actions .mobile-icon-btn-primary {
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid var(--xmx-border);
+    color: var(--xmx-ink);
+    box-shadow: var(--xmx-shadow-soft);
+  }
+
   .mobile-current-card {
     border-color: var(--xmx-border);
     border-radius: var(--xmx-radius-lg);
