@@ -3,6 +3,8 @@ import './App.css';
 
 import DesktopApp from './apps/DesktopApp';
 import MobileApp from './apps/MobileApp';
+import PublicLandingPage from './pages/PublicLandingPage';
+import DemoPage from './pages/DemoPage';
 import LoginScreen from './components/auth/LoginScreen';
 import AppNotification from './components/AppNotification';
 import { useNotificationState } from './hooks/useNotificationState';
@@ -33,7 +35,7 @@ function normalizeChapters(chapters) {
   });
 }
 
-function App() {
+function WorkspaceApp() {
   const [projectChapterCounts, setProjectChapterCounts] = useState({});
 
   const createForm = useProjectCreateFormState();
@@ -1823,6 +1825,20 @@ function App() {
       <AppNotification notification={notification} onClose={clearNotification} />
     </div>
   );
+}
+
+function App() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+
+  if (path === '/') {
+    return <PublicLandingPage />;
+  }
+
+  if (path === '/demo') {
+    return <DemoPage />;
+  }
+
+  return <WorkspaceApp />;
 }
 
 export default App;
