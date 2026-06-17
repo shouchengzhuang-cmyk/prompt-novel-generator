@@ -698,3 +698,112 @@
   word-break: break-word;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC', monospace, sans-serif;
 }
+
+/* ---- P1 material panel visual refresh ---- */
+
+.material-card-wrap {
+  border-color: var(--xmx-border);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.material-panel {
+  padding: 26px;
+  color: var(--xmx-ink);
+}
+
+.material-panel-head {
+  margin-bottom: 22px;
+}
+
+.material-panel-head h2,
+.material-card-item-main strong,
+.material-editor-head-left h2,
+.material-import-form label {
+  color: var(--xmx-ink);
+}
+
+.material-empty,
+.material-card-meta,
+.material-card-usage.unused,
+.file-name-hint,
+.material-create-form .hint,
+.material-import-form .hint,
+.material-import-preview .import-preview-text {
+  color: var(--xmx-ink-muted);
+}
+
+.material-card-list {
+  gap: 10px;
+}
+
+.material-card-item {
+  padding: 14px 16px;
+  border-color: var(--xmx-border);
+  border-radius: var(--xmx-radius-md);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: none;
+  transition: transform 0.16s, border-color 0.16s, background 0.16s, box-shadow 0.16s;
+}
+
+.material-card-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(18, 55, 45, 0.24);
+  background: #fff;
+  box-shadow: var(--xmx-shadow-soft);
+}
+
+.material-card-usage.used,
+.material-card-chapter-link {
+  color: var(--xmx-accent);
+}
+
+.material-card-chapter-link:hover {
+  color: var(--xmx-accent-2);
+}
+
+.material-create-form input,
+.material-import-form input,
+.material-editor-textarea,
+.material-import-preview .import-preview-text,
+.file-input-area {
+  border-color: var(--xmx-border);
+  border-radius: var(--xmx-radius-sm);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--xmx-ink);
+}
+
+.material-editor-textarea {
+  padding: 18px;
+  line-height: 1.8;
+}
+
+.material-create-form input:focus,
+.material-import-form input:focus,
+.material-editor-textarea:focus {
+  border-color: rgba(18, 55, 45, 0.46);
+  box-shadow: var(--xmx-focus);
+}
+
+.material-import-tabs {
+  border-color: var(--xmx-border);
+  border-radius: 14px;
+}
+
+.material-import-tabs .tab-btn {
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--xmx-ink-muted);
+}
+
+.material-import-tabs .tab-btn.active {
+  background: var(--xmx-accent);
+  color: #fff;
+}
+
+.material-import-tabs .tab-btn:not(.active):hover {
+  background: var(--xmx-accent-mist);
+  color: var(--xmx-accent);
+}
+
+.file-input-area {
+  border-style: dashed;
+}
