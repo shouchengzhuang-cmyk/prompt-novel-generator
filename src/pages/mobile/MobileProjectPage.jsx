@@ -14,6 +14,7 @@ export default function MobileProjectPage({
   editStyle,
   editSummary,
   editEditorialMemory,
+  mobileSettingsOpenField,
   outlineText,
   outlineError,
   outlineSaving,
@@ -32,6 +33,7 @@ export default function MobileProjectPage({
   onSetEditStyle,
   onSetEditSummary,
   onSetEditEditorialMemory,
+  onSetMobileSettingsOpenField,
   onSaveSettings,
   onSetShowSettings,
   onSetOutlineText,
@@ -46,6 +48,57 @@ export default function MobileProjectPage({
   onSetMobileChapterMenu,
   onMobileDeleteChapter,
 }) {
+  const settingsSections = [
+    {
+      key: 'world',
+      title: '世界观设定',
+      desc: '记录世界规则、势力结构、地理与基础背景。',
+      value: editWorld,
+      onChange: onSetEditWorld,
+      ref: mobileWorldRef,
+      rows: 5,
+      placeholder: '世界观设定...',
+    },
+    {
+      key: 'characters',
+      title: '人物设定',
+      desc: '记录主要角色、人设标签、关系与动机。',
+      value: editCharacters,
+      onChange: onSetEditCharacters,
+      ref: mobileCharactersRef,
+      rows: 5,
+      placeholder: '人物设定...',
+    },
+    {
+      key: 'style',
+      title: '写作规则',
+      desc: '记录文风、禁忌、篇幅和叙事偏好。',
+      value: editStyle,
+      onChange: onSetEditStyle,
+      rows: 5,
+      placeholder: '写作规则、文风要求...',
+    },
+    {
+      key: 'summary',
+      title: '剧情摘要',
+      desc: '记录已发生剧情事实，便于快速回顾主线。',
+      value: editSummary,
+      onChange: onSetEditSummary,
+      ref: mobileSummaryRef,
+      rows: 5,
+      placeholder: '剧情摘要...',
+    },
+    {
+      key: 'editorialMemory',
+      title: '项目编辑记忆',
+      desc: '记录长期写作判断、伏笔跟踪、人物关系演变和后续写作风险；不同于剧情摘要。',
+      value: editEditorialMemory,
+      onChange: onSetEditEditorialMemory,
+      rows: 6,
+      placeholder: '项目编辑记忆...',
+    },
+  ];
+
   return (
     <div className="panel mobile-project-view">
       <MobileProjectMenuPanel
@@ -63,17 +116,37 @@ export default function MobileProjectPage({
       {showSettings && (
         <div className="settings-panel">
           <h3>项目设定</h3>
-          <label>世界观设定</label>
-          <textarea className="settings-input" ref={mobileWorldRef} value={editWorld} onChange={(e) => onSetEditWorld(e.target.value)} rows={3} placeholder="世界观设定..." />
-          <label>人物设定</label>
-          <textarea className="settings-input" ref={mobileCharactersRef} value={editCharacters} onChange={(e) => onSetEditCharacters(e.target.value)} rows={3} placeholder="人物设定..." />
-          <label>写作规则</label>
-          <textarea className="settings-input" value={editStyle} onChange={(e) => onSetEditStyle(e.target.value)} rows={5} placeholder="写作规则、文风要求..." />
-          <label>剧情摘要</label>
-          <textarea className="settings-input" ref={mobileSummaryRef} value={editSummary} onChange={(e) => onSetEditSummary(e.target.value)} rows={5} placeholder="剧情摘要..." />
-          <label>项目编辑记忆</label>
-          <div className="settings-hint">记录跨章节人物关系、伏笔、长期写作风险和编辑判断。不同于剧情摘要：摘要记录剧情事实，这里记录编辑分析。</div>
-          <textarea className="settings-input" value={editEditorialMemory} onChange={(e) => onSetEditEditorialMemory(e.target.value)} rows={6} placeholder="项目编辑记忆..." />
+          <div className="mobile-settings-accordion">
+            {settingsSections.map((section) => (
+              <details
+                key={section.key}
+                className="mobile-settings-card"
+                open={mobileSettingsOpenField === section.key}
+                onToggle={(event) => {
+                  if (event.currentTarget.open) {
+                    onSetMobileSettingsOpenField(section.key);
+                  } else if (mobileSettingsOpenField === section.key) {
+                    onSetMobileSettingsOpenField('');
+                  }
+                }}
+              >
+                <summary>
+                  <span>
+                    <strong>{section.title}</strong>
+                    <em>{section.desc}</em>
+                  </span>
+                </summary>
+                <textarea
+                  className="settings-input"
+                  ref={section.ref}
+                  value={section.value}
+                  onChange={(e) => section.onChange(e.target.value)}
+                  rows={section.rows}
+                  placeholder={section.placeholder}
+                />
+              </details>
+            ))}
+          </div>
           <div className="form-actions">
             {/* 保存设定：把当前项目设定 PUT 到服务器，会覆盖该项目现有设定字段。 */}
             <button className="btn" disabled={savingSettings} onClick={onSaveSettings}>{savingSettings ? '保存中...' : '保存设定'}</button>

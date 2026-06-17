@@ -20,8 +20,12 @@ export default function MobileWritingPage({
   readingContent,
   navigateTo,
   onSetMobileWritingOutput,
+  referenceTips = [],
   onBackClick,
 }) {
+  const sourceChapterLabel = mobileWritingTarget?.chapterTitle || mobileWritingTarget?.fileName || '暂无承接章节';
+  const targetChapterLabel = mobileWritingTarget?.nextLabel || (mobileWritingKind === 'rewrite' ? '重写当前章节' : '继续写作');
+
   return (
     <div className="panel panel-main mobile-writing-view">
       {/* 返回写作来源页：走应用内返回逻辑，不保存当前写作输入或输出。 */}
@@ -38,6 +42,24 @@ export default function MobileWritingPage({
               ? `承接 ${mobileWritingTarget.chapterTitle}`
               : '为这个项目生成下一章'}
         </p>
+        <div className="mobile-writing-meta" aria-label="写作上下文">
+          <span>项目：{currentProject || mobileWritingTarget?.projectName || '当前项目'}</span>
+          <span>目标：{targetChapterLabel}</span>
+          <span>承接：{sourceChapterLabel}</span>
+        </div>
+        <div className="mobile-writing-top-actions">
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={!readingChapter || readingChapter === '_streaming'}
+            onClick={() => navigateTo('chapter')}
+          >
+            查看上一章
+          </button>
+          <button className="btn btn-secondary" type="button" onClick={() => navigateTo('project')}>
+            返回目录
+          </button>
+        </div>
       </header>
 
       <section className="mobile-writing-card">
@@ -49,6 +71,21 @@ export default function MobileWritingPage({
           placeholder="写下这次想推进的剧情、氛围或人物动作..."
           rows={6}
         />
+        <details className="mobile-writing-reference">
+          <summary>写作参考提示</summary>
+          {referenceTips.length > 0 ? (
+            <div className="mobile-writing-reference-list">
+              {referenceTips.map((tip) => (
+                <p key={tip.title}>
+                  <strong>{tip.title}</strong>
+                  <span>{tip.text}</span>
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="mobile-writing-reference-empty">暂无可展示的摘要、编辑记忆或上一章提示。</p>
+          )}
+        </details>
 
         <div className="mobile-writing-modes">
           {[
@@ -99,6 +136,9 @@ export default function MobileWritingPage({
             onClick={() => navigateTo('chapter')}
           >
             返回阅读页
+          </button>
+          <button className="btn btn-secondary" onClick={() => navigateTo('project')}>
+            返回目录
           </button>
           {/* 继续追加：清空本地输出并重置续写提示，不会请求后端或保存内容。 */}
           <button

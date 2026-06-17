@@ -40,6 +40,7 @@ export default function MobileApp({
   readingChapter,
   readingContent,
   setMobileWritingOutput,
+  mobileWritingReferenceTips,
   // outline page
   projectDetails,
   outline,
@@ -140,6 +141,7 @@ export default function MobileApp({
   editStyle,
   editSummary,
   editEditorialMemory,
+  mobileSettingsOpenField,
   mobileChapterMenu,
   handleExport,
   handleBackup,
@@ -150,6 +152,7 @@ export default function MobileApp({
   setEditStyle,
   setEditSummary,
   setEditEditorialMemory,
+  setMobileSettingsOpenField,
   setShowSettings,
   setMobileGenerateOpen,
   setMobileVariantsOpen,
@@ -191,6 +194,7 @@ export default function MobileApp({
             readingContent={readingContent}
             navigateTo={navigateTo}
             onSetMobileWritingOutput={setMobileWritingOutput}
+            referenceTips={mobileWritingReferenceTips}
             onBackClick={onBackClick}
           />
         )}{mobileView === 'outline' && currentProject && (
@@ -332,6 +336,7 @@ export default function MobileApp({
             editStyle={editStyle}
             editSummary={editSummary}
             editEditorialMemory={editEditorialMemory}
+            mobileSettingsOpenField={mobileSettingsOpenField}
             outlineText={outlineText}
             outlineError={outlineError}
             outlineSaving={outlineSaving}
@@ -350,6 +355,7 @@ export default function MobileApp({
             onSetEditStyle={setEditStyle}
             onSetEditSummary={setEditSummary}
             onSetEditEditorialMemory={setEditEditorialMemory}
+            onSetMobileSettingsOpenField={setMobileSettingsOpenField}
             onSaveSettings={handleSaveSettings}
             onSetShowSettings={setShowSettings}
             onSetOutlineText={setOutlineText}

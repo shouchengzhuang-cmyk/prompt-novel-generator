@@ -35,6 +35,11 @@ function normalizeChapters(chapters) {
   });
 }
 
+function getBriefText(value, maxLength = 72) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
 function WorkspaceApp() {
   const [projectChapterCounts, setProjectChapterCounts] = useState({});
 
@@ -69,6 +74,7 @@ function WorkspaceApp() {
 
   // Project settings editor
   const [showSettings, setShowSettings] = useState(false);
+  const [mobileSettingsOpenField, setMobileSettingsOpenField] = useState('');
 
   // Export
   const [exportStatus, setExportStatus] = useState('');
@@ -666,6 +672,7 @@ function WorkspaceApp() {
     if (!details || !projectName) return;
     hydrateSettingsDraft(details, projectName);
     setShowSettings(true);
+    setMobileSettingsOpenField(focusTarget || 'world');
     setShowOutline(false);
     setMobileMaterialsOpen(false);
     setError('');
@@ -1151,6 +1158,34 @@ function WorkspaceApp() {
     navigateTo('outline');
   };
 
+  const handleOpenMobileReading = async (projectName) => {
+    const name = resolveProjectName(projectName);
+    if (!name) {
+      setNotification({ title: '暂无项目', message: '请先创建或选择一个项目' });
+      return;
+    }
+    const details = await ensureMobileProjectLoaded(name);
+    if (!details) {
+      setNotification({ title: '加载失败', message: '无法加载项目数据，请重试' });
+      return;
+    }
+    rememberLastProject(name);
+    setShowSettings(false);
+    setShowOutline(false);
+    setMobileMaterialsOpen(false);
+    closeMobileOverlays();
+
+    const latestFile = getLatestChapterFile(details);
+    if (latestFile) {
+      await handleReadChapter(latestFile, name);
+      setMobileGenerateOpen(false);
+      setMobileVariantsOpen(false);
+      navigateTo('chapter');
+      return;
+    }
+    navigateTo('project');
+  };
+
   const handleOpenAllProjects = () => {
     if (sortedProjects.length === 0) {
       setNotification({ title: '暂无项目', message: '还没有项目，先创建一个吧' });
@@ -1166,15 +1201,37 @@ function WorkspaceApp() {
       return;
     }
 
-    if (type === 'materials') {
-      setNotification({ title: '功能开发中', message: '当前版本暂未接入素材库。' });
-      return;
-    }
-
     const ready = await ensureMobileProjectReady(name);
     if (!ready) return;
 
-    const details = projectDetails;
+    const details = (currentProject === name && projectDetails)
+      ? projectDetails
+      : await ensureProjectDetailsCached(name);
+
+    if (type === 'materials') {
+      setShowSettings(false);
+      setShowOutline(false);
+      closeMobileOverlays();
+      setMobileMaterialsOpen(true);
+      rememberLastProject(name);
+      navigateTo('project');
+      return;
+    }
+
+    if (type === 'reading') {
+      await handleOpenMobileReading(name);
+      return;
+    }
+
+    if (type === 'chapters') {
+      setShowSettings(false);
+      setShowOutline(false);
+      setMobileMaterialsOpen(false);
+      closeMobileOverlays();
+      rememberLastProject(name);
+      navigateTo('project');
+      return;
+    }
 
     if (type === 'world') {
       openSettingsEditor(details, name, 'world');
@@ -1241,6 +1298,9 @@ function WorkspaceApp() {
       setRewritePrompt(saved);
       setMobileWritingPrompt(saved);
     } else {
+      if (latestFile && readingChapter !== latestFile) {
+        await handleReadChapter(latestFile, name);
+      }
       const initialPrompt = options.prompt || userPrompt || '继续写';
       setUserPrompt(initialPrompt);
       setMobileWritingPrompt(initialPrompt);
@@ -1272,6 +1332,27 @@ function WorkspaceApp() {
     setUserPrompt(mobileWritingPrompt);
     await handleGenerate();
   };
+
+  const mobileWritingReferenceTips = useMemo(() => {
+    const tips = [];
+    if (projectDetails?.summary) {
+      tips.push({ title: '剧情摘要', text: getBriefText(projectDetails.summary) });
+    }
+    if (projectDetails?.editorialMemory) {
+      tips.push({ title: '编辑记忆', text: getBriefText(projectDetails.editorialMemory) });
+    }
+    const chapters = Array.isArray(projectDetails?.chapters) ? projectDetails.chapters : [];
+    const sourceFile = mobileWritingTarget?.fileName || getLatestChapterFile(projectDetails);
+    const sourceChapter = chapters.find((ch) => (ch.fileName || ch.filename) === sourceFile);
+    if (sourceChapter) {
+      const sourceText = [
+        sourceChapter.title || sourceFile,
+        sourceChapter.summary || sourceChapter.userPrompt,
+      ].filter(Boolean).join('：');
+      tips.push({ title: '上一章信息', text: getBriefText(sourceText) });
+    }
+    return tips.slice(0, 3);
+  }, [projectDetails, mobileWritingTarget]);
 
   const buildMobileSearchIndex = async () => {
     const index = [];
@@ -1709,6 +1790,7 @@ function WorkspaceApp() {
           readingChapter={readingChapter}
           readingContent={readingContent}
           setMobileWritingOutput={setMobileWritingOutput}
+          mobileWritingReferenceTips={mobileWritingReferenceTips}
           projectDetails={projectDetails}
           outline={outline}
           formatOutlinePlan={formatOutlinePlan}
@@ -1804,6 +1886,7 @@ function WorkspaceApp() {
           editStyle={editStyle}
           editSummary={editSummary}
           editEditorialMemory={editEditorialMemory}
+          mobileSettingsOpenField={mobileSettingsOpenField}
           mobileChapterMenu={mobileChapterMenu}
           handleExport={handleExport}
           handleBackup={handleBackup}
@@ -1814,6 +1897,7 @@ function WorkspaceApp() {
           setEditStyle={setEditStyle}
           setEditSummary={setEditSummary}
           setEditEditorialMemory={setEditEditorialMemory}
+          setMobileSettingsOpenField={setMobileSettingsOpenField}
           setShowSettings={setShowSettings}
           setMobileGenerateOpen={setMobileGenerateOpen}
           setMobileVariantsOpen={setMobileVariantsOpen}

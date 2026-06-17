@@ -94,7 +94,7 @@
     max-width: calc(100vw - 32px);
     left: 16px;
     right: auto;
-    bottom: 16px;
+    bottom: calc(96px + env(safe-area-inset-bottom));
   }
   .chapter-bottom-nav {
     display: grid;
@@ -989,6 +989,7 @@
   .mobile-current-actions {
     display: flex;
     gap: 14px;
+    flex-wrap: wrap;
   }
 
   .mobile-primary-action,
@@ -1012,6 +1013,12 @@
     background: linear-gradient(135deg, #45d8c4 0%, #14b8a6 100%);
     color: #effffb;
     box-shadow: 0 14px 30px rgba(20, 184, 166, 0.26);
+  }
+
+  .mobile-current-actions .mobile-primary-action,
+  .mobile-current-actions .mobile-secondary-action {
+    flex: 1 1 146px;
+    min-width: 0;
   }
 
   .mobile-secondary-action {
@@ -2129,6 +2136,29 @@
     font-size: 14px;
   }
 
+  .mobile-writing-meta {
+    display: grid;
+    gap: 6px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .mobile-writing-meta span {
+    color: rgba(226, 238, 234, 0.62);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .mobile-writing-top-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+  }
+
   .mobile-writing-card,
   .mobile-writing-output {
     margin-top: 14px;
@@ -2140,6 +2170,88 @@
 
   .mobile-writing-prompt {
     min-height: 132px;
+  }
+
+  .mobile-writing-reference {
+    margin-top: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    background: rgba(5, 14, 12, 0.28);
+    overflow: hidden;
+  }
+
+  .mobile-writing-reference summary {
+    padding: 12px 14px;
+    color: rgba(235, 246, 243, 0.8);
+    font-size: 14px;
+    font-weight: 560;
+    cursor: pointer;
+  }
+
+  .mobile-writing-reference-list {
+    display: grid;
+    gap: 10px;
+    padding: 0 14px 14px;
+  }
+
+  .mobile-writing-reference-list p,
+  .mobile-writing-reference-empty {
+    margin: 0;
+    color: rgba(226, 238, 234, 0.62);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .mobile-writing-reference-list strong {
+    display: block;
+    margin-bottom: 2px;
+    color: rgba(245, 251, 249, 0.88);
+  }
+
+  .mobile-settings-accordion {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .mobile-settings-card {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.05);
+    overflow: hidden;
+  }
+
+  .mobile-settings-card summary {
+    min-height: 72px;
+    padding: 14px;
+    color: rgba(235, 246, 243, 0.84);
+    cursor: pointer;
+  }
+
+  .mobile-settings-card summary span {
+    display: grid;
+    gap: 5px;
+  }
+
+  .mobile-settings-card summary strong {
+    font-size: 15px;
+  }
+
+  .mobile-settings-card summary em {
+    color: rgba(226, 238, 234, 0.54);
+    font-size: 12px;
+    font-style: normal;
+    line-height: 1.45;
+  }
+
+  .mobile-settings-card .settings-input {
+    margin: 0 12px 12px;
+    width: calc(100% - 24px);
+    min-height: 148px;
+  }
+
+  .mobile-settings-card:not([open]) .settings-input {
+    display: none !important;
   }
 
   .mobile-writing-modes {
@@ -2423,6 +2535,13 @@
     box-shadow: 0 14px 30px rgba(16, 42, 34, 0.14);
   }
 
+  .mobile-secondary-action {
+    border: 1px solid var(--xmx-border-strong) !important;
+    background: rgba(255, 255, 255, 0.78) !important;
+    color: var(--xmx-accent) !important;
+    box-shadow: none;
+  }
+
   .mobile-primary-action:hover,
   .mobile-dark-app .btn:hover,
   .mobile-dark-app .btn:active {
@@ -2448,6 +2567,9 @@
   .mobile-recent-list,
   .mobile-writing-card,
   .mobile-writing-output,
+  .mobile-writing-meta,
+  .mobile-writing-reference,
+  .mobile-settings-card,
   .mobile-outline-empty,
   .mobile-outline-card,
   .mobile-all-project-card,
@@ -2508,6 +2630,10 @@
   .mobile-shortcut-primary-copy span,
   .mobile-recent-copy span,
   .mobile-inspiration-card p,
+  .mobile-writing-meta span,
+  .mobile-writing-reference-list p,
+  .mobile-writing-reference-empty,
+  .mobile-settings-card summary em,
   .mobile-dark-app .hint,
   .mobile-dark-app .settings-hint,
   .mobile-dark-app .model-option-sub,
@@ -2520,6 +2646,12 @@
   .mobile-all-project-card,
   .mobile-search-result {
     font-family: inherit;
+  }
+
+  .mobile-writing-reference summary,
+  .mobile-settings-card summary strong,
+  .mobile-writing-reference-list strong {
+    color: var(--xmx-ink) !important;
   }
 
   .mobile-section-toggle,

@@ -68,6 +68,16 @@ export default function HomePage({
                 >
                   <span>✎</span>继续写作
                 </button>
+                {/* 继续阅读：优先打开最近章节；无法判断章节时进入项目目录。 */}
+                <button
+                  className="mobile-secondary-action"
+                  type="button"
+                  data-action="continue-reading"
+                  aria-label="继续阅读"
+                  onClick={() => onMobileQuickAction('reading', featuredProject.name)}
+                >
+                  <span>▤</span>继续阅读
+                </button>
               </div>
             </div>
           </section>
@@ -75,22 +85,27 @@ export default function HomePage({
           <section className="mobile-home-section">
             <h3 className="mobile-section-title">快捷入口</h3>
 
-            {/* 写作快捷入口：进入当前推荐项目的写作视图，必要时由父级加载项目详情。 */}
+            {/* 章节目录：进入当前推荐项目目录，避免和当前项目卡里的继续写作重复。 */}
             <button
               className="mobile-shortcut-card-primary"
               type="button"
-              data-action="writing"
-              aria-label="打开写作"
-              onClick={() => onMobileQuickAction('writing', featuredProject.name)}
+              data-action="chapters"
+              aria-label="打开章节目录"
+              onClick={() => onMobileQuickAction('chapters', featuredProject.name)}
             >
               <span className="mobile-shortcut-primary-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+                  <line x1="8" y1="6" x2="21" y2="6"/>
+                  <line x1="8" y1="12" x2="21" y2="12"/>
+                  <line x1="8" y1="18" x2="21" y2="18"/>
+                  <line x1="3" y1="6" x2="3.01" y2="6"/>
+                  <line x1="3" y1="12" x2="3.01" y2="12"/>
+                  <line x1="3" y1="18" x2="3.01" y2="18"/>
                 </svg>
               </span>
               <span className="mobile-shortcut-primary-copy">
-                <strong>写作</strong>
-                <span>继续章节 · 生成下一段</span>
+                <strong>章节目录</strong>
+                <span>阅读章节 · 管理章节入口</span>
               </span>
               <span className="mobile-shortcut-primary-arrow">›</span>
             </button>
@@ -197,7 +212,7 @@ export default function HomePage({
           <nav className="mobile-bottom-nav" aria-label="底部导航">
             {[
               ['▣', '项目', 'shelf', null],
-              ['✎', '写作', null, 'writing'],
+              ['☰', '目录', null, 'chapters'],
               ['▤', '素材', null, 'materials'],
               ['●', '我的', null, null],
             ].map(([icon, label, view, type]) => (
