@@ -1061,6 +1061,17 @@ textarea::placeholder {
   background: transparent;
 }
 
+.auth-pin-input::placeholder {
+  color: rgba(95, 112, 104, 0.52);
+}
+
+.auth-pin-input:-webkit-autofill,
+.auth-pin-input:-webkit-autofill:hover,
+.auth-pin-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--xmx-ink);
+  box-shadow: 0 0 0px 1000px rgba(255, 255, 255, 0.92) inset;
+}
+
 .auth-input-icon,
 .auth-eye-btn {
   color: var(--xmx-ink-muted);
