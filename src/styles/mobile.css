@@ -2296,3 +2296,453 @@
 .mobile-shelf-view .mobile-primary-action:active {
   opacity: 0.8;
 }
+
+/* ---- P1 mobile visual refresh ---- */
+
+@media (max-width: 900px) {
+  body {
+    background: var(--xmx-bg);
+  }
+
+  .app,
+  .mobile-dark-app,
+  .mobile-chapter-dark,
+  .mobile-chapter-dark .app-shell {
+    background:
+      radial-gradient(circle at 82% -4%, rgba(223, 233, 225, 0.9), transparent 30%),
+      linear-gradient(180deg, #fbfbf7 0%, var(--xmx-bg) 52%, var(--xmx-bg-soft) 100%) !important;
+    color: var(--xmx-ink);
+  }
+
+  .mobile-shelf-view,
+  .mobile-dark-app .mobile-project-view,
+  .mobile-writing-view,
+  .mobile-outline-view,
+  .mobile-all-projects-view,
+  .mobile-dark-app .reading-section {
+    max-width: 460px;
+    background:
+      radial-gradient(circle at 86% 0%, rgba(223, 233, 225, 0.82), transparent 28%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(244, 247, 242, 0.96)) !important;
+    color: var(--xmx-ink);
+  }
+
+  .mobile-shelf-view {
+    padding: calc(24px + env(safe-area-inset-top)) 18px calc(108px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-shelf-view::before,
+  .mobile-current-card::after {
+    opacity: 0.28;
+  }
+
+  .mobile-home-header {
+    margin-bottom: 22px;
+  }
+
+  .mobile-shelf-view .shelf-title,
+  .mobile-dark-app .mobile-project-title,
+  .mobile-writing-header h2,
+  .mobile-outline-header h2,
+  .mobile-writing-output-head h3,
+  .mobile-outline-card h3,
+  .mobile-search-group h3,
+  .mobile-current-card h3,
+  .mobile-section-title {
+    color: var(--xmx-ink) !important;
+  }
+
+  .mobile-shelf-view .shelf-title,
+  .mobile-dark-app .mobile-project-title,
+  .mobile-writing-header h2,
+  .mobile-outline-header h2 {
+    font-family: Georgia, 'Noto Serif SC', serif;
+    letter-spacing: 0;
+  }
+
+  .mobile-shelf-view .shelf-subtitle,
+  .mobile-current-card p,
+  .mobile-current-updated,
+  .mobile-writing-header p,
+  .mobile-all-project-card em,
+  .mobile-all-project-card p,
+  .mobile-outline-card p,
+  .mobile-outline-plan-item p,
+  .mobile-materials-panel p,
+  .mobile-writing-modes span,
+  .mobile-search-result em,
+  .mobile-search-result small {
+    color: var(--xmx-ink-muted) !important;
+  }
+
+  .mobile-icon-btn {
+    border-color: var(--xmx-border);
+    background: rgba(255, 255, 255, 0.8);
+    color: var(--xmx-accent);
+    box-shadow: var(--xmx-shadow-soft);
+  }
+
+  .mobile-current-card {
+    border-color: var(--xmx-border);
+    border-radius: var(--xmx-radius-lg);
+    background:
+      radial-gradient(circle at 88% 18%, rgba(223, 233, 225, 0.82), transparent 28%),
+      linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(239, 245, 239, 0.92)) !important;
+    box-shadow: var(--xmx-shadow-card);
+  }
+
+  .mobile-current-card-content {
+    color: var(--xmx-ink);
+  }
+
+  .mobile-card-kicker,
+  .mobile-writing-header span,
+  .mobile-outline-header span,
+  .mobile-writing-output-head span,
+  .mobile-dark-app .mobile-back-btn,
+  .mobile-back-btn {
+    color: var(--xmx-accent) !important;
+  }
+
+  .mobile-primary-action,
+  .mobile-dark-app .btn,
+  .mobile-writing-generate,
+  .mobile-project-write-btn {
+    border: 1px solid var(--xmx-accent) !important;
+    border-radius: 16px;
+    background: var(--xmx-accent) !important;
+    color: #fff !important;
+    box-shadow: 0 14px 30px rgba(16, 42, 34, 0.14);
+  }
+
+  .mobile-primary-action:hover,
+  .mobile-dark-app .btn:hover,
+  .mobile-dark-app .btn:active {
+    background: var(--xmx-accent-2) !important;
+  }
+
+  .mobile-dark-app .btn-secondary,
+  .mobile-dark-app .mobile-project-tools .btn-secondary,
+  .mobile-dark-app .chapter-bottom-nav .btn,
+  .mobile-writing-actions .btn-secondary,
+  .mobile-reading-writing-actions .btn-secondary,
+  .mobile-outline-actions .btn-secondary {
+    border-color: var(--xmx-border-strong) !important;
+    background: rgba(255, 255, 255, 0.78) !important;
+    color: var(--xmx-accent) !important;
+    box-shadow: none;
+  }
+
+  .mobile-shortcut-card-primary,
+  .mobile-shortcut-card,
+  .mobile-home-section,
+  .mobile-inspiration-card,
+  .mobile-recent-list,
+  .mobile-writing-card,
+  .mobile-writing-output,
+  .mobile-outline-empty,
+  .mobile-outline-card,
+  .mobile-all-project-card,
+  .mobile-dark-app .settings-panel,
+  .mobile-dark-app .generate-panel-area,
+  .mobile-dark-app .rewrite-input-area,
+  .mobile-dark-app .writing-controls,
+  .mobile-dark-app .mobile-materials-panel,
+  .mobile-dark-app .mobile-simple-edit,
+  .mobile-dark-app .mobile-chapter-list,
+  .mobile-search-panel {
+    border: 1px solid var(--xmx-border) !important;
+    border-radius: var(--xmx-radius-lg) !important;
+    background: rgba(255, 255, 255, 0.78) !important;
+    color: var(--xmx-ink) !important;
+    box-shadow: var(--xmx-shadow-soft);
+  }
+
+  .mobile-home-section,
+  .mobile-inspiration-card {
+    padding: 16px;
+  }
+
+  .mobile-shortcut-card-primary {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(223, 233, 225, 0.88)) !important;
+  }
+
+  .mobile-shortcut-primary-icon,
+  .mobile-shortcut-icon,
+  .mobile-recent-thumb,
+  .mobile-project-initial {
+    background:
+      radial-gradient(circle at 76% 18%, rgba(255, 255, 255, 0.36), transparent 20%),
+      linear-gradient(135deg, #dfe9e1, var(--xmx-accent)) !important;
+    color: #fff !important;
+  }
+
+  .mobile-shortcut-card-copy strong,
+  .mobile-shortcut-primary-copy strong,
+  .mobile-recent-copy strong,
+  .mobile-all-project-card strong,
+  .mobile-outline-plan-item strong,
+  .mobile-writing-modes strong,
+  .mobile-search-result strong,
+  .mobile-chapter-title,
+  .mobile-dark-app .mobile-chapter-title,
+  .mobile-dark-app .settings-panel h3,
+  .mobile-dark-app .rewrite-input-area h3,
+  .mobile-dark-app .writing-controls-title,
+  .mobile-dark-app .mobile-materials-panel h3,
+  .mobile-dark-app .mobile-simple-edit h3,
+  .reading-title-row h3,
+  .mobile-chapter-dark .reading-title-row h3 {
+    color: var(--xmx-ink) !important;
+  }
+
+  .mobile-shortcut-card-copy span,
+  .mobile-shortcut-primary-copy span,
+  .mobile-recent-copy span,
+  .mobile-inspiration-card p,
+  .mobile-dark-app .hint,
+  .mobile-dark-app .settings-hint,
+  .mobile-dark-app .model-option-sub,
+  .mobile-dark-app .debug-prompt-info,
+  .reading-filename,
+  .mobile-chapter-dark .reading-filename {
+    color: var(--xmx-ink-muted) !important;
+  }
+
+  .mobile-all-project-card,
+  .mobile-search-result {
+    font-family: inherit;
+  }
+
+  .mobile-section-toggle,
+  .mobile-dark-app .mobile-section-toggle,
+  .mobile-dark-app .model-option,
+  .mobile-dark-app .writing-controls-option,
+  .mobile-dark-app .reading-settings-panel,
+  .mobile-dark-app .variant-item,
+  .model-option,
+  .writing-controls-option,
+  .variant-item {
+    border-color: var(--xmx-border) !important;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.76) !important;
+    color: var(--xmx-ink-muted) !important;
+  }
+
+  .mobile-dark-app .model-option.active,
+  .mobile-dark-app .writing-controls-option.active,
+  .mobile-dark-app .reading-settings-chip.active,
+  .model-option.active,
+  .writing-controls-option.active,
+  .variant-item.active {
+    border-color: rgba(18, 55, 45, 0.28) !important;
+    background: var(--xmx-accent-mist) !important;
+    color: var(--xmx-accent) !important;
+  }
+
+  .mobile-dark-app .settings-input,
+  .mobile-dark-app .prompt-input,
+  .mobile-dark-app .writing-controls-input,
+  .mobile-dark-app .reading-title-input,
+  .mobile-dark-app .create-panel input,
+  .mobile-dark-app .create-panel textarea,
+  .mobile-dark-app .mobile-simple-edit input,
+  .mobile-dark-app .mobile-simple-edit textarea,
+  .mobile-dark-app input,
+  .mobile-dark-app textarea,
+  .mobile-dark-app select,
+  .mobile-search-bar input,
+  .mobile-writing-output-body {
+    border-color: var(--xmx-border) !important;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.82) !important;
+    color: var(--xmx-ink) !important;
+    caret-color: var(--xmx-accent);
+  }
+
+  .mobile-dark-app input::placeholder,
+  .mobile-dark-app textarea::placeholder,
+  .mobile-search-bar input::placeholder {
+    color: rgba(95, 112, 104, 0.62) !important;
+  }
+
+  .mobile-dark-app .mobile-project-view {
+    padding: calc(20px + env(safe-area-inset-top)) 18px calc(34px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-project-tools {
+    gap: 8px;
+  }
+
+  .mobile-chapter-list {
+    overflow: hidden;
+  }
+
+  .mobile-chapter-item {
+    border-bottom-color: var(--xmx-border);
+    background: transparent;
+  }
+
+  .mobile-chapter-item:active,
+  .mobile-chapter-item.active,
+  .mobile-dark-app .mobile-chapter-item:active,
+  .mobile-dark-app .mobile-chapter-item.active {
+    background: var(--xmx-accent-mist);
+  }
+
+  .mobile-chapter-index,
+  .mobile-dark-app .mobile-chapter-index {
+    color: var(--xmx-accent) !important;
+  }
+
+  .mobile-chapter-menu-btn,
+  .mobile-dark-app .mobile-chapter-menu-btn,
+  .book-menu-btn,
+  .mobile-dark-app .book-menu-btn {
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--xmx-ink-muted);
+  }
+
+  .mobile-chapter-menu-dropdown,
+  .book-menu-dropdown,
+  .mobile-dark-app .book-menu-dropdown,
+  .mobile-dark-app .mobile-chapter-menu-dropdown {
+    border: 1px solid var(--xmx-border);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: var(--xmx-shadow-card);
+  }
+
+  .mobile-chapter-menu-delete,
+  .book-menu-delete,
+  .mobile-dark-app .book-menu-delete,
+  .mobile-dark-app .mobile-chapter-menu-delete {
+    color: var(--xmx-danger);
+  }
+
+  .mobile-bottom-nav {
+    border: 1px solid var(--xmx-border);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.86);
+    box-shadow: var(--xmx-shadow-card);
+    backdrop-filter: blur(18px);
+  }
+
+  .mobile-bottom-nav button {
+    color: var(--xmx-ink-muted);
+  }
+
+  .mobile-bottom-nav button.active {
+    color: var(--xmx-accent);
+  }
+
+  .mobile-bottom-nav button.active::after {
+    background: var(--xmx-accent);
+  }
+
+  .mobile-search-overlay {
+    background: rgba(244, 247, 242, 0.84);
+    backdrop-filter: blur(10px);
+  }
+
+  .mobile-search-bar {
+    border-bottom-color: var(--xmx-border);
+  }
+
+  .mobile-search-bar button {
+    color: var(--xmx-accent);
+  }
+
+  .mobile-search-empty {
+    color: var(--xmx-ink-muted);
+  }
+
+  .mobile-search-result span {
+    background: var(--xmx-accent-soft);
+    color: var(--xmx-accent);
+  }
+
+  .mobile-writing-modes button {
+    border-color: var(--xmx-border);
+    background: rgba(255, 255, 255, 0.76);
+    color: var(--xmx-ink-muted);
+  }
+
+  .mobile-writing-modes button.active {
+    border-color: rgba(18, 55, 45, 0.28);
+    background: var(--xmx-accent-mist);
+    color: var(--xmx-accent);
+  }
+
+  .mobile-writing-output-body {
+    line-height: 1.95;
+  }
+
+  .mobile-dark-app .reading-content,
+  .mobile-chapter-dark .reading-content,
+  .reading-content {
+    max-height: none;
+    border-color: var(--xmx-border);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.88);
+    color: var(--xmx-ink-2);
+    box-shadow: var(--xmx-shadow-soft);
+  }
+
+  .mobile-dark-app .reading-content.reading-theme-ink,
+  .mobile-dark-app .reading-content.reading-theme-dark,
+  .mobile-dark-app .reading-content.reading-theme-default {
+    background: #fbfcf8;
+    border-color: var(--xmx-border);
+    color: var(--xmx-ink-2);
+  }
+
+  .mobile-dark-app .reading-content.reading-theme-night,
+  .mobile-dark-app .reading-content.reading-theme-warm {
+    background: #fbf6ec;
+    border-color: rgba(168, 126, 38, 0.16);
+    color: #2d261c;
+  }
+
+  .mobile-dark-app .reading-content.reading-theme-paper,
+  .mobile-dark-app .reading-content.reading-theme-gray {
+    background: #f5f3eb;
+    border-color: var(--xmx-border);
+    color: #29251f;
+  }
+
+  .reading-settings-toggle,
+  .mobile-dark-app .reading-settings-toggle {
+    justify-content: space-between;
+    border: 1px solid var(--xmx-border);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.72);
+    color: var(--xmx-ink-muted);
+  }
+
+  .reading-settings-chip,
+  .mobile-dark-app .reading-settings-chip {
+    border-color: var(--xmx-border);
+    background: rgba(255, 255, 255, 0.78);
+    color: var(--xmx-ink-muted);
+  }
+
+  .scroll-to-top-btn,
+  .mobile-dark-app .scroll-to-top-btn {
+    border-color: var(--xmx-border);
+    background: #fff;
+    color: var(--xmx-accent);
+    box-shadow: var(--xmx-shadow-card);
+  }
+
+  .mobile-outline-plan-item > span {
+    background: var(--xmx-accent-soft);
+    color: var(--xmx-accent);
+  }
+
+  .mobile-all-projects-list,
+  .mobile-outline-sections {
+    display: grid;
+    gap: 12px;
+  }
+}

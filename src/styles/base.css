@@ -750,3 +750,337 @@ body {
 .app h1 {
   position: relative;
 }
+
+/* ---- P1 visual system: Xiaomoxia soft ink workspace ---- */
+
+:root {
+  --xmx-bg: #f4f7f2;
+  --xmx-bg-soft: #eef4ee;
+  --xmx-bg-warm: #faf8f1;
+  --xmx-card: #ffffff;
+  --xmx-card-soft: rgba(255, 255, 255, 0.82);
+  --xmx-ink: #102a22;
+  --xmx-ink-2: #243a32;
+  --xmx-ink-muted: #5f7068;
+  --xmx-ink-subtle: #8a9992;
+  --xmx-border: rgba(16, 42, 34, 0.1);
+  --xmx-border-strong: rgba(16, 42, 34, 0.18);
+  --xmx-accent: #12372d;
+  --xmx-accent-2: #245646;
+  --xmx-accent-soft: #dfe9e1;
+  --xmx-accent-mist: #edf5ef;
+  --xmx-danger: #b85a52;
+  --xmx-danger-soft: #fff0ee;
+  --xmx-shadow-card: 0 18px 45px rgba(16, 42, 34, 0.08);
+  --xmx-shadow-soft: 0 10px 28px rgba(16, 42, 34, 0.06);
+  --xmx-radius-lg: 24px;
+  --xmx-radius-md: 16px;
+  --xmx-radius-sm: 10px;
+  --xmx-focus: 0 0 0 3px rgba(18, 55, 45, 0.14);
+}
+
+html,
+body {
+  background: var(--xmx-bg);
+}
+
+body {
+  color: var(--xmx-ink);
+}
+
+.app:not(.mobile-dark-app) {
+  background:
+    radial-gradient(circle at 12% -12%, rgba(223, 233, 225, 0.95), transparent 34%),
+    radial-gradient(circle at 92% 8%, rgba(238, 244, 238, 0.9), transparent 30%),
+    linear-gradient(180deg, #f9faf6 0%, var(--xmx-bg) 52%, #eef4ee 100%);
+  color: var(--xmx-ink);
+}
+
+.btn,
+.auth-btn,
+.public-btn,
+.demo-disabled-btn {
+  border-radius: var(--xmx-radius-sm);
+  font-family: inherit;
+}
+
+.btn {
+  border: 1px solid var(--xmx-accent);
+  background: var(--xmx-accent);
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(16, 42, 34, 0.1);
+  transition: transform 0.16s, border-color 0.16s, background 0.16s, color 0.16s, box-shadow 0.16s;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--xmx-accent-2);
+  border-color: var(--xmx-accent-2);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(16, 42, 34, 0.14);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn-secondary,
+.desktop-editor-actions .btn-secondary {
+  border-color: var(--xmx-border-strong);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--xmx-accent);
+  box-shadow: none;
+}
+
+.btn-secondary:hover:not(:disabled),
+.desktop-editor-actions .btn-secondary:hover:not(:disabled) {
+  background: var(--xmx-accent-mist);
+  border-color: rgba(18, 55, 45, 0.28);
+  color: var(--xmx-accent);
+}
+
+.btn-success {
+  border-color: #2f6b56;
+  background: #2f6b56;
+  color: #fff;
+}
+
+.btn-danger,
+.delete-btn {
+  border-color: rgba(184, 90, 82, 0.28);
+  background: var(--xmx-danger-soft);
+  color: var(--xmx-danger);
+}
+
+.btn:disabled,
+.btn-secondary:disabled,
+.btn-danger:disabled,
+.desktop-action:disabled,
+.desktop-icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+  transform: none;
+  box-shadow: none;
+}
+
+input,
+textarea,
+select,
+.prompt-input,
+.settings-input,
+.writing-controls-input,
+.reading-title-input,
+.create-panel input,
+.create-panel textarea {
+  border-color: var(--xmx-border);
+  border-radius: var(--xmx-radius-sm);
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--xmx-ink);
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+.prompt-input:focus,
+.settings-input:focus,
+.writing-controls-input:focus,
+.reading-title-input:focus,
+.create-panel input:focus,
+.create-panel textarea:focus {
+  outline: none;
+  border-color: rgba(18, 55, 45, 0.46);
+  box-shadow: var(--xmx-focus);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(95, 112, 104, 0.62);
+}
+
+.error {
+  border-color: rgba(184, 90, 82, 0.22);
+  border-radius: var(--xmx-radius-sm);
+  background: var(--xmx-danger-soft);
+  color: #9f433c;
+}
+
+.notification-card {
+  border: 1px solid var(--xmx-border);
+  border-radius: var(--xmx-radius-md);
+  background: var(--xmx-card);
+  box-shadow: var(--xmx-shadow-card);
+}
+
+.notification-title {
+  color: var(--xmx-ink);
+}
+
+.notification-body,
+.notification-close {
+  color: var(--xmx-ink-muted);
+}
+
+.auth-loading,
+.auth-page {
+  background:
+    radial-gradient(circle at 18% 12%, rgba(223, 233, 225, 0.85), transparent 34%),
+    radial-gradient(circle at 78% 72%, rgba(238, 244, 238, 0.9), transparent 32%),
+    linear-gradient(135deg, #fbfaf4 0%, var(--xmx-bg) 54%, #edf3ed 100%);
+  color: var(--xmx-ink);
+}
+
+.auth-loading-text {
+  color: var(--xmx-accent);
+  text-shadow: 0 10px 30px rgba(16, 42, 34, 0.12);
+}
+
+.auth-page::before {
+  background-image:
+    linear-gradient(rgba(16, 42, 34, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 42, 34, 0.02) 1px, transparent 1px);
+}
+
+.auth-page::after {
+  background:
+    linear-gradient(90deg, rgba(250, 248, 241, 0.14) 0%, rgba(244, 247, 242, 0.32) 48%, rgba(244, 247, 242, 0.92) 76%, #f7f8f3 100%),
+    radial-gradient(circle at 42% 72%, rgba(36, 86, 70, 0.11), transparent 28%);
+}
+
+.auth-library::before {
+  background: rgba(36, 86, 70, 0.16);
+}
+
+.auth-library::after {
+  background: rgba(141, 163, 148, 0.18);
+}
+
+.auth-shelf {
+  border-color: rgba(16, 42, 34, 0.08);
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(16, 42, 34, 0.04) 0 9px,
+      rgba(255, 255, 255, 0.26) 9px 14px,
+      rgba(36, 86, 70, 0.07) 14px 16px
+    ),
+    linear-gradient(180deg, rgba(238, 244, 238, 0.88), rgba(211, 225, 214, 0.82));
+  box-shadow: inset -20px 0 44px rgba(16, 42, 34, 0.08);
+}
+
+.auth-light-door {
+  background:
+    linear-gradient(180deg, transparent 0%, rgba(36, 86, 70, 0.14) 58%, rgba(255, 255, 255, 0.74) 100%),
+    radial-gradient(ellipse at 50% 100%, rgba(223, 233, 225, 0.9), transparent 60%);
+}
+
+.auth-ink-stream {
+  background:
+    radial-gradient(ellipse at 52% 48%, rgba(255, 255, 255, 0.62), transparent 8%),
+    radial-gradient(ellipse at 52% 50%, rgba(36, 86, 70, 0.24), transparent 28%),
+    conic-gradient(from 166deg at 42% 48%, transparent, rgba(36, 86, 70, 0.28), rgba(255, 255, 255, 0.32), transparent 76%);
+  box-shadow: 0 0 52px rgba(16, 42, 34, 0.1);
+}
+
+.auth-page-float {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.76), rgba(223, 233, 225, 0.58)),
+    repeating-linear-gradient(0deg, transparent 0 8px, rgba(16, 42, 34, 0.08) 8px 9px);
+  border-color: rgba(16, 42, 34, 0.08);
+  box-shadow: 0 12px 34px rgba(16, 42, 34, 0.1);
+}
+
+.auth-visual-copy,
+.auth-visual-copy p:last-child,
+.auth-kicker {
+  color: var(--xmx-ink-muted);
+  text-shadow: none;
+}
+
+.auth-visual-copy h2 {
+  color: var(--xmx-ink);
+  text-shadow: none;
+}
+
+.auth-box {
+  border-color: var(--xmx-border);
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: var(--xmx-shadow-card);
+  color: var(--xmx-ink);
+}
+
+.auth-logo {
+  background:
+    linear-gradient(135deg, #f7fbf6 0%, #dfe9e1 42%, #12372d 43%, #245646 100%);
+  box-shadow:
+    0 16px 36px rgba(16, 42, 34, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+}
+
+.auth-title {
+  color: var(--xmx-ink);
+  text-shadow: none;
+}
+
+.auth-subtitle,
+.auth-label,
+.auth-footnote {
+  color: var(--xmx-ink-muted);
+}
+
+.auth-divider::before {
+  background: linear-gradient(90deg, transparent, rgba(18, 55, 45, 0.1), rgba(18, 55, 45, 0.32), rgba(18, 55, 45, 0.1), transparent);
+}
+
+.auth-divider span,
+.auth-footnote span {
+  background: var(--xmx-accent);
+  color: var(--xmx-accent);
+  box-shadow: 0 0 18px rgba(18, 55, 45, 0.18);
+}
+
+.auth-input-shell {
+  border-color: var(--xmx-border);
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.auth-input-shell:focus-within {
+  border-color: rgba(18, 55, 45, 0.46);
+  background: #fff;
+  box-shadow: var(--xmx-focus);
+}
+
+.auth-pin-input,
+.auth-pin-input[type="password"],
+.auth-pin-input[type="text"] {
+  background: transparent;
+  color: var(--xmx-ink);
+  caret-color: var(--xmx-accent);
+}
+
+.auth-pin-input:focus {
+  background: transparent;
+}
+
+.auth-input-icon,
+.auth-eye-btn {
+  color: var(--xmx-ink-muted);
+}
+
+.auth-eye-btn {
+  background: var(--xmx-accent-mist);
+}
+
+.auth-eye-btn:hover:not(:disabled) {
+  background: var(--xmx-accent-soft);
+  color: var(--xmx-accent);
+}
+
+.auth-btn {
+  border-color: var(--xmx-accent);
+  background: var(--xmx-accent);
+  box-shadow: 0 18px 38px rgba(16, 42, 34, 0.16);
+}
+
+.auth-btn:hover:not(:disabled) {
+  box-shadow: 0 22px 46px rgba(16, 42, 34, 0.2);
+}
