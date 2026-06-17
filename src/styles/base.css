@@ -779,6 +779,7 @@ body {
   --xmx-focus: 0 0 0 3px rgba(18, 55, 45, 0.14);
 }
 
+#root,
 html,
 body {
   background: var(--xmx-bg);
