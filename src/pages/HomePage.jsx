@@ -14,6 +14,7 @@ export default function HomePage({
   onMobileQuickAction,
   onOpenMobileSearch,
   onCreateProject,
+  onDeleteProject,
   formatProjectUpdatedAt,
   getProjectChapterCount,
 }) {
@@ -176,26 +177,39 @@ export default function HomePage({
               {hasHomeProjects ? recentHomeProjects.map((p, index) => {
               const count = getProjectChapterCount(p);
               return (
-              /* 打开项目：加载所选项目详情并进入项目工作区，会改变 currentProject / projectDetails。 */
-              <button key={p.name} className="mobile-recent-item" type="button" data-action="open-project" aria-label={p.name} onClick={() => onHomeProjectOpen(p.name)}>
-                <span className={`mobile-recent-thumb tone-${(index % 3) + 1}`}>
-                  <span>{p.name.charAt(0)}</span>
-                </span>
-                <span className="mobile-recent-copy">
-                  <strong>{p.name}</strong>
-                  <span>{formatProjectUpdatedAt(p.updatedAt)} ｜ 第 {count || 0} 章</span>
-                </span>
-                <span className="mobile-recent-arrow">›</span>
-              </button>
+              <div key={p.name} className="mobile-recent-row">
+                <button className="mobile-recent-item" type="button" data-action="open-project" aria-label={p.name} onClick={() => onHomeProjectOpen(p.name)}>
+                  <span className={`mobile-recent-thumb tone-${(index % 3) + 1}`}>
+                    <span>{p.name.charAt(0)}</span>
+                  </span>
+                  <span className="mobile-recent-copy">
+                    <strong>{p.name}</strong>
+                    <span>{formatProjectUpdatedAt(p.updatedAt)} ｜ 第 {count || 0} 章</span>
+                  </span>
+                  <span className="mobile-recent-arrow">›</span>
+                </button>
+                {onDeleteProject && (
+                  <button
+                    className="mobile-recent-delete"
+                    type="button"
+                    aria-label={`删除项目 ${p.name}`}
+                    onClick={(e) => { e.stopPropagation(); onDeleteProject(p.name); }}
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
               );
             }) : fallbackRecentProjects.map((p, index) => (
-              <div key={p.name} className="mobile-recent-item mobile-recent-item-fallback">
+              <div key={p.name} className="mobile-recent-row">
+                <div className="mobile-recent-item mobile-recent-item-fallback">
                 <div className={`mobile-recent-thumb tone-${(index % 3) + 1}`}><span>{p.name.charAt(0)}</span></div>
                 <div className="mobile-recent-copy">
                   <strong>{p.name}</strong>
                   <span>{p.meta}</span>
                 </div>
                 <span className="mobile-recent-arrow">›</span>
+              </div>
               </div>
             ))}
             </div>

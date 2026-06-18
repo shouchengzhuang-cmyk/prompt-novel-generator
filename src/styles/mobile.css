@@ -1321,6 +1321,38 @@
     cursor: default;
   }
 
+  .mobile-recent-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .mobile-recent-row .mobile-recent-item {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .mobile-recent-row + .mobile-recent-row .mobile-recent-item {
+    border-top: 1px solid rgba(231, 255, 250, 0.06);
+  }
+
+  .mobile-recent-delete {
+    flex-shrink: 0;
+    align-self: center;
+    min-height: 34px;
+    padding: 0 10px;
+    margin-right: 8px;
+    border: 1px solid var(--xmx-border) !important;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.62) !important;
+    color: var(--xmx-danger) !important;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .mobile-recent-delete:active {
+    background: #fff1f1 !important;
+  }
+
   .mobile-inspiration-card {
     margin-top: 24px;
     padding: 20px;

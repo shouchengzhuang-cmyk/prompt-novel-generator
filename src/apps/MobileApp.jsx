@@ -317,6 +317,7 @@ export default function MobileApp({
             onMobileQuickAction={handleMobileQuickAction}
             onOpenMobileSearch={openMobileSearch}
             onCreateProject={handleCreateProject}
+            onDeleteProject={handleShelfDeleteProject}
             formatProjectUpdatedAt={formatProjectUpdatedAt}
             getProjectChapterCount={getProjectChapterCount}
           />
