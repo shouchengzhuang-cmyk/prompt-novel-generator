@@ -242,8 +242,11 @@ function WorkspaceApp() {
   // Browser title during generation / rewrite
   useEffect(() => {
     const busy = loading || regenerating;
-    document.title = busy ? '生成中...' : '小墨匣';
-    return () => { document.title = '小墨匣'; };
+    const appTitle = window.location.pathname.replace(/\/+$/, '') === '/forge'
+      ? '灵格工坊 persona-forge'
+      : '小墨匣';
+    document.title = busy ? '生成中...' : appTitle;
+    return () => { document.title = appTitle; };
   }, [loading, regenerating]);
 
   const handleAppBackRef = useRef(null);

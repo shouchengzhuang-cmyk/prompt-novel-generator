@@ -9,6 +9,8 @@ export default function LoginScreen({
   loggingIn = false,
   handleLogin,
 }) {
+  const isForgeSplash = window.location.pathname.replace(/\/+$/, '') === '/forge';
+
   if (checkingAuth) {
     return (
       <div className="auth-loading">
@@ -32,21 +34,37 @@ export default function LoginScreen({
           <span className="auth-page-float auth-page-float-four" />
         </div>
         <div className="auth-visual-copy">
-          <p className="auth-kicker">WRITE IN THE QUIET DARK</p>
+          <p className="auth-kicker">{isForgeSplash ? 'PERSONA FORGE WORKBENCH' : 'WRITE IN THE QUIET DARK'}</p>
           <h2>
-            墨色藏灯，照夜成章
-            <br />
-            匣中收梦，落笔生花
+            {isForgeSplash ? (
+              <>
+                灵格工坊
+                <br />
+                人格档案与长期对话工作台
+                <br />
+                灵犀成档，照见古今
+                <br />
+                格中真意，栩栩如生
+              </>
+            ) : (
+              <>
+                墨色藏灯，照夜成章
+                <br />
+                匣中收梦，落笔生花
+              </>
+            )}
           </h2>
-          <p>以墨为舟，收万象于匣中。</p>
+          <p>{isForgeSplash ? '以档为骨，以话养心。' : '以墨为舟，收万象于匣中。'}</p>
         </div>
       </section>
 
-      <section className="auth-panel-wrap" aria-label="小墨匣登录">
+      <section className="auth-panel-wrap" aria-label={isForgeSplash ? '灵格工坊登录' : '小墨匣登录'}>
         <div className="auth-box">
           <div className="auth-logo" aria-hidden="true" />
-          <h1 className="auth-title">小墨匣</h1>
-          <p className="auth-subtitle">专属写作空间 · 记录你的故事</p>
+          <h1 className="auth-title">{isForgeSplash ? '灵格工坊' : '小墨匣'}</h1>
+          <p className="auth-subtitle">
+            {isForgeSplash ? '人格档案 · 长期对话 · 事件沉淀' : '专属写作空间 · 记录你的故事'}
+          </p>
 
           <div className="auth-divider" aria-hidden="true">
             <span />
@@ -78,7 +96,7 @@ export default function LoginScreen({
               }}
               autoFocus
               disabled={loggingIn}
-              placeholder="····"
+              placeholder={isForgeSplash ? '请输入访问密码' : '····'}
             />
             <button
               type="button"
@@ -106,7 +124,7 @@ export default function LoginScreen({
 
           <p className="auth-footnote">
             <span aria-hidden="true">◇</span>
-            本地加密存储 · 你的内容只属于你
+            {isForgeSplash ? '本地优先存档，你的人格工程属于你' : '本地加密存储 · 你的内容只属于你'}
           </p>
         </div>
       </section>
