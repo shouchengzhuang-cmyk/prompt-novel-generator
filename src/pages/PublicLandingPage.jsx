@@ -17,6 +17,14 @@ function PublicLandingPage() {
           <div className="public-actions" aria-label="主要入口">
             <a className="public-btn public-btn-primary" href="/demo">查看演示</a>
             <a className="public-btn public-btn-secondary" href="/app">进入工作台</a>
+            <a
+              className="public-btn public-btn-secondary"
+              href="/forge/"
+              title="进入灵格工坊：人格档案与对话工作台"
+              aria-label="进入灵格工坊：人格档案与对话工作台"
+            >
+              进入灵格
+            </a>
           </div>
         </div>
       </section>
