@@ -20,8 +20,6 @@ export default function DesktopProjectLibrary({
             <button className="active" type="button">全部项目</button>
           </div>
         </div>
-        {/* 新建项目：打开创建项目表单并清理错误状态，不会立即请求后端。 */}
-        <button className="btn" type="button" onClick={() => { onSetShowCreateForm(true); onSetCreateError(''); }}>新建项目</button>
       </div>
       <div className="desktop-library-list">
         {sortedProjects.length > 0 ? sortedProjects.map((project) => (

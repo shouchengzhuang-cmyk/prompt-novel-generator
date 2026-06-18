@@ -6,12 +6,12 @@
   --desk-panel: rgba(17, 24, 42, 0.92);
   --desk-panel-soft: rgba(23, 32, 54, 0.82);
   --desk-border: rgba(148, 163, 184, 0.16);
-  --desk-border-strong: rgba(139, 92, 246, 0.46);
+  --desk-border-strong: rgba(20, 184, 166, 0.46);
   --desk-text: #e7ebf8;
   --desk-muted: #8d99b7;
   --desk-subtle: #5d6680;
-  --desk-primary: #7c5cff;
-  --desk-primary-2: #4f8cff;
+  --desk-primary: #14b8a6;
+  --desk-primary-2: #0d9488;
   display: flex;
   flex-direction: column;
   height: 100dvh;
@@ -19,6 +19,33 @@
   overflow: hidden;
   background: transparent;
   color: var(--desk-text);
+}
+
+/* ---- Desktop scrollbar: visible, grabbable (override Win 11 overlay defaults) ---- */
+.desktop-workbench ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.desktop-workbench ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 5px;
+}
+
+.desktop-workbench ::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.28);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.desktop-workbench ::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.48);
+  background-clip: padding-box;
+}
+
+.desktop-workbench ::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .desktop-topbar {
@@ -48,9 +75,9 @@
   height: 32px;
   border-radius: 9px;
   background:
-    linear-gradient(135deg, rgba(164, 143, 255, 0.95), rgba(72, 112, 255, 0.55)),
+    linear-gradient(135deg, rgba(45, 212, 191, 0.95), rgba(13, 148, 136, 0.55)),
     #1a2150;
-  box-shadow: 0 0 22px rgba(124, 92, 255, 0.62), inset 0 0 0 1px rgba(255,255,255,0.22);
+  box-shadow: 0 0 22px rgba(20, 184, 166, 0.62), inset 0 0 0 1px rgba(255,255,255,0.22);
   transform: rotate(45deg);
 }
 
@@ -139,8 +166,8 @@
   width: fit-content;
   padding: 1px 8px;
   border-radius: 4px;
-  background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
+  background: rgba(20, 184, 166, 0.15);
+  color: #2dd4bf;
   font-size: 11px;
   font-weight: 600;
 }
@@ -186,8 +213,8 @@
 
 .desktop-action.primary,
 .desktop-generate-btn {
-  border-color: rgba(160, 132, 255, 0.48);
-  background: linear-gradient(135deg, #5b45e9, #7f57ff);
+  border-color: rgba(45, 212, 191, 0.48);
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
   color: #fff;
 }
 
@@ -314,7 +341,7 @@
 }
 
 .desktop-mainnav button.active {
-  border-color: rgba(124, 92, 255, 0.56);
+  border-color: rgba(20, 184, 166, 0.56);
   background: linear-gradient(135deg, rgba(70, 55, 199, 0.9), rgba(35, 48, 132, 0.76));
   box-shadow: inset 3px 0 0 #8e74ff, 0 12px 28px rgba(55, 47, 160, 0.26);
 }
@@ -442,7 +469,7 @@
   margin-bottom: 5px;
   padding: 3px 8px;
   border-radius: 6px;
-  background: rgba(124, 92, 255, 0.18);
+  background: rgba(20, 184, 166, 0.18);
   color: #bbaaff;
   font-style: normal;
   font-size: 12px;
@@ -696,7 +723,7 @@
   min-height: 32px;
   padding: 6px 10px;
   font-size: 13px;
-  border: 1px solid rgba(124, 92, 255, 0.38);
+  border: 1px solid rgba(20, 184, 166, 0.38);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
 }
 
@@ -736,7 +763,8 @@
 .desktop-ai-panel {
   min-height: 0;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .desktop-ai-card {
@@ -763,8 +791,8 @@
 }
 
 .desktop-mode-grid button.active {
-  border-color: rgba(124, 92, 255, 0.64);
-  background: linear-gradient(135deg, rgba(91, 69, 233, 0.92), rgba(75, 91, 185, 0.72));
+  border-color: rgba(20, 184, 166, 0.64);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.92), rgba(15, 118, 110, 0.72));
   color: #fff;
 }
 
@@ -792,8 +820,8 @@
 }
 
 .desktop-model-grid button.active {
-  border-color: rgba(124, 92, 255, 0.64);
-  background: linear-gradient(135deg, rgba(91, 69, 233, 0.92), rgba(75, 91, 185, 0.72));
+  border-color: rgba(20, 184, 166, 0.64);
+  background: linear-gradient(135deg, rgba(13, 148, 136, 0.92), rgba(15, 118, 110, 0.72));
   color: #fff;
 }
 
@@ -919,7 +947,7 @@
 
 .desktop-candidate-list {
   flex: 1;
-  min-height: 0;
+  min-height: 180px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 6px 0;
@@ -935,7 +963,7 @@
 
 .desktop-candidates article.active {
   border-color: var(--desk-border-strong);
-  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.22);
 }
 
 .desktop-candidates strong {
@@ -1132,7 +1160,7 @@
   border: 1px solid #d9d9d9;
   border-radius: 8px;
   background: #fff;
-  color: #4a6cf7;
+  color: #0f766e;
   cursor: pointer;
   font-size: 22px;
   line-height: 1;
@@ -1264,7 +1292,7 @@ label {
   border-radius: 8px;
   cursor: pointer;
   white-space: nowrap;
-  background: #4a6cf7;
+  background: #0f766e;
   color: #fff;
   transition: background 0.2s;
 }
@@ -1280,7 +1308,7 @@ label {
 
 /* Color variants */
 .btn-primary {
-  background: #4a6cf7;
+  background: #0f766e;
   color: #fff;
 }
 
@@ -1345,7 +1373,7 @@ label {
 }
 
 .model-option.active {
-  border-color: #4a6cf7;
+  border-color: #0f766e;
   background: #e6f0ff;
 }
 
@@ -1366,7 +1394,7 @@ label {
 }
 
 .model-option.active .model-option-title {
-  color: #4a6cf7;
+  color: #0f766e;
 }
 
 .model-option-sub {
@@ -1398,9 +1426,9 @@ label {
 
 .project-item.active {
   background: #e6f0ff;
-  color: #4a6cf7;
+  color: #0f766e;
   font-weight: 600;
-  box-shadow: inset 3px 0 0 #4a6cf7;
+  box-shadow: inset 3px 0 0 #0f766e;
 }
 
 /* ---- Delete buttons ---- */
@@ -1475,7 +1503,7 @@ label {
 .create-panel input:focus,
 .create-panel textarea:focus {
   outline: none;
-  border-color: #4a6cf7;
+  border-color: #0f766e;
 }
 
 .create-panel textarea {
@@ -1549,14 +1577,14 @@ label {
 
 .chapter-item:hover {
   background: #f0f4ff;
-  color: #4a6cf7;
+  color: #0f766e;
 }
 
 .chapter-item.active {
   background: #e6f0ff;
-  color: #4a6cf7;
+  color: #0f766e;
   font-weight: 600;
-  box-shadow: inset 3px 0 0 #4a6cf7;
+  box-shadow: inset 3px 0 0 #0f766e;
 }
 
 .chapter-name {
@@ -1599,7 +1627,7 @@ label {
 
 .btn-link {
   font-size: 12px;
-  color: #4a6cf7;
+  color: #0f766e;
   background: none;
   border: none;
   cursor: pointer;
@@ -1651,7 +1679,7 @@ label {
 
 .settings-input:focus {
   outline: none;
-  border-color: #4a6cf7;
+  border-color: #0f766e;
 }
 
 /* Dark theme for settings-input inside desktop editor shell */
@@ -1715,7 +1743,7 @@ label {
 
 .prompt-input:focus {
   outline: none;
-  border-color: #4a6cf7;
+  border-color: #0f766e;
   box-shadow: 0 0 0 2px rgba(74, 108, 247, 0.15);
 }
 
@@ -1765,7 +1793,7 @@ label {
 .reading-title-input:focus {
   outline: none;
   border-color: #4096ff;
-  box-shadow: 0 0 0 2px rgba(64, 150, 255, 0.1);
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.1);
 }
 
 .reading-filename {
@@ -1866,8 +1894,8 @@ label {
 
 .scroll-to-top-btn:hover {
   background: #f0f4ff;
-  color: #4a6cf7;
-  border-color: #818cf8;
+  color: #0f766e;
+  border-color: #2dd4bf;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
@@ -1938,8 +1966,8 @@ label {
   min-height: 32px;
 }
 .reading-settings-chip.active {
-  background: #4a6cf7;
-  border-color: #4a6cf7;
+  background: #0f766e;
+  border-color: #0f766e;
   color: #fff;
 }
 .reading-settings-chip:active {
@@ -2143,7 +2171,7 @@ label {
 
 .writing-controls-input:focus {
   outline: none;
-  border-color: #4a6cf7;
+  border-color: #0f766e;
 }
 
 .writing-controls-options {
@@ -2173,9 +2201,9 @@ label {
 }
 
 .writing-controls-option.active {
-  border-color: #4a6cf7;
+  border-color: #0f766e;
   background: #e6f0ff;
-  color: #4a6cf7;
+  color: #0f766e;
 }
 
 .writing-controls-option input {
@@ -2364,7 +2392,7 @@ label {
 
 .gen-progress-bar-fill {
   height: 100%;
-  background: #4a6cf7;
+  background: #0f766e;
   border-radius: 2px;
   transition: width 0.3s ease;
 }
@@ -2392,17 +2420,17 @@ label {
 }
 
 .gen-progress--streaming .gen-progress-label {
-  color: #4a6cf7;
+  color: #0f766e;
   font-size: 13px;
 }
 
 /* Streaming preview */
 .streaming-preview {
   margin: 16px 0;
-  border: 2px solid #818cf8;
+  border: 2px solid #2dd4bf;
   border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 2px 12px rgba(79, 70, 229, 0.08);
+  box-shadow: 0 2px 12px rgba(20, 184, 166, 0.08);
   animation: streamingPreviewIn 0.3s ease;
 }
 
@@ -2459,7 +2487,7 @@ label {
 
 .project-sort-controls select:focus {
   outline: none;
-  border-color: #4a6cf7;
+  border-color: #0f766e;
 }
 
 /* Mobile sort controls — narrower gap to fit shelf width */
