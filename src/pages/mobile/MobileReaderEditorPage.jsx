@@ -106,12 +106,13 @@ export default function MobileReaderEditorPage(props) {
     readingChapterTitle,
     readingContent,
   } = chapterSelection;
+  const mainPanelClass = `panel panel-main${isMobile && mobileView === 'chapter' ? ' mobile-fullscreen-page mobile-reader-page' : ''}`;
 
   return (
     <>
       {/* ===== Main Panel (mobile hidden on shelf/project/writing/outline/allProjects) ===== */}
       {!(isMobile && (mobileView === 'shelf' || mobileView === 'project' || mobileView === 'writing' || mobileView === 'outline' || mobileView === 'allProjects')) && (
-      <div className="panel panel-main">
+      <div className={mainPanelClass}>
         {/* Mobile: editor view — standalone */}
         {isMobile && mobileView === 'editor' && readingChapter ? (
           <div className="mobile-editor-view-placeholder"></div>

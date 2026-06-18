@@ -162,3 +162,28 @@ describe('GET /api/projects/:projectName/chapters/:fileName', () => {
     expect(res.body.error).toContain('无效的章节文件名');
   });
 });
+
+// ----------------------------------------------------------------
+// DELETE /api/projects/:projectName
+// ----------------------------------------------------------------
+describe('DELETE /api/projects/:projectName', () => {
+  it('登录后删除项目会移入回收区而不是永久删除', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/auth/login').send({ pin: '0000' });
+
+    const projectName = '待删除项目';
+    const projectDir = path.join(tmpDir, projectName);
+    await fs.mkdir(path.join(projectDir, 'chapters'), { recursive: true });
+    await fs.writeFile(path.join(projectDir, 'world.md'), '临时项目', 'utf-8');
+
+    const res = await agent.delete(`/api/projects/${encodeURIComponent(projectName)}`);
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.message).toContain('回收区');
+
+    await expect(fs.access(projectDir)).rejects.toThrow();
+    const trashDir = path.join(tmpDir, '.trash', 'projects');
+    const trashEntries = await fs.readdir(trashDir);
+    expect(trashEntries.some((entry) => entry.startsWith(`${projectName}-`))).toBe(true);
+  });
+});

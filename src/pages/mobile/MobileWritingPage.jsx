@@ -27,7 +27,7 @@ export default function MobileWritingPage({
   const targetChapterLabel = mobileWritingTarget?.nextLabel || (mobileWritingKind === 'rewrite' ? '重写当前章节' : '继续写作');
 
   return (
-    <div className="panel panel-main mobile-writing-view">
+    <div className="panel panel-main mobile-writing-view mobile-fullscreen-page mobile-generation-page">
       {/* 返回写作来源页：走应用内返回逻辑，不保存当前写作输入或输出。 */}
       <button className="mobile-back-btn" onClick={onBackClick}>
         ← 返回

@@ -47,8 +47,8 @@ export default function DesktopProjectLibrary({
                   onRenameProject(project.name, newName.trim());
                 }
               }}>✎</button>
-              {/* 删除项目：二次确认后删除，不可恢复。 */}
-              <button type="button" className="desktop-library-action danger" title="删除" onClick={(e) => {
+              {/* 删除项目：二次确认后移入回收区。 */}
+              <button type="button" className="desktop-library-action danger" title="删除项目" aria-label={`删除项目 ${project.name}`} onClick={(e) => {
                 onDeleteProject(project.name, e);
               }}>✕</button>
             </div>

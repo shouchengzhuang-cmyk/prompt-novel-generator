@@ -565,34 +565,50 @@ function WorkspaceApp() {
   };
 
   // ---- 删除项目（含确认弹窗） ----
-  /** 删除整个项目和所有章节，不可恢复。如果删除的是当前项目，清空所有相关状态 */
+  /** 删除整个项目和所有章节；后端会移入回收区。如果删除的是当前项目，清空所有相关状态。 */
   const handleDeleteProject = async (name, e) => {
-    e.stopPropagation();
-    if (!confirm(`确定删除项目【${name}】吗？这会删除该项目的所有章节和设定，且不可恢复。`)) return false;
+    e?.stopPropagation?.();
+    if (!confirm(`确定删除项目《${name}》吗？此操作会移入回收区/备份区，不建议随便操作。`)) return false;
     setError('');
     try {
       await ProjectsApi.deleteProject(name);
-      // If deleting the current project, clear all state and go back to project library
+      // If deleting the current project, clear all state and go back to a stable project list.
       if (currentProject === name) {
         setCurrentProject(null);
         setProjectDetails(null);
         if (!isMobile) setDesktopView('projects');
+        if (isMobile) switchMobileView('shelf');
         setDisplayContent('');
         setReadingChapter(null);
+        setReadingChapterTitle('');
         setReadingContent('');
         clearVariantState();
         setLastFilename('');
         setUserPrompt('');
+        setMobileWritingTarget(null);
+        setMobileWritingOutput('');
+        setMobileWritingError('');
+        setOutline([]);
+        setOutlineText('');
+        setOutlineError('');
+        localStorage.removeItem('xiaomoxia-last-project');
+        setLastProjectName('');
         setShowSettings(false);
+        setShowOutline(false);
+        setMobileMaterialsOpen(false);
+        setMobileChapterMenu(null);
+        setMobileShelfMenu(null);
         clearSettingsDraft();
         setDebugPromptInfo(null);
-          }
+      }
       await fetchProjects();
-      setError('项目已删除');
+      setError('项目已移入回收区');
+      setNotification({ title: '项目已移入回收区', message: `《${name}》已移入回收区/备份区。` });
       setTimeout(() => setError(''), 3000);
       return true;
     } catch (err) {
       setError(err.message);
+      setNotification({ title: '删除失败', message: err.message });
       return false;
     }
   };
@@ -634,7 +650,7 @@ function WorkspaceApp() {
   // Mobile shelf: delete project with view state cleanup
   const handleShelfDeleteProject = async (name) => {
     setMobileShelfMenu(null);
-    const ok = await handleDeleteProject(name, { stopPropagation() {} });
+    const ok = await handleDeleteProject(name);
     if (ok && isMobile) {
       switchMobileView('shelf');
     }
@@ -1805,6 +1821,7 @@ function WorkspaceApp() {
           formatProjectUpdatedAt={formatProjectUpdatedAt}
           getProjectChapterCount={getProjectChapterCount}
           handleHomeProjectOpen={handleHomeProjectOpen}
+          handleShelfDeleteProject={handleShelfDeleteProject}
           settingsDraft={settingsDraft}
           workspaceUi={workspaceUi}
           projectSelection={projectSelection}

@@ -185,12 +185,37 @@ function createProjectService({
 
   async function deleteProject(projectName) {
     const projectDir = resolveProjectDir(projectName);
-    if (projectDir === novelsDir) {
+    const resolvedNovelsDir = path.resolve(novelsDir);
+    if (projectDir === resolvedNovelsDir) {
       throw new ProjectServiceError('不能删除根目录', 400);
     }
     await requireProjectDir(projectName);
-    await fs.rm(projectDir, { recursive: true, force: false });
-    return { ok: true, message: '项目已删除', projectName };
+
+    const trashRoot = path.resolve(novelsDir, '.trash', 'projects');
+    await fs.mkdir(trashRoot, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const baseName = `${path.basename(projectDir)}-${timestamp}`;
+    let targetDir = path.join(trashRoot, baseName);
+    let counter = 1;
+    while (true) {
+      const relativeTarget = path.relative(trashRoot, targetDir);
+      if (!relativeTarget || relativeTarget.startsWith('..') || path.isAbsolute(relativeTarget)) {
+        throw new ProjectServiceError('非法的回收区路径', 400);
+      }
+      try {
+        await fs.access(targetDir);
+        targetDir = path.join(trashRoot, `${baseName}-${counter}`);
+        counter += 1;
+      } catch {
+        break;
+      }
+    }
+
+    await withProjectLock(projectName, 'delete-project', async () => {
+      await fs.rename(projectDir, targetDir);
+    });
+    return { ok: true, message: '项目已移入回收区', projectName, trashPath: targetDir };
   }
 
   async function renameProject(projectName, newName) {

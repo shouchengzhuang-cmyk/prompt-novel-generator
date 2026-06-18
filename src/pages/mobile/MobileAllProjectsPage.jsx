@@ -7,6 +7,7 @@ export default function MobileAllProjectsPage({
   formatProjectUpdatedAt,
   getProjectChapterCount,
   onHomeProjectOpen,
+  onDeleteProject,
   onBackClick,
 }) {
   return (
@@ -26,6 +27,7 @@ export default function MobileAllProjectsPage({
         formatProjectUpdatedAt={formatProjectUpdatedAt}
         getProjectChapterCount={getProjectChapterCount}
         onOpenProject={onHomeProjectOpen}
+        onDeleteProject={onDeleteProject}
       />
     </div>
   );

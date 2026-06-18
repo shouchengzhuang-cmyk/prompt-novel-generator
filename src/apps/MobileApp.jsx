@@ -54,6 +54,7 @@ export default function MobileApp({
   formatProjectUpdatedAt,
   getProjectChapterCount,
   handleHomeProjectOpen,
+  handleShelfDeleteProject,
   // reader/editor page
   settingsDraft,
   workspaceUi,
@@ -216,6 +217,7 @@ export default function MobileApp({
             formatProjectUpdatedAt={formatProjectUpdatedAt}
             getProjectChapterCount={getProjectChapterCount}
             onHomeProjectOpen={handleHomeProjectOpen}
+            onDeleteProject={handleShelfDeleteProject}
             onBackClick={onBackClick}
           />
         )}
