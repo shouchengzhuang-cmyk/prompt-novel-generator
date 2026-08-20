@@ -1,0 +1,5 @@
+x=[2.0, 3.0]
+analytic=[8.0, 10.0]
+autograd=[8.0, 10.0]
+norm_before=12.806248
+norm_after=1.0

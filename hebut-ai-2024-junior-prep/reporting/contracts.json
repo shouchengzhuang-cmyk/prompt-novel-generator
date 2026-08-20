@@ -1,0 +1,215 @@
+{
+  "data-mining-exp1": {
+    "title": "数据预处理",
+    "confidence": "高：河工大历届公开题型",
+    "required_ids": [
+      {"id": "metric.rows_before", "section": "metrics", "description": "处理前记录数"},
+      {"id": "metric.rows_after", "section": "metrics", "description": "处理后记录数"},
+      {"id": "table.cleaning_summary", "section": "tables", "description": "缺失、负数、日期、冗余字段处理汇总"},
+      {"id": "table.before_after_samples", "section": "tables", "description": "处理前后样例对照"},
+      {"id": "fig.kmeans_anomalies", "section": "figures", "description": "K-means 异常检测结果图"},
+      {"id": "fig.pca_variance", "section": "figures", "description": "PCA 方差贡献图"},
+      {"id": "artifact.cleaned_csv", "section": "artifacts", "description": "最终清洗数据 CSV"}
+    ]
+  },
+  "data-mining-exp2": {
+    "title": "数据立方体与 OLAP",
+    "confidence": "高：河工大历届公开题型",
+    "required_ids": [
+      {"id": "table.cube_1019", "section": "tables", "description": "1019 商店三维立方体展开表"},
+      {"id": "table.cube_1020", "section": "tables", "description": "1020 商店三维立方体展开表"},
+      {"id": "table.cube_1021", "section": "tables", "description": "1021 商店三维立方体展开表"},
+      {"id": "table.olap_queries", "section": "tables", "description": "指定 OLAP 查询与结果"},
+      {"id": "artifact.cube_export", "section": "artifacts", "description": "可复用数据立方体导出文件"}
+    ]
+  },
+  "data-mining-exp3": {
+    "title": "Apriori 频繁项集",
+    "confidence": "高：河工大历届公开题型",
+    "required_ids": [
+      {"id": "metric.transaction_count", "section": "metrics", "description": "交易篮子数量"},
+      {"id": "metric.min_support", "section": "metrics", "description": "最小支持度"},
+      {"id": "table.transaction_summary", "section": "tables", "description": "交易构造统计"},
+      {"id": "table.frequent_itemsets", "section": "tables", "description": "各阶频繁项集与支持度"},
+      {"id": "artifact.transactions", "section": "artifacts", "description": "交易篮子导出文件"}
+    ]
+  },
+  "data-mining-exp4": {
+    "title": "贝叶斯分类",
+    "confidence": "中高：河工大历届实验序列",
+    "required_ids": [
+      {"id": "metric.test_accuracy", "section": "metrics", "description": "测试准确率"},
+      {"id": "metric.macro_f1", "section": "metrics", "description": "宏平均 F1"},
+      {"id": "table.classification_report", "section": "tables", "description": "逐类别评价表"},
+      {"id": "fig.confusion_matrix", "section": "figures", "description": "混淆矩阵"},
+      {"id": "artifact.predictions", "section": "artifacts", "description": "逐样本预测结果"}
+    ]
+  },
+  "data-mining-exp5": {
+    "title": "K-means 聚类",
+    "confidence": "中高：河工大历届实验序列",
+    "required_ids": [
+      {"id": "metric.silhouette", "section": "metrics", "description": "轮廓系数或等价聚类质量指标"},
+      {"id": "table.cluster_centers", "section": "tables", "description": "聚类中心"},
+      {"id": "fig.elbow_curve", "section": "figures", "description": "肘部法曲线"},
+      {"id": "fig.cluster_result", "section": "figures", "description": "聚类结果可视化"},
+      {"id": "artifact.assignments", "section": "artifacts", "description": "样本簇标签导出"}
+    ]
+  },
+  "missing-data-imputation": {
+    "title": "缺失数据填补与下游验证",
+    "confidence": "中：河工大近届公开实验结果结构，课程归属待当届核对",
+    "required_ids": [
+      {"id": "table.metrics_20", "section": "tables", "description": "20% 缺失率多模型评估矩阵"},
+      {"id": "table.metrics_40", "section": "tables", "description": "40% 缺失率多模型评估矩阵"},
+      {"id": "table.metrics_60", "section": "tables", "description": "60% 缺失率多模型评估矩阵"},
+      {"id": "fig.f1_bar", "section": "figures", "description": "F1 柱状对比"},
+      {"id": "fig.nf1_heatmap", "section": "figures", "description": "归一化 nF1 热力图"},
+      {"id": "fig.stability", "section": "figures", "description": "缺失率变化稳定性曲线"},
+      {"id": "artifact.imputed_datasets", "section": "artifacts", "description": "不同填补方法的数据集索引"}
+    ]
+  },
+  "cv-exp1": {
+    "title": "车道线检测与参数对比",
+    "confidence": "高：2026 河工大大三下机器视觉公开实验",
+    "required_ids": [
+      {"id": "metric.processed_images", "section": "metrics", "description": "实际处理图像数"},
+      {"id": "metric.parameter_sets", "section": "metrics", "description": "实际参数组数"},
+      {"id": "table.parameter_grid", "section": "tables", "description": "Canny、滤波、ROI、Hough 参数表"},
+      {"id": "table.batch_index", "section": "tables", "description": "每张图与每组参数的结果索引"},
+      {"id": "fig.pipeline_overview", "section": "figures", "description": "原图至最终检测的六联图"},
+      {"id": "fig.parameter_comparison", "section": "figures", "description": "四组参数对比代表图"},
+      {"id": "artifact.batch_outputs", "section": "artifacts", "description": "批量输出目录或清单"}
+    ]
+  },
+  "cv-exp2": {
+    "title": "CIFAR-10 传统方法与 CNN 对比",
+    "confidence": "高：2026 河工大大三下机器视觉公开实验",
+    "required_ids": [
+      {"id": "metric.best_traditional_accuracy", "section": "metrics", "description": "传统方法最佳准确率"},
+      {"id": "metric.cnn_accuracy", "section": "metrics", "description": "CNN 测试准确率"},
+      {"id": "table.model_comparison", "section": "tables", "description": "HOG/SVM、颜色/KNN、组合特征与 CNN 指标总表"},
+      {"id": "fig.traditional_confusion", "section": "figures", "description": "传统方法混淆矩阵"},
+      {"id": "fig.cnn_loss", "section": "figures", "description": "CNN 训练损失曲线"},
+      {"id": "fig.cnn_confusion", "section": "figures", "description": "CNN 混淆矩阵"},
+      {"id": "fig.cnn_errors", "section": "figures", "description": "至少 6 个分类错误样例"},
+      {"id": "artifact.predictions", "section": "artifacts", "description": "测试集逐样本预测结果"}
+    ]
+  },
+  "dl-exp1": {
+    "title": "PyTorch 自动求导与梯度截断",
+    "confidence": "高：2026 河工大大三下深度学习公开实验",
+    "required_ids": [
+      {"id": "metric.gradient_max_error", "section": "metrics", "description": "自动求导与解析梯度最大误差"},
+      {"id": "metric.norm_before_clip", "section": "metrics", "description": "截断前梯度范数"},
+      {"id": "metric.norm_after_clip", "section": "metrics", "description": "截断后梯度范数"},
+      {"id": "table.gradient_check", "section": "tables", "description": "变量、解析梯度、自动梯度对照表"},
+      {"id": "artifact.console_log", "section": "artifacts", "description": "完整运行日志"}
+    ]
+  },
+  "dl-exp2": {
+    "title": "前馈神经网络多任务实验",
+    "confidence": "高：2026 河工大大三下深度学习公开实验",
+    "required_ids": [
+      {"id": "metric.regression_mse", "section": "metrics", "description": "回归测试 MSE"},
+      {"id": "metric.binary_accuracy", "section": "metrics", "description": "二分类准确率"},
+      {"id": "metric.multiclass_accuracy", "section": "metrics", "description": "多分类准确率"},
+      {"id": "metric.kfold_mean", "section": "metrics", "description": "K 折平均指标"},
+      {"id": "metric.kfold_std", "section": "metrics", "description": "K 折标准差"},
+      {"id": "table.manual_vs_torch", "section": "tables", "description": "手动 FNN 与 torch.nn 对比"},
+      {"id": "table.kfold_results", "section": "tables", "description": "逐折结果"},
+      {"id": "fig.dataset_overview", "section": "figures", "description": "回归、二分类、多分类数据分布"},
+      {"id": "fig.activation_comparison", "section": "figures", "description": "激活函数损失曲线对比"},
+      {"id": "fig.learning_rate_comparison", "section": "figures", "description": "学习率影响曲线"},
+      {"id": "artifact.training_log", "section": "artifacts", "description": "完整训练日志"}
+    ]
+  },
+  "nlp-sentiment": {
+    "title": "中文情感分类与参数扫描",
+    "confidence": "中：河工大近届公开实验，正式课程归属待核对",
+    "required_ids": [
+      {"id": "metric.test_accuracy", "section": "metrics", "description": "最终测试准确率"},
+      {"id": "metric.macro_f1", "section": "metrics", "description": "宏平均 F1"},
+      {"id": "table.hyperparameter_sweep", "section": "tables", "description": "学习率、批大小、轮数、耗时、验证/测试指标"},
+      {"id": "table.classification_report", "section": "tables", "description": "逐类别指标"},
+      {"id": "table.error_samples", "section": "tables", "description": "代表性误分类样例"},
+      {"id": "fig.loss_accuracy", "section": "figures", "description": "训练曲线"},
+      {"id": "fig.confusion_matrix", "section": "figures", "description": "混淆矩阵"},
+      {"id": "artifact.predictions", "section": "artifacts", "description": "逐样本预测结果"},
+      {"id": "artifact.training_log", "section": "artifacts", "description": "逐实验日志"}
+    ]
+  },
+  "nlp-kg-rag": {
+    "title": "知识图谱与向量 RAG 对比",
+    "confidence": "中：河工大近届公开实验，正式课程归属待核对",
+    "required_ids": [
+      {"id": "metric.answer_accuracy", "section": "metrics", "description": "带标准答案问题集上的准确率或人工评分"},
+      {"id": "table.answer_comparison", "section": "tables", "description": "纯 LLM、向量 RAG、KG+向量 RAG 逐题对照"},
+      {"id": "table.data_sources", "section": "tables", "description": "三元组与文档来源记录"},
+      {"id": "fig.architecture", "section": "figures", "description": "系统流程或架构图"},
+      {"id": "artifact.kg", "section": "artifacts", "description": "知识图谱三元组"},
+      {"id": "artifact.documents", "section": "artifacts", "description": "检索文档"},
+      {"id": "artifact.raw_answers", "section": "artifacts", "description": "原始回答输出"}
+    ]
+  },
+  "ml-platform": {
+    "title": "MNIST 机器学习系统与平台实践",
+    "confidence": "高：河工大同名课程近届公开项目与报告",
+    "required_ids": [
+      {"id": "metric.best_test_accuracy", "section": "metrics", "description": "MLP/CNN/RNN 中最佳测试准确率"},
+      {"id": "metric.api_latency_ms", "section": "metrics", "description": "推理 API 端到端延迟"},
+      {"id": "table.model_comparison", "section": "tables", "description": "三种模型参数量、准确率、耗时对比"},
+      {"id": "fig.training_curves", "section": "figures", "description": "损失和准确率曲线"},
+      {"id": "fig.confusion_matrix", "section": "figures", "description": "最佳模型混淆矩阵"},
+      {"id": "fig.feature_visualization", "section": "figures", "description": "t-SNE 或等价特征可视化"},
+      {"id": "fig.ui_screenshot", "section": "figures", "description": "前端手写预测界面截图"},
+      {"id": "artifact.api_response", "section": "artifacts", "description": "真实 API 响应样例"},
+      {"id": "artifact.checkpoint_manifest", "section": "artifacts", "description": "权重文件校验与模型配置清单"}
+    ]
+  },
+  "ml-pattern-recognition": {
+    "title": "机器学习与模式识别分类实验",
+    "confidence": "中低：本专业正式题目待核对",
+    "required_ids": [
+      {"id": "metric.test_accuracy", "section": "metrics", "description": "测试准确率"},
+      {"id": "metric.macro_f1", "section": "metrics", "description": "宏平均 F1"},
+      {"id": "table.model_comparison", "section": "tables", "description": "至少两种方法的统一对比"},
+      {"id": "fig.confusion_matrix", "section": "figures", "description": "混淆矩阵"},
+      {"id": "fig.decision_or_embedding", "section": "figures", "description": "决策边界、PCA 或特征嵌入图"},
+      {"id": "artifact.predictions", "section": "artifacts", "description": "逐样本预测结果"}
+    ]
+  },
+  "computational-intelligence": {
+    "title": "计算智能算法对比",
+    "confidence": "低：通用预制，正式题目待核对",
+    "required_ids": [
+      {"id": "metric.best_objective", "section": "metrics", "description": "最优目标函数值"},
+      {"id": "table.run_statistics", "section": "tables", "description": "多随机种子均值、标准差、最优和最差"},
+      {"id": "fig.convergence", "section": "figures", "description": "收敛曲线"},
+      {"id": "artifact.raw_runs", "section": "artifacts", "description": "逐次运行结果"}
+    ]
+  },
+  "numerical-optimization": {
+    "title": "数值分析与优化算法实验",
+    "confidence": "低：通用预制，正式题目待核对",
+    "required_ids": [
+      {"id": "metric.final_error", "section": "metrics", "description": "最终绝对或相对误差"},
+      {"id": "metric.iterations", "section": "metrics", "description": "迭代次数"},
+      {"id": "table.iteration_trace", "section": "tables", "description": "逐步迭代记录"},
+      {"id": "fig.error_curve", "section": "figures", "description": "误差或目标函数收敛曲线"},
+      {"id": "artifact.raw_trace", "section": "artifacts", "description": "机器可读迭代日志"}
+    ]
+  },
+  "software-practice": {
+    "title": "软件设计与编程实践",
+    "confidence": "低：项目题目通常按届变化",
+    "required_ids": [
+      {"id": "metric.test_pass_rate", "section": "metrics", "description": "自动测试通过率"},
+      {"id": "table.requirement_traceability", "section": "tables", "description": "需求—实现—测试追踪矩阵"},
+      {"id": "table.test_summary", "section": "tables", "description": "测试用例与结果"},
+      {"id": "fig.system_architecture", "section": "figures", "description": "系统架构图"},
+      {"id": "fig.demo_screenshot", "section": "figures", "description": "关键功能演示截图"},
+      {"id": "artifact.demo_instructions", "section": "artifacts", "description": "可复现演示说明"}
+    ]
+  }
+}

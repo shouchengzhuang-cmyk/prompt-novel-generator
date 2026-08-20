@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MNIST 手写数字识别</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color-scheme: dark; }
+    body { margin: 0; background: #10141f; color: #eef2ff; }
+    main { width: min(920px, 92vw); margin: 32px auto; display: grid; gap: 24px; grid-template-columns: 320px 1fr; }
+    .card { background: #171d2b; border: 1px solid #2c354a; border-radius: 16px; padding: 20px; }
+    canvas { width: 280px; height: 280px; background: white; border-radius: 12px; touch-action: none; cursor: crosshair; }
+    .actions { display: flex; gap: 10px; margin-top: 14px; }
+    button, select { border: 1px solid #44506b; background: #222b3e; color: inherit; border-radius: 9px; padding: 9px 13px; }
+    button.primary { background: #2563eb; border-color: #3b82f6; }
+    #digit { font-size: 96px; line-height: 1; margin: 16px 0; }
+    .bar { display: grid; grid-template-columns: 22px 1fr 62px; align-items: center; gap: 8px; margin: 6px 0; }
+    .track { height: 10px; background: #293247; border-radius: 999px; overflow: hidden; }
+    .fill { height: 100%; background: #60a5fa; width: 0%; }
+    .muted { color: #9aa7bd; }
+    @media (max-width: 720px) { main { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+<main>
+  <section class="card">
+    <h1>手写一个数字</h1>
+    <canvas id="canvas" width="280" height="280" aria-label="手写数字画板"></canvas>
+    <div class="actions">
+      <select id="model">
+        <option value="cnn">CNN</option>
+        <option value="mlp">MLP</option>
+        <option value="rnn">RNN</option>
+      </select>
+      <button id="clear">清空</button>
+      <button id="predict" class="primary">识别</button>
+    </div>
+    <p class="muted">黑色笔迹、白色背景；前端会缩放为 28×28。</p>
+  </section>
+  <section class="card">
+    <h2>预测结果</h2>
+    <div id="digit">—</div>
+    <p id="status" class="muted">先训练权重并启动后端。</p>
+    <div id="probabilities"></div>
+  </section>
+</main>
+<script>
+  const canvas = document.querySelector('#canvas');
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  const status = document.querySelector('#status');
+  const digit = document.querySelector('#digit');
+  const probabilities = document.querySelector('#probabilities');
+  let drawing = false;
+
+  function resetCanvas() {
+    context.fillStyle = 'white';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.lineWidth = 20;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.strokeStyle = 'black';
+    digit.textContent = '—';
+    probabilities.innerHTML = '';
+    status.textContent = '画完后点击识别。';
+  }
+
+  function point(event) {
+    const rect = canvas.getBoundingClientRect();
+    const source = event.touches?.[0] ?? event;
+    return {
+      x: (source.clientX - rect.left) * canvas.width / rect.width,
+      y: (source.clientY - rect.top) * canvas.height / rect.height,
+    };
+  }
+
+  function start(event) {
+    drawing = true;
+    const p = point(event);
+    context.beginPath();
+    context.moveTo(p.x, p.y);
+    event.preventDefault();
+  }
+  function move(event) {
+    if (!drawing) return;
+    const p = point(event);
+    context.lineTo(p.x, p.y);
+    context.stroke();
+    event.preventDefault();
+  }
+  function stop(event) {
+    if (!drawing) return;
+    drawing = false;
+    context.closePath();
+    event.preventDefault();
+  }
+
+  for (const name of ['pointerdown']) canvas.addEventListener(name, start);
+  canvas.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', stop);
+  document.querySelector('#clear').addEventListener('click', resetCanvas);
+
+  function extractPixels() {
+    const small = document.createElement('canvas');
+    small.width = 28;
+    small.height = 28;
+    const smallContext = small.getContext('2d', { willReadFrequently: true });
+    smallContext.fillStyle = 'white';
+    smallContext.fillRect(0, 0, 28, 28);
+    smallContext.drawImage(canvas, 0, 0, 28, 28);
+    const data = smallContext.getImageData(0, 0, 28, 28).data;
+    const pixels = [];
+    for (let index = 0; index < data.length; index += 4) {
+      pixels.push(255 - data[index]);
+    }
+    return pixels;
+  }
+
+  function renderProbabilities(values) {
+    probabilities.innerHTML = values.map((value, index) => `
+      <div class="bar">
+        <span>${index}</span>
+        <div class="track"><div class="fill" style="width:${(value * 100).toFixed(2)}%"></div></div>
+        <span>${(value * 100).toFixed(1)}%</span>
+      </div>`).join('');
+  }
+
+  document.querySelector('#predict').addEventListener('click', async () => {
+    status.textContent = '识别中…';
+    try {
+      const response = await fetch('http://127.0.0.1:8000/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: document.querySelector('#model').value,
+          pixels: extractPixels(),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail ?? `HTTP ${response.status}`);
+      digit.textContent = payload.predicted;
+      status.textContent = `${payload.model.toUpperCase()} 置信度 ${(payload.confidence * 100).toFixed(1)}%`;
+      renderProbabilities(payload.probabilities);
+    } catch (error) {
+      status.textContent = `失败：${error.message}`;
+    }
+  });
+
+  resetCanvas();
+</script>
+</body>
+</html>
