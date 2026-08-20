@@ -15,10 +15,10 @@ def run(*arguments: str) -> None:
 
 
 def main() -> None:
-    if not compileall.compile_dir(ROOT / "src", quiet=1):
-        raise SystemExit("src 编译失败")
-    if not compileall.compile_dir(ROOT / "labs", quiet=1):
-        raise SystemExit("labs 编译失败")
+    for directory in ("src", "labs", "reporting", "scripts", "tests"):
+        if not compileall.compile_dir(ROOT / directory, quiet=1):
+            raise SystemExit(f"{directory} 编译失败")
+
     run("-m", "unittest", "discover", "-s", "tests", "-v")
     run("labs/semester5/data_mining/lab01_preprocessing.py")
     run("labs/semester5/data_mining/lab02_olap_cube.py")
@@ -27,7 +27,7 @@ def main() -> None:
     run("labs/semester5/computational_intelligence/demo.py")
     run("labs/semester5/numerical_optimization/demo.py")
     run("labs/semester6/nlp/text_classification.py")
-    print("\n核心检查全部通过；未运行需要 PyTorch/OpenCV/FastAPI 的重型实验。")
+    print("\n核心检查全部通过；未运行需要下载数据或长时间训练的重型实验。")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,76 @@
+{
+  "meta": {
+    "course": "深度学习",
+    "experiment": "自动求导与梯度截断",
+    "contract": "dl-exp1",
+    "student": "TODO：本人填写",
+    "student_id": "TODO：本人填写",
+    "class_name": "TODO：本人填写",
+    "date": "TODO：本人填写",
+    "git_commit": "TODO：运行后填写"
+  },
+  "purpose": [
+    "验证 PyTorch 自动求导结果与解析梯度一致。",
+    "观察梯度截断前后范数变化。"
+  ],
+  "environment": {
+    "os": "TODO：运行时采集",
+    "python": "TODO：运行时采集",
+    "hardware": "TODO：运行时采集",
+    "random_seed": 42,
+    "dependencies": {"torch": "TODO：运行时采集"}
+  },
+  "data": [
+    {
+      "name": "手工构造张量",
+      "source": "本实验定义",
+      "path": "example_artifacts/input.json",
+      "samples": 2,
+      "split": "不适用",
+      "notes": "x=[2.0, 3.0]"
+    }
+  ],
+  "methodology": [
+    "构造 y=x^2+4x，并对 y.sum() 反向传播。",
+    "计算解析梯度 2x+4，与自动梯度逐元素比较。",
+    "将梯度最大范数限制为 1.0，并记录截断前后范数。"
+  ],
+  "parameters": [
+    {"name": "max_norm", "value": 1.0, "reason": "与实验要求一致"}
+  ],
+  "metrics": [
+    {"id": "metric.gradient_max_error", "name": "最大梯度误差", "split": "全量", "value": 0.0, "unit": "", "source": "example_artifacts/metrics.json"},
+    {"id": "metric.norm_before_clip", "name": "截断前梯度范数", "split": "全量", "value": 12.806248, "unit": "", "source": "example_artifacts/metrics.json"},
+    {"id": "metric.norm_after_clip", "name": "截断后梯度范数", "split": "全量", "value": 1.0, "unit": "", "source": "example_artifacts/metrics.json"}
+  ],
+  "tables": [
+    {"id": "table.gradient_check", "title": "梯度核验表", "path": "example_artifacts/gradient_check.csv", "caption": "解析梯度与自动梯度逐元素一致。"}
+  ],
+  "figures": [],
+  "artifacts": [
+    {"id": "artifact.console_log", "title": "完整控制台日志", "kind": "text", "path": "example_artifacts/run.log", "description": "包含输入、梯度和截断结果。"}
+  ],
+  "commands": [
+    {"purpose": "运行实验", "command": "python labs/semester6/deep_learning/exp01_autograd.py --output artifacts"}
+  ],
+  "findings": [
+    {
+      "claim": "自动求导与解析梯度完全一致，最大误差为 0。",
+      "evidence": ["metric.gradient_max_error", "table.gradient_check"],
+      "caveat": "该结论仅针对本次给定函数和输入。"
+    },
+    {
+      "claim": "梯度截断将范数限制到 1.0。",
+      "evidence": ["metric.norm_before_clip", "metric.norm_after_clip", "artifact.console_log"],
+      "caveat": "截断改变梯度幅值，但不代表所有训练任务都会更优。"
+    }
+  ],
+  "problems": [
+    {"title": "无真实训练任务", "description": "本实验只演示算子行为。", "action": "在后续 RNN 实验中验证截断对训练稳定性的影响。"}
+  ],
+  "conclusion": [
+    "完成了自动求导的解析核验。",
+    "梯度截断按预期控制了梯度范数。",
+    "所有结论均能追溯到本次运行日志与结果表。"
+  ]
+}

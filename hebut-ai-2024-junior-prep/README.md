@@ -1,59 +1,119 @@
 # 河北工业大学人工智能 2024 级：大三课程预制实验库
 
-> 目标：把“老师发作业后从零开工”变成“对照要求、替换数据、重新运行、补充分析”。
+> 目标：把“老师发作业后从零开工”变成“对照要求、批量生成结果、自动审计、映射报告模板”。
 >
-> 本目录是**预学习与适配工具箱**，不是可直接冒充本人完成情况提交的成品作业。
+> 本目录是**预学习、结果生成与适配工具箱**，不是可直接改名提交的历届答案。
 
 ## 已确认的大三课程
 
-依据河北工业大学人工智能与数据科学学院公开的 2024 级培养方案，大三专业必修与集中实践如下：
+依据河北工业大学人工智能与数据科学学院公开的 2024 级培养方案：
 
-| 学期 | 课程 | 实验/实践量 | 本库状态 |
+| 学期 | 课程 | 实验/实践量 | 当前准备状态 |
 |---|---|---:|---|
-| 第 5 学期 | 机器学习与模式识别 | 16 学时实验 | 通用基线与报告骨架 |
-| 第 5 学期 | 数据挖掘 | 8 学时实验 | **历届题型高置信度，3 个可运行实验** |
-| 第 5 学期 | 计算智能 | 16 学时实验 | GA / PSO 可运行实现 |
-| 第 5 学期 | 数值分析与数值优化 | 8 学时实验 | 二分法、牛顿法、梯度下降 |
-| 第 5 学期 | 软件设计与编程实践 | 2 周 | 工程脚手架与验收清单 |
-| 第 6 学期 | 计算机视觉 | 8 学时实验 | **上一届题型高置信度，车道线与 CIFAR-10 骨架** |
-| 第 6 学期 | 深度学习 | 16 学时实验 | **上一届题型高置信度，PyTorch 基础与多任务 MLP** |
-| 第 6 学期 | 自然语言处理 | 8 学时实验 | 通用文本分类基线；具体题目待核 |
-| 第 6 学期 | 机器学习系统与平台实践 | 2 周 | **上一届题型高置信度，MNIST 全栈骨架** |
+| 第 5 学期 | 机器学习与模式识别 | 16 学时实验 | 通用分类基线与结果合同 |
+| 第 5 学期 | 数据挖掘 | 8 学时实验 | **历届五实验序列；前三项可运行** |
+| 第 5 学期 | 计算智能 | 16 学时实验 | GA / PSO、多随机种子结果合同 |
+| 第 5 学期 | 数值分析与数值优化 | 8 学时实验 | 二分法、牛顿法、梯度下降、迭代合同 |
+| 第 5 学期 | 软件设计与编程实践 | 2 周 | 工程脚手架、需求追踪和验收清单 |
+| 第 6 学期 | 计算机视觉 | 8 学时实验 | **2026 近届题型：车道线与 CIFAR-10** |
+| 第 6 学期 | 深度学习 | 16 学时实验 | **2026 近届题型：自动求导与多任务 FNN** |
+| 第 6 学期 | 自然语言处理 | 8 学时实验 | 文本分类基线；情感分类与 KG/RAG 候选合同 |
+| 第 6 学期 | 机器学习系统与平台实践 | 2 周 | **同名课程近届 MNIST 全栈骨架** |
 
-课程证据、来源和置信度见 [`docs/evidence-matrix.md`](docs/evidence-matrix.md)。
+证据、来源和不确定性见：
 
-## 最值得先跑的部分
+- [`docs/evidence-matrix.md`](docs/evidence-matrix.md)
+- [`docs/sources.md`](docs/sources.md)
+- [`docs/future-gpt-context.md`](docs/future-gpt-context.md)
 
-### 1. 数据挖掘三连
+## 这次升级真正解决什么
 
-历史公开材料反复出现以下链路：
+公开近届材料显示，很多作业最费时间的不是算法本身，而是：
 
-1. 销售数据预处理：日期补全、负数修正、表合并、字段规整；
-2. 商品类别 × 商店 × 日期的 OLAP 数据立方体；
-3. 基于交易记录的 Apriori 频繁项集挖掘。
+- 5 张图 × 4 组参数之类的批量结果；
+- 20%/40%/60% 缺失率的完整评估矩阵；
+- 模型、参数、随机种子和耗时的统一对比；
+- 混淆矩阵、训练曲线、错误样例和界面截图；
+- 把每个数字插进最终实验报告；
+- 临交前发现少图、少表、路径错、指标没来源。
+
+因此本库现在有两层：
+
+1. **算法与工程骨架**：减少从零编码；
+2. **结果合同与报告流水线**：减少跑参、整理、截图、写报告和验收劳动。
+
+## 结果先行流水线
+
+### 1. 初始化一次正式实验
 
 ```bash
 cd hebut-ai-2024-junior-prep
+
+python scripts/init_assignment.py \
+  --course "计算机视觉" \
+  --experiment "实验二：CIFAR-10 分类" \
+  --contract cv-exp2 \
+  --output work/2027-cv-exp2
+```
+
+### 2. 运行实验并保存真实产物
+
+统一写入本次目录的 `artifacts/`：
+
+- 指标 JSON；
+- 参数扫描 CSV；
+- 逐样本预测；
+- 图表 PNG/SVG；
+- 完整日志；
+- 模型/接口/截图产物。
+
+### 3. 审计结果是否齐全
+
+```bash
+python reporting/audit_artifacts.py work/2027-cv-exp2/result-manifest.json
+```
+
+### 4. 生成报告草稿
+
+```bash
+python reporting/build_report.py \
+  work/2027-cv-exp2/result-manifest.json \
+  --output work/2027-cv-exp2/实验报告草稿.md \
+  --allow-warnings
+```
+
+收到老师 Word 模板后，再由未来 GPT/Codex 做格式映射，不重新编造结果。
+
+详细说明：
+
+- [`reporting/README.md`](reporting/README.md)
+- [`docs/result-contracts.md`](docs/result-contracts.md)
+- [`docs/final-report-blueprints.md`](docs/final-report-blueprints.md)
+- [`docs/report-template.md`](docs/report-template.md)
+- [`docs/codex-playbook.md`](docs/codex-playbook.md)
+
+## 已预制的可运行部分
+
+### 数据挖掘三连
+
+```bash
 python labs/semester5/data_mining/lab01_preprocessing.py
 python labs/semester5/data_mining/lab02_olap_cube.py
 python labs/semester5/data_mining/lab03_apriori.py --min-support 2
 ```
 
-生成文件写入 `artifacts/`，不会污染样例数据。
-
-### 2. 轻量算法库
+### 轻量算法库
 
 ```bash
 python labs/semester5/ml_pattern_recognition/baseline.py
 python labs/semester5/computational_intelligence/demo.py
 python labs/semester5/numerical_optimization/demo.py
+python labs/semester6/nlp/text_classification.py
 ```
 
-这些模块只依赖 Python 标准库，便于先验证算法逻辑。
+### 深度学习 / CV / 平台实践
 
-### 3. 深度学习 / CV / 平台实践
-
-重型实验依赖放在 `requirements-optional.txt`，默认测试不会下载数据集或训练大模型。
+重型依赖见 `requirements-optional.txt`：
 
 ```bash
 python -m pip install -r requirements-optional.txt
@@ -61,7 +121,7 @@ python labs/semester6/deep_learning/exp01_autograd.py
 python labs/semester6/deep_learning/exp02_tabular_nn.py --epochs 30
 ```
 
-机器学习平台实践的完整说明见：
+机器学习平台实践：
 
 - [`labs/semester6/ml_system_platform/README.md`](labs/semester6/ml_system_platform/README.md)
 - `backend/`：MLP / CNN / RNN、训练脚本、推理 API；
@@ -69,41 +129,38 @@ python labs/semester6/deep_learning/exp02_tabular_nn.py --epochs 30
 
 ## 本地验证
 
-核心模块完全基于标准库：
-
-```bash
-python -m unittest discover -s tests -v
-python -m compileall -q src labs tests
-```
-
-也可执行：
-
 ```bash
 python scripts/check.py
 ```
 
-## 老师发正式要求后的正确用法
+也可分开执行：
 
-把要求原文和数据放进新分支，再给 Codex：
-
-```text
-阅读老师本次实验要求与 hebut-ai-2024-junior-prep/docs/evidence-matrix.md。
-先列出“正式要求 vs 预制实现”的差异，不要直接改代码。
-确认数据字段、算法约束、输出格式、报告章节和评分点后：
-1. 在独立目录适配本次实验；
-2. 重新运行并保存真实输出；
-3. 添加可复现命令和测试；
-4. 生成报告草稿，但所有结果必须来自本次运行；
-5. 标出仍需本人解释、截图或核验的部分。
+```bash
+python -m unittest discover -s tests -v
+python -m compileall -q src labs reporting scripts tests
 ```
 
-更完整的提示词见 [`docs/codex-playbook.md`](docs/codex-playbook.md)。
+## 老师发正式要求后的正确用法
+
+给未来 GPT/Codex 的第一句话不应是“帮我写完”，而是：
+
+```text
+阅读 teacher/ 中的老师原始要求、docs/future-gpt-context.md、
+docs/evidence-matrix.md 和 reporting/contracts.json。
+先提取评分点和最终交付物，输出正式要求与历史合同的差异表。
+修订本次结果合同后，再适配代码、批量运行、保存真实产物、
+填写 result-manifest.json、通过审计，最后生成报告草稿。
+```
+
+这样即使以后套餐降级，模型也不用重新考古整个专业的作业生态。
 
 ## 边界
 
-- 没有复制历届学生的报告、姓名、运行结果或大体量数据；
-- 高置信度表示“确有河工大历届公开材料对应”，**不代表 2024 级会原题复用**；
-- 课程教师、数据集、格式和评分标准都可能变化；
-- 提交前必须按正式要求重新运行、理解并核验。
+- 不复制历届学生报告、姓名、学号、权重或历史数字；
+- 高置信度表示确有河工大公开材料对应，**不表示 2024 级原题复用**；
+- 学生公开仓库不是教师官方答案；
+- 当届课程教师、数据集、指定框架、图像数量和模板都可能变化；
+- 所有正式结果必须在用户自己的环境重新运行；
+- 报告必须由本人核验并能够解释。
 
 详见 [`ACADEMIC_INTEGRITY.md`](ACADEMIC_INTEGRITY.md)。
