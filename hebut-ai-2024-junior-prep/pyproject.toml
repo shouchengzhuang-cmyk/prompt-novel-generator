@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hebut-ai-2024-junior-prep"
+version = "0.1.0"
+description = "HEBUT AI 2024 junior-year course preparation kit"
+requires-python = ">=3.10"
+authors = [{name = "Shou Chengzhuang"}]
+readme = "README.md"
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+ml = [
+  "numpy>=1.26",
+  "matplotlib>=3.8",
+  "scikit-learn>=1.4",
+  "pandas>=2.2",
+]
+deep = [
+  "torch>=2.3",
+  "torchvision>=0.18",
+]
+cv = [
+  "opencv-python>=4.9",
+  "scikit-image>=0.23",
+]
+platform = [
+  "fastapi>=0.112",
+  "uvicorn>=0.30",
+  "pillow>=10.0",
+  "python-multipart>=0.0.9",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

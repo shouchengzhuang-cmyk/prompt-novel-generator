@@ -1,0 +1,13 @@
+# 重型实验的可选依赖；核心单元测试不需要安装这些包。
+numpy>=1.26
+pandas>=2.2
+matplotlib>=3.8
+scikit-learn>=1.4
+scikit-image>=0.23
+opencv-python>=4.9
+torch>=2.3
+torchvision>=0.18
+fastapi>=0.112
+uvicorn>=0.30
+pillow>=10.0
+python-multipart>=0.0.9
